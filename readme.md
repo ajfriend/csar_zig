@@ -84,7 +84,7 @@ pre-commit / CI check); see `dev.md` for the full workflow.
 `csar` was previously developed as
 [`skar_zig`](https://github.com/ajfriend/skar_zig) and forked into this fresh
 repository under a new name, alongside its Python bindings
-[`csar`](https://github.com/ajfriend/csar) (formerly `skar_py`). The
+[`csar`](https://github.com/ajfriend/csar_py) (formerly `skar_py`). The
 experimental DGGS survey/comparison tooling that once lived here now has its own
 repo. The `skar_zig` repository is preserved as-is for its history and provenance.
 
