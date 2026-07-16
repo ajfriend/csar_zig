@@ -11,5 +11,7 @@ commit that carries the full detail.
   `b`) and returns the cone's axis ratio. `solve` returns a tagged `Outcome`
   union (`Converged` / `Infeasible` / `DidNotConverge`); `SolveOptions.method`
   selects the path (`.auto` default, resolving to the trust-region solver).
-  Continues the solver previously developed under the `skar_zig` name; the
-  experimental DGGS survey/comparison tooling now lives in a separate repo.
+  Continues the solver previously developed as
+  [`skar_zig`](https://github.com/ajfriend/skar_zig) (preserved as-is for its
+  history and provenance); the experimental DGGS survey/comparison tooling now
+  lives in a separate repo.
