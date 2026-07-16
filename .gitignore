@@ -1,0 +1,7 @@
+.zig-cache/
+zig-out/
+coverage/
+scripts/states/data/
+scripts/countries/data/
+.claude/
+.DS_Store
