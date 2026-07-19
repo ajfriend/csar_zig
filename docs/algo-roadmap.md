@@ -152,3 +152,101 @@ the residual band *and* removes a latent numerical hazard. Item 4 is the
 cheapest experiment with the largest potential convergence payoff and can run
 in parallel as a probe. Items 2–3 follow if the np400/ha band still matters
 after 1.
+
+## Addendum (2026-07-18): certificate-quality and simplification items
+
+Written during the paper's solution-method section work (skar_paper, branch
+`dual-derivation-improvements`), from a duality-side review of the solver.
+Items 6–8 attack the same certificate floor as item 4 but from the
+construction side rather than the arithmetic side; items 9–10 are pure
+simplification. Nothing here touches the inner oracle or the (value,
+gradient) consistency contract.
+
+### 6. Certificate polishing: maximize over Γ instead of wiggling the axis
+
+The RECERT phase exists because the constructed certificate at a bit-frozen
+axis is idempotent — when the M-Cholesky fails at noise amplitude, the only
+current lever is axis micro-motion to re-sample the numerical state
+(src/trust.zig, re-certification phase). That is a stochastic fix for what
+may be a deterministic problem. The recipe γᵢ = λᵢ·A·xᵢ/‖A·xᵢ‖ is one
+dual-feasible point; for fixed λ the *best* Γ maximizes log det Z subject to
+‖γᵢ‖ ≤ λᵢ — a tiny concave problem over the ≤ 6 active columns (≤ 18
+variables). Even one improvement step from the current recipe (candidate
+direction: the LS recovery of Γ against A⁻¹ = ½(XΓᵀ + ΓXᵀ), then rescale
+into the SOC) strictly increases the dual value and can restore PSD-ness of
+Z deterministically.
+
+The evidence this addresses construction noise rather than an input-precision
+wall: on A5 res-30 the first cert fails M-Cholesky *for both paths* and the
+second passes purely because iterating re-sampled the state
+(docs/trust-solver.md, "What it took: the re-certification phase").
+
+Falsifiable the same way as item 4, and composable with it: at failed-cert /
+floor-DNC iterates, run the small Γ-solve and count how many certify. If it
+works, RECERT_MAX, the axis micro-step, and their canary complexity all
+delete — a rare item that is both an improvement and a simplification.
+
+### 7. Two-component, cancellation-free gap
+
+`dualityGapConstructed` computes the axis term as `w_sum.norm() - 3.0`
+(src/csar.zig) — subtracting 3 from a norm that is ≈ 3 near convergence,
+discarding the term's value into ~1e-15 cancellation noise. Since
+b·Xλ = 3·Σwᵢ structurally, the stable split is
+
+    gap_axis  = 3·(Σ_active wᵢ − 1) + ‖τ‖² / (‖Xλ‖ + b·Xλ)   (τ = tangential part)
+    gap_inner = −log det M
+
+Two wins: no cancellation, and the gap decomposes into named components —
+"axis off-centering" vs "inner refinement" — so a DNC can report *which*
+half stalled. Feeds the certificates-as-provenance direction (paper
+Discussion section) and sharpens item 4's probe (only gap_inner moves the
+eigenvalues at fixed axis). Afternoon-sized; measure on the floor-marginal
+S2/A5 populations.
+
+### 8. Gap→AR sensitivity bound → `certified_digits` (spans solver + paper)
+
+Already on the paper's roadmap (Discussion: denominate the tolerance in
+answer units); recording here that the algorithmic piece is small. At the
+optimum the curvature of −log det in the (σ₁, σ₂) directions is 1/σᵢ², so a
+certified gap g bounds the relative eigenvalue-pair error at roughly √(2g) —
+everything needed is in the factored solution already in hand. Shipping
+`certified_digits` plus a floor-aware adaptive default tolerance dissolves
+the "status noisier than the answer" failure mode (h3_gap_floor_report.md in
+the predecessor skar_py repo) without moving the floor at all. Highest
+user-facing value per line of code on this list. The derivation belongs in
+the paper's appendix; the field belongs on every outcome.
+
+### 9. Retire the standalone alternating path from the public API
+
+Consistent with (not contradicting) "don't touch `solveAlternating`": the
+proposal is to stop *exposing* it, not to edit it. Since the eager phase is
+literally the alternating path's opening cadence and trust is at
+success-parity or better everywhere measured (probe27), the standalone
+method is redundant as a product path: two public methods, two diagnostics
+structs, DampState, the quasi-Newton preconditioner and its gates
+(PRECOND_COND_MIN, AXIS_WARMUP), and a parallel canary suite. Keep it
+compiled as a test-only cross-validation oracle (its bit-stable reference
+role) and delete the public surface. Largest pure simplification available;
+zero algorithmic risk; the cost is a major-version API change.
+
+### 10. Unify the eager/OPEN_ROUNDS and RECERT phases
+
+Both are "cheap alternating cadence wrapped around a certification attempt"
+— one before TR work, one after. A single shared subroutine removes one of
+the two code paths without behavior change. If item 6 lands, the after-side
+disappears entirely and this item shrinks to renaming. Do after 6, not
+before.
+
+## Smaller / conditional (addendum)
+
+- **Closed form for triangles**: for n = 3 the inner design is exactly
+  w = (⅓, ⅓, ⅓) (with point basis Y, gᵢ = 1/wᵢ), so h and ∇h are explicit
+  and the whole solve is 2D Newton on a smooth closed-form function — no FW,
+  no polish. Only worth it if triangle inputs matter; DGGS cells are 4–10
+  vertices.
+- **Batch warm-starts for surveys**: neighboring cells of one resolution
+  class are near-congruent; carrying (b, w) across cells could turn most
+  solves into eager-cert passes. Bounded win (most cells already converge in
+  0–3 iterations); only pursue if survey throughput becomes the metric.
+- **Delete `mveeFwAway`**: kept in-tree after the away-step revert; the
+  record in docs/away-step-fw.md suffices.
