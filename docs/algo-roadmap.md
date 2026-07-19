@@ -162,29 +162,76 @@ construction side rather than the arithmetic side; items 9–10 are pure
 simplification. Nothing here touches the inner oracle or the (value,
 gradient) consistency contract.
 
-### 6. Certificate polishing: maximize over Γ instead of wiggling the axis
+**Reference oracles for this work** (added alongside this addendum;
+self-contained, run with `uv run <script>`):
 
-The RECERT phase exists because the constructed certificate at a bit-frozen
-axis is idempotent — when the M-Cholesky fails at noise amplitude, the only
-current lever is axis micro-motion to re-sample the numerical state
-(src/trust.zig, re-certification phase). That is a stochastic fix for what
-may be a deterministic problem. The recipe γᵢ = λᵢ·A·xᵢ/‖A·xᵢ‖ is one
-dual-feasible point; for fixed λ the *best* Γ maximizes log det Z subject to
-‖γᵢ‖ ≤ λᵢ — a tiny concave problem over the ≤ 6 active columns (≤ 18
-variables). Even one improvement step from the current recipe (candidate
-direction: the LS recovery of Γ against A⁻¹ = ½(XΓᵀ + ΓXᵀ), then rescale
-into the SOC) strictly increases the dual value and can restore PSD-ness of
-Z deterministically.
+- `scripts/verify_duality.py` — CVXPY checks of every structural identity
+  the certificate relies on (strong duality, b-eigenvector at 1/√3,
+  Z* = A⁻¹, ‖Xλ‖ = 3, W = A⁻², the recipe, KW conditions, ∇h = −Xλ,
+  homogeneity). Any change to the certificate construction must keep
+  agreeing with it. The derivations live in skar_paper (branch
+  `dual-derivation-improvements`); the identities themselves are restated
+  in the script's docstring so this repo is self-sufficient.
+- `scripts/gamma_polish_prototype.py` — the item 6 experiment, with
+  measured results in its docstring.
 
-The evidence this addresses construction noise rather than an input-precision
-wall: on A5 res-30 the first cert fails M-Cholesky *for both paths* and the
-second passes purely because iterating re-sampled the state
-(docs/trust-solver.md, "What it took: the re-certification phase").
+**Infrastructure gap (important for anyone implementing 6–8):** the
+DGGS-floor measurement harness did NOT migrate from the skar-era repos.
+`tests/dggs_dnc_test.zig`, `zig build ex-compare`, the probe programs, and
+skar_py's `scripts/dggs/survey.py` (10k-cell h3/s2/a5 sweeps) exist only in
+skar_zig / skar_py history. What this repo has: `tests/methods_test.zig`
+(wide-cap fixtures + Clarabel references), `tests/cases/`, `just bench`,
+and the states/countries pipelines under `scripts/`. Items whose validation
+says "floor-marginal S2/A5 populations" need the survey harness ported to
+csar_py first (source: skar_py `scripts/dggs/survey.py`; it is a thin loop
+over cell boundaries → solve → collect status/gap/AR).
 
-Falsifiable the same way as item 4, and composable with it: at failed-cert /
-floor-DNC iterates, run the small Γ-solve and count how many certify. If it
-works, RECERT_MAX, the axis micro-step, and their canary complexity all
-delete — a rare item that is both an improvement and a simplification.
+### 6. Certificate polishing — REVISED after prototype measurement
+
+**Original claim (2026-07-18, now largely refuted):** the RECERT phase's
+axis micro-motion could be replaced by maximizing the dual over Γ at fixed
+λ (a ≤ 18-variable concave problem on the active columns), recovering gap
+magnitude lost to certificate-construction noise.
+
+**Measured (scripts/gamma_polish_prototype.py, same day):** under an
+inexact-inner-state noise model (Gaussian w-perturbation at
+η ∈ {0, 1e-8, 1e-6, 1e-4}, solver-faithful construction: moment → A →
+budget rescale → recipe), the recipe γᵢ = λᵢ·A·xᵢ/‖A·xᵢ‖ is already
+Γ-optimal within evaluation resolution — the KKT alignment fixed-point
+recovers nothing, and CVXPY's own subsolve can't beat the recipe. The
+reported gap sits within ~1.2–1.4× of the irreducible p − d* at every η.
+Two consequences:
+
+- **No gap-magnitude recovery is available from better Γ.** The floor is
+  the iterate (w, b at f64), not the construction. This is evidence for
+  the "iterate quantization" branch of item 4's dichotomy — and it
+  sharpens item 4's probe with a quantitative prediction: gap ≈ 6×
+  (effective w-noise) in this model, so measure the run-to-run /
+  path-to-path w variation on floor cells and expect the gap floor at ~6×
+  that. If confirmed, item 4's extended-precision arithmetic won't help
+  either, and the floor is honest.
+- **The surviving scope is PSD-repair, not gap recovery.** The RECERT
+  trigger is the M-Cholesky *failure* (Z indefinite at noise amplitude),
+  which the prototype's noise model never produced. When Z(recipe) fails
+  Cholesky, one μ-shifted alignment step gives a deterministic PSD
+  candidate:
+
+      choose μ: smallest power-of-2 multiple of ε·tr(Z) such that
+                (Z + μI) admits Cholesky (≤ ~5 attempts)
+      D  = (Z + μI)⁻¹ X_active        (Cholesky solves, 3×3)
+      γᵢ = λᵢ · Dᵢ / ‖Dᵢ‖            (dual-feasible by construction)
+      rebuild Z(Γ), evaluate the gap through the existing M = LᵀZL path
+
+  All primitives exist in src/csar.zig (`Mat3.cholesky`, the M-path in
+  `dualityGapConstructed`); ~40 lines behind the existing
+  Cholesky-failure branch. **The decisive experiment**: instrument
+  `certifyAt` (src/trust.zig) to capture states where the first
+  certificate fails M-Cholesky (the A5 res-30 population,
+  docs/trust-solver.md "What it took: the re-certification phase"), apply
+  the repair step, count how many then certify at `gap_tol`. Succeeds →
+  RECERT_MAX, the axis micro-step, and their canary complexity delete
+  (item 10 then shrinks to a rename). Fails → keep RECERT, close this
+  item, and record the result here.
 
 ### 7. Two-component, cancellation-free gap
 
@@ -201,20 +248,71 @@ Two wins: no cancellation, and the gap decomposes into named components —
 half stalled. Feeds the certificates-as-provenance direction (paper
 Discussion section) and sharpens item 4's probe (only gap_inner moves the
 eigenvalues at fixed axis). Afternoon-sized; measure on the floor-marginal
-S2/A5 populations.
+S2/A5 populations (needs the survey harness — see the infrastructure note).
+
+**Implementation notes.** In `dualityGapConstructed` (src/csar.zig, the
+`gap = w_sum.norm() - 3.0 - Lm.logDet()` line):
+
+- `s = b·w_sum` — but compute the *deviation* `s − 3` without cancellation:
+  since `λᵢ·(b·xᵢ) = 3wᵢ` exactly by construction, `s − 3 = 3·(Σ_active wᵢ
+  − 1)`. Two options, measure both: (a) the invariant Σ_workingset w = 1 is
+  maintained by FW/polish, so `Σ_active w − 1 = −Σ_dropped w` — sum only
+  the (≤ ACTIVE_THRESH) dropped weights, no cancellation at all; (b)
+  compensated (Kahan) summation of Σ_active w, then subtract 1. Option (a)
+  is exact modulo the fp drift of the simplex invariant; assert the two
+  agree to ~1e-14 in a debug check.
+- `τ = w_sum − s·b` (tangential part; ‖τ‖² is a sum of squares, no
+  cancellation), and
+  `gap_axis = (s − 3) + ‖τ‖² / (‖w_sum‖ + s)`,
+  `gap_inner = −Lm.logDet()`, `gap = gap_axis + gap_inner`.
+  The identity behind the split: ‖w_sum‖² = s² + ‖τ‖², so
+  ‖w_sum‖ − s = ‖τ‖²/(‖w_sum‖ + s).
+- Surface: add `gap_axis`/`gap_inner` to `GapResult`, thread through
+  `buildOutcome` onto `Converged`/`DidNotConverge` (api.zig) next to `gap`.
+- Validation: assert `|gap − (gap_axis + gap_inner)| ≤ 1e-12·(1 + |gap|)`
+  across the slow suite; all CANARY pins must hold (the split changes
+  reported values only at the old formula's ~1e-15 noise scale).
 
 ### 8. Gap→AR sensitivity bound → `certified_digits` (spans solver + paper)
 
 Already on the paper's roadmap (Discussion: denominate the tolerance in
-answer units); recording here that the algorithmic piece is small. At the
-optimum the curvature of −log det in the (σ₁, σ₂) directions is 1/σᵢ², so a
-certified gap g bounds the relative eigenvalue-pair error at roughly √(2g) —
-everything needed is in the factored solution already in hand. Shipping
+answer units); recording here that the algorithmic piece is small. Shipping
 `certified_digits` plus a floor-aware adaptive default tolerance dissolves
 the "status noisier than the answer" failure mode (h3_gap_floor_report.md in
 the predecessor skar_py repo) without moving the floor at all. Highest
 user-facing value per line of code on this list. The derivation belongs in
 the paper's appendix; the field belongs on every outcome.
+
+**The bound, spelled out** (so implementation is translation, not
+derivation). f(A) = −log det A is standard self-concordant. For the optimal
+A* and any primal-feasible A with certified gap g = f(A) − d ≥ f(A) − f*:
+
+1. Self-concordance lower bound (Nesterov):
+   f(A) ≥ f(A*) + ⟨∇f(A*), Δ⟩ + ω(‖E‖_F), where Δ = A − A*,
+   E = A*^{−1/2}·Δ·A*^{−1/2} (the local norm: ‖Δ‖²_{A*} =
+   tr(A*⁻¹ΔA*⁻¹Δ) = ‖E‖²_F), and ω(t) = t − ln(1+t).
+2. First-order optimality of A* over the (jointly convex) feasible set,
+   with f constant in b: ⟨∇f(A*), Δ⟩ ≥ 0. Hence ω(‖E‖_F) ≤ g.
+3. Inverting ω with a safe elementary bound (ω(t) ≥ t²/6 on [0, 1]):
+   t := ‖E‖_F ≤ √(6g), valid whenever √(6g) ≤ 1.
+4. Ostrowski / multiplicative Weyl: A = A*^{1/2}(I + E)A*^{1/2} gives
+   σᵢ(A) ∈ σᵢ(A*)·[1 − t, 1 + t], so the aspect ratio satisfies
+   |AR(A) − AR(A*)| / AR(A*) ≤ 2t/(1 − t).
+
+So: `rel_ar_err_bound(g) = 2√(6g)/(1 − √(6g))` for g < 1/6, and
+`certified_digits = −log10(rel_ar_err_bound(g))`, computed from the
+achieved gap on every outcome — no new solver state needed.
+
+**Caveat to state honestly (and measure):** the bound is worst-case over
+all feasible A at gap g; empirically cross-method AR agreement is ~4
+orders tighter (gap 1e-6 ↔ AR deltas ~1e-7–1e-8; docs/trust-solver.md
+DGGS tables) because solver iterates are near-stationary, not adversarial.
+Ship the conservative bound as the guarantee; optionally report a
+calibrated estimate alongside (constant fit by regressing cross-method AR
+deltas against achieved gap on the survey data — needs the harness from
+the infrastructure note). The conservative-vs-calibrated decision is the
+paper's open question (c); whichever ships, name it accurately in the API
+docs.
 
 ### 9. Retire the standalone alternating path from the public API
 
@@ -229,6 +327,26 @@ compiled as a test-only cross-validation oracle (its bit-stable reference
 role) and delete the public surface. Largest pure simplification available;
 zero algorithmic risk; the cost is a major-version API change.
 
+**Implementation checklist:**
+
+- api.zig: remove the `.alternating` variant from the public `Method` enum
+  (or mark the enum non-exhaustive and stop documenting it); `.auto`
+  already resolves to `.trust`.
+- Keep `solveAlternating` itself `pub` in the source module so the test
+  suite and the CANARY(alternating) pins keep exercising it directly —
+  its role becomes cross-validation oracle, stated in its doc comment.
+- `Diagnostics` union: the `alternating` variant stays (tests construct
+  it); only its reachability from the public entry point changes.
+- Check the Python bindings (csar_py) for method exposure before removal —
+  if `method=` is surfaced there, the removal lands in both repos in the
+  same release.
+- Changelog entry + major version bump; note the escape hatch (the test
+  oracle) for anyone who was selecting `.alternating` deliberately.
+- Follow-up deletions this unlocks (verify unused first): `DampState`,
+  `quasiNewtonAxisDirection`, PRECOND_COND_MIN, AXIS_WARMUP — but only if
+  the eager/RECERT cadences don't route through them (they use the plain
+  damped axis step; check call sites before deleting).
+
 ### 10. Unify the eager/OPEN_ROUNDS and RECERT phases
 
 Both are "cheap alternating cadence wrapped around a certification attempt"
@@ -236,6 +354,23 @@ Both are "cheap alternating cadence wrapped around a certification attempt"
 the two code paths without behavior change. If item 6 lands, the after-side
 disappears entirely and this item shrinks to renaming. Do after 6, not
 before.
+
+**Implementation notes.** The two cadences are not identical — parameterize
+rather than force-merge (all in src/trust.zig):
+
+- eager/opening (before TR): two FW steps + one polish + certify, **no
+  axis step before the certificate** (the incoming axis is the one being
+  tested), axis step only between rounds.
+- RECERT (after TR): FW step + polish + certify, then an **undamped** axis
+  micro-step (‖c‖ is at noise scale there; the damped step is the opening
+  cadence's).
+
+Shared shape: `cheapRound(state, fw_steps: u32, axis_step: enum {none,
+damped, plain}) ?GapResult`. Byte-parity requirement: the refactor must
+reproduce the existing iterate sequences exactly — validate with the
+CANARY(trust) typed signatures (open/tr/recert counts) and the full slow
+suite; any drift is a bug in the unification, not an acceptable
+regression.
 
 ## Smaller / conditional (addendum)
 
