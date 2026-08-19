@@ -316,6 +316,15 @@ docs.
 
 ### 9. Retire the standalone alternating path from the public API
 
+**Disposition upgraded to full removal — see #5.** The oracle-retention
+idea below is superseded: both solve paths share `dualityGapConstructed`,
+so the cross-validation was never independent where it matters;
+verification rests on the duality-gap certificates and the
+independent-provenance Clarabel references instead, and #5 deletes the
+path outright (machinery, diagnostics variant, and agreement test
+included). The checklist below still applies where it doesn't contradict
+#5. The original proposal is kept for the record:
+
 Consistent with (not contradicting) "don't touch `solveAlternating`": the
 proposal is to stop *exposing* it, not to edit it. Since the eager phase is
 literally the alternating path's opening cadence and trust is at
