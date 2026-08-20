@@ -64,6 +64,22 @@ test "batchFor: clamped, and a useless probe asks for the longest interval" {
     try std.testing.expectEqual(bc.BATCH_MAX, bc.batchFor(std.math.inf(f64)));
 }
 
+test "Tally counts each outcome, and anything unrecognised as an error" {
+    var t: bc.Tally = .{};
+    t.add(.{ .status = "converged" });
+    t.add(.{ .status = "converged" });
+    t.add(.{ .status = "infeasible" });
+    t.add(.{ .status = "did_not_converge" });
+    // An @errorName from a failed solve — the reason `status` is a string.
+    t.add(.{ .status = "NegativeDualityGap" });
+
+    var buf: [128]u8 = undefined;
+    try std.testing.expectEqualStrings(
+        "2 converged / 1 DNC / 1 infeasible / 1 errored",
+        try t.format(&buf),
+    );
+}
+
 /// A scripted stand-in for "run `count` solves and report the elapsed µs".
 /// Exact arithmetic, so the loop's own maths is assertable to the ulp.
 const Fake = struct {

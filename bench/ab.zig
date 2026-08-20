@@ -202,6 +202,7 @@ fn report(comptime BaseLib: type, init: std.process.Init, opts: Opts) !void {
     var w = std.Io.File.stdout().writer(io, &buf);
     const out = &w.interface;
     var line: [256]u8 = undefined;
+    var line2: [256]u8 = undefined;
 
     const cur_tol: f64 = if (opts.inject_tol) INJECT_GAP_TOL else GAP_TOL;
     const cur_mult: u32 = if (opts.inject_2x) 2 else 1;
@@ -228,9 +229,13 @@ fn report(comptime BaseLib: type, init: std.process.Init, opts: Opts) !void {
     // ---- deterministic pass, over every fixture -------------------------
     try out.print("deterministic diff ({d} fixtures: status / iters / ar)\n", .{cases.all.len});
     var n_diff: usize = 0;
+    var tally_cur: bc.Tally = .{};
+    var tally_base: bc.Tally = .{};
     for (cases.all) |entry| {
         const a = side_cur.metrics(entry.case.points);
         const b = side_base.metrics(entry.case.points);
+        tally_cur.add(a);
+        tally_base.add(b);
         if (!bc.differs(a, b)) continue;
         n_diff += 1;
         try out.print("{s}\n", .{try bc.formatDiff(&line, entry.name, a, b)});
@@ -240,6 +245,8 @@ fn report(comptime BaseLib: type, init: std.process.Init, opts: Opts) !void {
     } else {
         try out.print("  {d} case(s) differ\n", .{n_diff});
     }
+    try out.print("  outcomes  cur : {s}\n", .{try tally_cur.format(&line)});
+    try out.print("            base: {s}\n", .{try tally_base.format(&line2)});
     try out.print("\n", .{});
 
     // ---- timing, paired and interleaved ---------------------------------

@@ -156,6 +156,42 @@ pub const Metrics = struct {
     gap: f64 = 0,
 };
 
+/// Running count of outcomes on one side.
+///
+/// Aggregate, not per-case: a report that says 27 cases differ makes you read
+/// 27 rows to learn which *direction* things moved. This says it in one line.
+///
+/// Deliberately a whole-corpus tally rather than a per-family convergence
+/// rate. That metric is #19's, and it is blocked on the corpus rather than on
+/// code: the `dggs` fixtures are five families of four cells, so a "percentage"
+/// there can only be 0/25/50/75/100.
+pub const Tally = struct {
+    converged: u32 = 0,
+    infeasible: u32 = 0,
+    did_not_converge: u32 = 0,
+    errored: u32 = 0,
+
+    pub fn add(self: *Tally, m: Metrics) void {
+        if (std.mem.eql(u8, m.status, "converged")) {
+            self.converged += 1;
+        } else if (std.mem.eql(u8, m.status, "infeasible")) {
+            self.infeasible += 1;
+        } else if (std.mem.eql(u8, m.status, "did_not_converge")) {
+            self.did_not_converge += 1;
+        } else {
+            self.errored += 1;
+        }
+    }
+
+    pub fn format(self: Tally, buf: []u8) ![]const u8 {
+        return std.fmt.bufPrint(
+            buf,
+            "{d} converged / {d} DNC / {d} infeasible / {d} errored",
+            .{ self.converged, self.did_not_converge, self.infeasible, self.errored },
+        );
+    }
+};
+
 /// The deterministic-diff predicate: the tool's contract, consumed by #5, #6
 /// and #9 as "an empty deterministic diff".
 ///
