@@ -393,42 +393,43 @@ pub fn evalH(
 /// otherwise). Returns the step u and the predicted decrease.
 const TrStep = struct { u: Vec2, pred: f64 };
 
-/// Acceptance test for a trial step's actual/predicted decrease ratio.
-/// Written as !(ρ ≥ ETA), not ρ < ETA: a NaN ratio (h from a poisoned
-/// state) must REJECT the trial, not accept it.
-pub fn accepts(rho: f64) bool {
-    return rho >= tc.ETA;
-}
+/// The derived isotropic model Hessian (≈ its own circular-optimum
+/// limit) — the fallback whenever the per-evaluation Hessian is
+/// unusable.
+const ISO_B = Mat2{ .m = .{ tc.B0, 0, 0, tc.B0 } };
 
-pub const RadiusUpdate = struct { delta: f64, hit_floor: bool };
+pub const RadiusUpdate = struct { accepted: bool, delta: f64, hit_floor: bool };
 
-/// The trust-region radius policy after a trial evaluation, in one
-/// testable place (constants and their provenance: config.trust).
+/// The trust-region acceptance test and radius policy after a trial
+/// evaluation, in one testable place (constants and their provenance:
+/// config.trust).
 ///
-/// - Reject (ρ < ETA, NaN included): shrink by SHRINK, relative to the
-///   step actually attempted so interior Newton steps shrink
-///   meaningfully too. The caller also restores the warm-start weights.
+/// - Reject (ρ < ETA — via !(ρ ≥ ETA), so a NaN ratio from a poisoned
+///   state rejects too): shrink by SHRINK, relative to the step
+///   actually attempted so interior Newton steps shrink meaningfully
+///   too. The caller also restores the warm-start weights.
 /// - Accepted but poor (ρ < RHO_POOR): the quadratic model
 ///   over-promised (higher-order terms dominate over this radius) —
 ///   shrink gently by SHRINK_POOR so the model regains fidelity
 ///   instead of creeping at ρ ≈ 0.15 or oscillating across the
 ///   fidelity boundary.
-/// - Very successful (ρ ≥ ETA_GOOD) with a radius-limited step: grow.
+/// - Very successful (ρ ≥ ETA_GOOD) with a radius-limited step
+///   (≥ GROW_MIN_STEP_FRAC of the radius): grow.
 /// - `hit_floor` means the shrunk radius fell below DELTA_MIN — the
 ///   caller exits the loop.
 pub fn updateRadius(delta: f64, rho: f64, step_norm: f64) RadiusUpdate {
-    if (!accepts(rho)) {
+    if (!(rho >= tc.ETA)) {
         const d = @min(delta, step_norm) * tc.SHRINK;
-        return .{ .delta = d, .hit_floor = d < tc.DELTA_MIN };
+        return .{ .accepted = false, .delta = d, .hit_floor = d < tc.DELTA_MIN };
     }
     if (rho < tc.RHO_POOR) {
         const d = @min(delta, step_norm) * tc.SHRINK_POOR;
-        return .{ .delta = d, .hit_floor = d < tc.DELTA_MIN };
+        return .{ .accepted = true, .delta = d, .hit_floor = d < tc.DELTA_MIN };
     }
-    if (rho >= tc.ETA_GOOD and step_norm >= 0.8 * delta) {
-        return .{ .delta = @min(delta * tc.GROW, tc.DELTA_MAX), .hit_floor = false };
+    if (rho >= tc.ETA_GOOD and step_norm >= tc.GROW_MIN_STEP_FRAC * delta) {
+        return .{ .accepted = true, .delta = @min(delta * tc.GROW, tc.DELTA_MAX), .hit_floor = false };
     }
-    return .{ .delta = delta, .hit_floor = false };
+    return .{ .accepted = true, .delta = delta, .hit_floor = false };
 }
 
 /// `doglegStep` with the isotropic-Hessian retry: if the model
@@ -439,8 +440,7 @@ pub fn updateRadius(delta: f64, rho: f64, step_norm: f64) RadiusUpdate {
 pub fn doglegStepRobust(B: Mat2, g: Vec2, delta: f64) TrStep {
     const step = doglegStep(B, g, delta);
     if (step.pred > 0) return step;
-    const iso = Mat2{ .m = .{ tc.B0, 0, 0, tc.B0 } };
-    return doglegStep(iso, g, delta);
+    return doglegStep(ISO_B, g, delta);
 }
 
 pub fn doglegStep(B: Mat2, g: Vec2, delta: f64) TrStep {
@@ -592,7 +592,7 @@ pub fn solveTrust(
         // circular-optimum limit) so the dogleg's prediction is
         // positive whenever g ≠ 0.
         var B = cur.B;
-        if (!(B.det() > 0) or !(B.m[0] > 0)) B = .{ .m = .{ tc.B0, 0, 0, tc.B0 } }; // negated form: NaN falls back too
+        if (!(B.det() > 0) or !(B.m[0] > 0)) B = ISO_B; // negated form: NaN falls back too
 
         const step = doglegStepRobust(B, cur.g, delta);
         if (step.pred <= 0 or !(step.u.norm() > 0)) break; // stationary: g ≈ 0
@@ -608,10 +608,10 @@ pub fn solveTrust(
         const trial = evalH(b_trial, Xw, &wb, algo.FEAS_MARGIN);
 
         const rho: f64 = if (trial) |t| (cur.h - t.h) / step.pred else -1.0;
-        if (!accepts(rho)) {
+        const rd = updateRadius(delta, rho, step.u.norm());
+        if (!rd.accepted) {
             // Reject: restore the warm-start weights and shrink.
             @memcpy(wb.w, wb.w_bak);
-            const rd = updateRadius(delta, rho, step.u.norm());
             delta = rd.delta;
             if (rd.hit_floor) break;
             continue;
@@ -637,7 +637,6 @@ pub fn solveTrust(
             }
         }
 
-        const rd = updateRadius(delta, rho, step.u.norm());
         delta = rd.delta;
         if (rd.hit_floor) break;
     }

@@ -14,6 +14,7 @@ const Vec2 = linalg.Vec2;
 const Mat2 = linalg.Mat2;
 const Vec3 = csar.Vec3;
 const tc = @import("../src/config.zig").trust;
+const helpers = @import("helpers.zig");
 
 fn pred(B: Mat2, g: Vec2, u: Vec2) f64 {
     return -(g.dot(u) + 0.5 * u.dot(B.apply(u)));
@@ -85,17 +86,18 @@ test "updateRadius: every ρ band of the tuned radius policy" {
 
     // Reject band (ρ < ETA), NaN included: shrink relative to the step
     // actually attempted, by SHRINK.
-    try std.testing.expect(!trust.accepts(0.0));
-    try std.testing.expect(!trust.accepts(nan));
     const rej = trust.updateRadius(1.0, 0.0, 0.5);
+    try std.testing.expect(!rej.accepted);
     try std.testing.expectEqual(@min(1.0, 0.5) * tc.SHRINK, rej.delta);
     try std.testing.expect(!rej.hit_floor);
-    try std.testing.expectEqual(rej.delta, trust.updateRadius(1.0, nan, 0.5).delta);
+    const rej_nan = trust.updateRadius(1.0, nan, 0.5);
+    try std.testing.expect(!rej_nan.accepted);
+    try std.testing.expectEqual(rej.delta, rej_nan.delta);
 
     // Accepted-but-poor band (ETA ≤ ρ < RHO_POOR): gentle SHRINK_POOR.
     const rho_poor = (tc.ETA + tc.RHO_POOR) / 2.0;
-    try std.testing.expect(trust.accepts(rho_poor));
     const poor = trust.updateRadius(1.0, rho_poor, 1.0);
+    try std.testing.expect(poor.accepted);
     try std.testing.expectEqual(tc.SHRINK_POOR, poor.delta);
     try std.testing.expect(!poor.hit_floor);
 
@@ -113,23 +115,7 @@ test "updateRadius: every ρ band of the tuned radius policy" {
     try std.testing.expectEqual(1.0, trust.updateRadius(1.0, 0.99, 0.5).delta);
 }
 
-/// N points on the boundary of an anisotropic "elliptical cap": tangent
-/// ellipse (half-angles `half_a` × `half_b`) at `center`, mapped to the
-/// sphere via the exponential map, optionally over a partial arc.
-fn ellipseBoundary(center: Vec3, half_a: f64, half_b: f64, phase: f64, arc: f64, out: []Vec3) void {
-    const Q = center.orthoBasis();
-    const n_f = @as(f64, @floatFromInt(out.len));
-    for (out, 0..) |*p, i| {
-        const theta = phase + arc * @as(f64, @floatFromInt(i)) / n_f;
-        const ta = half_a * @cos(theta);
-        const tb = half_b * @sin(theta);
-        const r = @sqrt(ta * ta + tb * tb);
-        const ca = @cos(r);
-        const sa = if (r > 0) @sin(r) / r else 1.0;
-        const tan = Vec3.lincomb(sa * ta, Q.e1, sa * tb, Q.e2);
-        p.* = Vec3.lincomb(ca, center, 1.0, tan).normalize();
-    }
-}
+const ellipseBoundary = helpers.ellipseBoundary;
 
 test "trust: extreme-anisotropy and arc inputs traverse rejected steps and clipped doglegs" {
     // Wide, strongly anisotropic caps and open arcs start the trust
@@ -164,9 +150,9 @@ test "trust: extreme-anisotropy and arc inputs traverse rejected steps and clipp
         const pts: [][3]f64 = @ptrCast(pts_v);
         var o = try csar.solve(allocator, pts, .{});
         defer o.deinit();
-        const t = trustTally(&o);
-        total_tr_iters += t.tr_iters;
-        if (t.converged) {
+        const v = helpers.resolvedView(&o);
+        total_tr_iters += v.diag.trust.tr_iters;
+        if (v.converged) {
             n_converged += 1;
             const c = o.converged;
             try std.testing.expect(@abs(c.gap) <= 1e-6);
@@ -177,36 +163,6 @@ test "trust: extreme-anisotropy and arc inputs traverse rejected steps and clipp
     }
     try std.testing.expect(n_converged >= 5);
     try std.testing.expect(total_tr_iters > 0); // TR actually engaged
-}
-
-const Tally = struct { converged: bool, tr_iters: u32 };
-
-/// Outcome accounting for the anisotropy family. Both arms are
-/// exercised deterministically on every platform: the family's tame
-/// shapes converge everywhere, and the budget-clamped test below DNCs
-/// everywhere — so the per-shape platform variance above leaves no
-/// coverage hole.
-fn trustTally(o: *const csar.Outcome) Tally {
-    return switch (o.*) {
-        .converged => |c| .{ .converged = true, .tr_iters = c.diag.trust.tr_iters },
-        .did_not_converge => |d| .{ .converged = false, .tr_iters = d.diag.trust.tr_iters },
-        .infeasible => unreachable, // solver bug: every family input is strictly feasible by construction
-    };
-}
-
-test "trust: budget-clamped wide cap is an honest DNC everywhere" {
-    // wide_cap89 with max_outer = 1: the wide-cap eager certificate
-    // fails by construction (docs/wide-cap-dnc-report.md), so a single
-    // outer iteration cannot certify — deterministic DNC on every
-    // platform. A shift here is a regression signal, not a number to
-    // bump.
-    const allocator = std.testing.allocator;
-    const cases = @import("cases");
-    const pts = (cases.byName("wide_cap89") orelse unreachable).points;
-    var o = try csar.solve(allocator, pts, .{ .method = .trust, .max_outer = 1 });
-    defer o.deinit();
-    const t = trustTally(&o);
-    try std.testing.expect(!t.converged);
 }
 
 test "trust: tight gap_tol converges through the re-certification phase" {

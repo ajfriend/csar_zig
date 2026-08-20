@@ -142,11 +142,12 @@ Before marking a line, exhaust these — each has an in-tree example:
   path a self-test drives directly (`expectArAgreement` in
   methods_test).
 - **Cover platform-dependent arms with a deterministic sibling.**
-  A tolerant switch over converged/DNC is factored into a helper
-  (`snapshotQ`, `trustTally`), and a test feeds it both a
-  guaranteed-converged solve (hex) and a guaranteed-DNC solve
-  (wide_cap89 at max_outer = 1 — the wide-cap eager certificate
-  fails by construction) so both arms execute on every platform.
+  The tolerant switch over converged/DNC lives once, in
+  `tests/helpers.zig` (`resolvedView`), and its own test feeds it
+  both a guaranteed-converged solve (hex) and a guaranteed-DNC solve
+  (`solveClampedWideCapDnc`: wide_cap89 at max_outer = 1 — the
+  wide-cap eager certificate fails by construction) so both arms
+  execute on every platform.
 
 What remains excluded is exactly the `=> unreachable` arms (counted
 in the ledger, never marked). Historical evidence for the polish-bail

@@ -72,8 +72,6 @@ pub const NewtonScratch = struct {
 /// break firing first. Pre-existing, documented, unchanged.
 pub const RANGE_SPACE_MIN_K: usize = 8;
 
-/// Bordered KKT [H, 1; 1', 0] [Δw; -ν] = [g; 0] via LU on the (k+1)×(k+1)
-/// symmetric indefinite system.
 /// Dense KKT Hessian for `solveBorderedKkt`: symmetric H_ij = (qᵢᵀW⁻¹qⱼ)²,
 /// built from what `Y` holds on each path (see the Y/g computation in
 /// `newtonPolish`): range path (forward solves, Y = L⁻¹q) ⇒ (yᵢ·yⱼ)²;
@@ -90,6 +88,8 @@ pub fn buildKktH(q: []const Vec3, Y: []const Vec3, use_range: bool, H: []f64) vo
     }
 }
 
+/// Bordered KKT [H, 1; 1', 0] [Δw; -ν] = [g; 0] via LU on the (k+1)×(k+1)
+/// symmetric indefinite system.
 fn solveBorderedKkt(H: []const f64, k: usize, g: []const f64, delta_w: []f64, s: *NewtonScratch) bool {
     const n = k + 1;
     const K = s.KKT;

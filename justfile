@@ -1,6 +1,9 @@
 _:
     just --list
 
+kcov_include := "src/,tests/"
+kcov_exclude := "=> unreachable,kcov-excl"
+
 # Fast test loop. Skips long-running randomized stress tests
 # (e.g. cap_test). No coverage gate. Sub-second; use this while
 # iterating. Run `just test-slow` before committing.
@@ -8,41 +11,30 @@ test:
     zig build install-test
     ./zig-out/bin/csar-test
 
-# Full test suite + 100% line coverage gate. Builds with -Dslow=true
-# so the randomized stress tests run, then measures coverage under
-# kcov. Slower (~10s) — the pre-commit / CI check.
-# Exclusions keep the 100% gate exact, not lax (any NEWLY uncovered
-# line still fails): `=> unreachable` switch arms can never execute in
-# a passing run by definition (deliberately narrow — `orelse
-# unreachable` lines DO execute and stay counted), and `kcov-excl`
-# markers carry a per-site reason — the ledger lives in dev.md
-# "Coverage exclusions".
-# The exclusion ledger rides along for free: the gate run collects and
-# reports as before (with the exclusion flags); a second, report-only
-# kcov pass on a copy of the collected data reclassifies WITHOUT the
-# flags. Per file, raw total_lines − gated total_lines = lines the
-# exclusions removed — the ledger to watch over time. CI posts it on
-# every PR. (Only the line *classification* of the report-only pass is
-# used; its hit data is lossy and never consulted.)
+# Full test suite + 100% line coverage gate under kcov. -Dslow=true
+# runs the randomized stress tests too; ~10s — the pre-commit / CI
+# check. Exclusion policy and the ledger's meaning: dev.md "Coverage
+# exclusions". The report-only second pass derives the exclusion
+# ledger from the same collected data (its line classification only;
+# report-only hit data is lossy and never consulted). The summary
+# block lands in coverage/summary.txt for CI to post on PRs.
 test-slow:
     zig build install-test -Dslow=true
     rm -rf coverage coverage_raw
-    kcov --include-pattern=src/,tests/ --exclude-line='=> unreachable,kcov-excl' --exclude-region=kcov-excl-start:kcov-excl-stop coverage zig-out/bin/csar-test
+    kcov --include-pattern={{kcov_include}} --exclude-line='{{kcov_exclude}}' --exclude-region=kcov-excl-start:kcov-excl-stop coverage zig-out/bin/csar-test
     cp -r coverage coverage_raw
-    kcov --report-only --include-pattern=src/,tests/ coverage_raw zig-out/bin/csar-test
+    kcov --report-only --include-pattern={{kcov_include}} coverage_raw zig-out/bin/csar-test
     @n=$(ls -1d coverage/csar-test.*/ 2>/dev/null | wc -l | tr -d ' '); \
         if [ "$n" != "1" ]; then echo "expected exactly 1 coverage/csar-test.*/ dir, got $n"; exit 1; fi
-    @jq -r '"csar coverage: \(.percent_covered)%"' coverage/csar-test.*/coverage.json
-    @jq -rn --arg root "$(pwd)/" --slurpfile g coverage/csar-test.*/coverage.json --slurpfile r coverage_raw/csar-test.*/coverage.json \
-        '($g[0].files | map({key: .file, value: (.total_lines|tonumber)}) | from_entries) as $gt | [$r[0].files[] | {f: (.file|ltrimstr($root)), d: ((.total_lines|tonumber) - ($gt[.file] // 0))} | select(.d > 0)] | sort_by(.f) as $per | "coverage exclusions: \($per | map(.d) | add // 0) lines excluded from the gate", ($per[] | "  \(.f): \(.d)")'
+    @{ jq -r '"csar coverage: \(.percent_covered)%"' coverage/csar-test.*/coverage.json; \
+        jq -rn --arg root "$(pwd)/" --slurpfile g coverage/csar-test.*/coverage.json --slurpfile r coverage_raw/csar-test.*/coverage.json \
+        '($g[0].files | INDEX(.file)) as $gt | [$r[0].files[] | {f: (.file|ltrimstr($root)), d: ((.total_lines|tonumber) - (($gt[.file].total_lines // 0) | tonumber))} | select(.d > 0)] | sort_by(.f) as $per | "coverage exclusions: \($per | map(.d) | add // 0) lines excluded from the gate", ($per[] | "  \(.f): \(.d)")'; } > coverage/summary.txt
+    @cat coverage/summary.txt
     @jq -e '(.percent_covered | tonumber) >= 100' coverage/csar-test.*/coverage.json > /dev/null
 
-# Full suite under zig's SELF-HOSTED backend (-Dllvm=false). The suite
-# — including the deterministic iteration-ceiling bounds — must pass
-# under both backends; coverage is only measured on the LLVM binary
-# (kcov can't read self-hosted DWARF). Backend support is per-target:
-# works on x86_64-linux (CI runs it there); the 0.15.2 self-hosted
-# backend crashes compiling this suite on aarch64-macos.
+# Full suite under zig's self-hosted backend. Policy and per-target
+# support (it crashes compiling this suite on aarch64-macos; CI runs
+# it on x86_64-linux): dev.md "Two backends".
 test-selfhosted:
     zig build test -Dslow=true -Dllvm=false
 

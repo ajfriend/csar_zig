@@ -186,6 +186,10 @@ pub const trust = struct {
     /// ρ ≈ 0.2 / ρ ≈ 0.8 iterations).
     pub const SHRINK_POOR: f64 = 0.5;
     pub const GROW: f64 = 2.0;
+    /// Growth requires the step to have actually used this fraction of
+    /// the radius — an interior Newton step that stopped short says the
+    /// radius wasn't the constraint, so growing it buys nothing.
+    pub const GROW_MIN_STEP_FRAC: f64 = 0.8;
     pub const DELTA_MIN: f64 = 1e-14;
     /// Step acceptance thresholds on ρ = actual/predicted decrease.
     /// ETA gates acceptance; RHO_POOR triggers a radius shrink even on

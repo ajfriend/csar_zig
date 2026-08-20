@@ -50,14 +50,10 @@ pub fn build(b: *std.Build) void {
     });
     test_mod.addImport("cases", cases_mod);
     test_mod.addOptions("test_options", test_options);
-    // Backend selection for the test binary. Default LLVM: the kcov
-    // coverage gate needs LLVM-emitted DWARF — zig's self-hosted
-    // backend (the Debug default on x86_64-linux) emits debug info
-    // kcov v43 can't parse and silently collects 0 lines. `-Dllvm=false`
-    // builds the suite with the self-hosted backend instead:
-    // correctness and the iteration-ceiling bounds must hold under
-    // BOTH backends (see `just test-slow` / CI), coverage is only
-    // measured on the LLVM binary.
+    // Backend selection for the test binary. Default LLVM because the
+    // kcov coverage gate reads only LLVM-emitted DWARF; `-Dllvm=false`
+    // selects the self-hosted backend. Policy and per-target support:
+    // dev.md "Two backends".
     const use_llvm = b.option(bool, "llvm", "Use the LLVM backend for the test binary (default true; kcov requires it)") orelse true;
     const tests = b.addTest(.{ .name = "csar-test", .root_module = test_mod, .use_llvm = use_llvm });
     const run_tests = b.addRunArtifact(tests);

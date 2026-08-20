@@ -3,6 +3,7 @@
 //! therefore the kcov-based coverage gate) discovers them all.
 
 comptime {
+    _ = @import("helpers.zig");
     _ = @import("cases/cases_test.zig");
     _ = @import("solver_test.zig");
     _ = @import("extreme_aspect_test.zig");
