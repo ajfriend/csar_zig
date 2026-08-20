@@ -43,48 +43,25 @@ fn runOne(allocator: std.mem.Allocator, name: []const u8) !void {
         std.debug.print("use --all to see what's available.\n", .{});
         return error.UnknownCase;
     };
-
-    std.debug.print("{s}: {s}\n", .{ name, case.description });
-    std.debug.print("  points: {d}\n", .{case.points.len});
-
-    var outcome = try csar.solve(allocator, case.points, .{});
-    defer outcome.deinit();
-
-    switch (outcome) {
-        .converged => |c| {
-            std.debug.print("  converged: AR = {d:.6}, gap = {e:.3} after {d} iters\n", .{
-                c.aspectRatio(), c.gap, c.diag.totalIters(),
-            });
-        },
-        .infeasible => |i| {
-            std.debug.print("  infeasible: residual = {e:.3}, {d} active points\n", .{
-                i.residual, i.cert.indices.len,
-            });
-        },
-        .did_not_converge => |p| {
-            std.debug.print("  did_not_converge: gap = {e:.3} after {d} iters\n", .{
-                p.gap, p.diag.totalIters(),
-            });
-        },
-    }
+    std.debug.print("{s}: {s} ({d} points)\n", .{ name, case.description, case.points.len });
+    try report(allocator, name, case.points);
 }
 
 fn runAll(allocator: std.mem.Allocator) !void {
-    std.debug.print("{s:22}  {s:11}  {s}\n", .{ "case", "status", "metric" });
-    std.debug.print("{s:22}  {s:11}  {s}\n", .{ "----------------------", "-----------", "------------" });
-    for (cases.all) |entry| {
-        var outcome = try csar.solve(allocator, entry.case.points, .{});
-        defer outcome.deinit();
-        switch (outcome) {
-            .converged => |c| std.debug.print("{s:22}  {s:11}  AR={d:.6}\n", .{
-                entry.name, "converged", c.aspectRatio(),
-            }),
-            .infeasible => |i| std.debug.print("{s:22}  {s:11}  residual={e:.3}\n", .{
-                entry.name, "infeasible", i.residual,
-            }),
-            .did_not_converge => |p| std.debug.print("{s:22}  {s:11}  gap={e:.3}\n", .{
-                entry.name, "DNC", p.gap,
-            }),
-        }
+    for (cases.all) |entry| try report(allocator, entry.name, entry.case.points);
+}
+
+/// One line per case: the outcome tag and the one number that matters for it.
+fn report(allocator: std.mem.Allocator, name: []const u8, points: []const [3]f64) !void {
+    var outcome = try csar.solve(allocator, points, .{});
+    defer outcome.deinit();
+    switch (outcome) {
+        .converged => |c| std.debug.print("{s:22}  converged  AR={d:.6}  gap={e:.3}  iters={d}\n", .{
+            name, c.aspectRatio(), c.gap, c.diag.totalIters(),
+        }),
+        .infeasible => |i| std.debug.print("{s:22}  infeasible  residual={e:.3}  active={d}\n", .{
+            name, i.residual, i.cert.indices.len,
+        }),
+        .did_not_converge => |p| std.debug.print("{s:22}  DNC  gap={e:.3}  iters={d}\n", .{ name, p.gap, p.diag.totalIters() }), // kcov-excl: no bundled fixture DNCs at the default tolerance (ex-status shows the variant)
     }
 }

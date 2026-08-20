@@ -12,7 +12,9 @@ pub fn build(b: *std.Build) void {
     // default to Debug, and the ROOT module's optimize mode governs codegen
     // for the whole compilation — so a Debug root would silently benchmark a
     // Debug solver on both sides. `build.zig` forces this for ex-bench too.
-    const optimize: std.builtin.OptimizeMode = .ReleaseFast;
+    // `-Dcoverage=true` builds Debug for the kcov gate (dev.md "Coverage").
+    const coverage = b.option(bool, "coverage", "Build for the coverage gate (Debug)") orelse false;
+    const optimize: std.builtin.OptimizeMode = if (coverage) .Debug else .ReleaseFast;
 
     const cur = b.dependency("csar_cur", .{ .target = target, .optimize = optimize });
 
@@ -43,6 +45,9 @@ pub fn build(b: *std.Build) void {
     mod.addOptions("build_options", options);
 
     const exe = b.addExecutable(.{ .name = "csar-ab", .root_module = mod });
+    // `zig build --build-file bench/build.zig install` → bench/zig-out/bin/csar-ab,
+    // which the coverage gate runs under kcov.
+    b.installArtifact(exe);
     const run = b.addRunArtifact(exe);
     if (b.args) |args| run.addArgs(args);
     b.step("ab", "A/B the working tree against the pinned baseline").dependOn(&run.step);

@@ -22,8 +22,12 @@ problem). Core: `src/csar.zig` (`solve`, the outer loop, `mveeFw` inner MVEE),
   this machine. `just test` is the fast inner loop; `just test-slow` is the
   gate (enforced 100% line coverage + exclusion ledger) — not bare
   `zig build test`. Per-command detail: dev.md's table.
-- Coverage exclusions are governed by dev.md "Coverage exclusions" — read it
+- The gate covers every binary we ship or run — tests, examples, the A/B
+  harness. An uncovered line's first question is whether the code should
+  exist; exclusions are governed by dev.md "Coverage exclusions" — read it
   before marking anything excluded; the ledger is posted on every PR.
+- `just lint` — every declaration referenced (the dead-code check coverage
+  structurally cannot make; dev.md "Coverage").
 - The suite must pass under BOTH zig backends (LLVM and self-hosted); CI runs
   both. See dev.md "Two backends".
 - `zig build ex-bench` — per-case timing (ReleaseFast, 100 reps).

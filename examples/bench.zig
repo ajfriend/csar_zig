@@ -30,11 +30,22 @@ pub fn main(init: std.process.Init) !void {
     // Representative subset of the full manifest. Intentionally fewer
     // cases than `cases.all` — bench is for cross-config timing, not
     // completeness; the full case-coverage gate is the test suite.
-    const CASE_NAMES: []const []const u8 = &.{
-        "hex",      "np20",     "np100",    "np400",
-        "h3_res05", "h3_res09", "h3_res12", "h3_res15",
-        "ha_05",    "ha_08",    "ha_10",    "ha_12",   "ha_14",
-        "infeas_antipodal", "near_collinear",
+    // Resolved at comptime: a misspelt name is a build error, not a
+    // silently shorter table.
+    const CASES = comptime blk: {
+        @setEvalBranchQuota(10_000); // 15 names × 63 manifest entries
+        const names = [_][]const u8{
+            "hex",      "np20",     "np100",    "np400",
+            "h3_res05", "h3_res09", "h3_res12", "h3_res15",
+            "ha_05",    "ha_08",    "ha_10",    "ha_12",   "ha_14",
+            "infeas_antipodal", "near_collinear",
+        };
+        var out: [names.len]struct { name: []const u8, points: []const [3]f64 } = undefined;
+        for (names, 0..) |name, i| {
+            const case = cases.byName(name) orelse @compileError("unknown case: " ++ name);
+            out[i] = .{ .name = name, .points = case.points };
+        }
+        break :blk out;
     };
 
     const io = init.io;
@@ -48,16 +59,13 @@ pub fn main(init: std.process.Init) !void {
     var total_converged_median: f64 = 0;
     var n_converged: u32 = 0;
 
-    for (CASE_NAMES) |name| {
-        const case = cases.byName(name) orelse {
-            try stdout.print("{s:22}  unknown case (not in manifest)\n", .{name});
-            continue;
-        };
+    for (CASES) |case| {
+        const name = case.name;
         const X = case.points;
 
         // Warm up.
         for (0..N_WARMUP) |_| {
-            var outcome = csar.solve(allocator, X, .{ .gap_tol = TOL, .n_hull = 10, .coplanarity_tol = 1e-12 }) catch continue;
+            var outcome = try csar.solve(allocator, X, .{ .gap_tol = TOL, .n_hull = 10, .coplanarity_tol = 1e-12 });
             outcome.deinit();
         }
 
@@ -101,15 +109,16 @@ pub fn main(init: std.process.Init) !void {
                     polish_failures = c.diag.trust.polish_failures;
                     aspect_ratio = c.aspectRatio();
                 },
+                // kcov-excl-start: none of the cases above DNC at TOL; the arm exists for chasing a DNC regression
                 .did_not_converge => |p| {
                     outer_iters = p.diag.totalIters();
                     polish_failures = p.diag.trust.polish_failures;
-                    // Uncertified ratio from the last iterate — useful when
-                    // chasing a DNC regression. `DidNotConverge` intentionally
-                    // omits an `aspectRatio()` method since the value isn't
-                    // certified; compute it inline here.
+                    // Uncertified ratio from the last iterate. `DidNotConverge`
+                    // intentionally omits an `aspectRatio()` method since the
+                    // value isn't certified; compute it inline here.
                     aspect_ratio = p.sigma[2] / p.sigma[1];
                 },
+                // kcov-excl-end
                 .infeasible => {},
             }
             try stdout.print("{s:22}  {s:8}  {d:2}  {d:5}  {d:11.2}  {d:14.2}  {d:12.6}  {d:7}\n", .{

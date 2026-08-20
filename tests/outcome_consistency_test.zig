@@ -6,7 +6,6 @@
 
 const std = @import("std");
 const csar = @import("../src/root.zig");
-const cases = @import("cases");
 const helpers = @import("helpers.zig");
 
 test "budget-limited trust DNC returns a self-consistent certified snapshot" {

@@ -3,9 +3,8 @@
     .version = "0.2.0",
     .fingerprint = 0x9c8d1b0e21364c6e,
     .minimum_zig_version = "0.16.0",
-    .dependencies = .{},
-    // Only what compiling the `csar` module needs; `just consumer-smoke`
-    // proves the tree builds through this list. See dev.md "Packaging".
+    .dependencies = .{
+    },
     .paths = .{
         "build.zig",
         "build.zig.zon",

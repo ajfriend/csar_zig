@@ -18,11 +18,16 @@ pub fn main(init: std.process.Init) !void {
     // release builds.
     const allocator = init.gpa;
 
-    const points = [_][3]f64{
-        .{ 1, 0, 0 },
-        .{ 0, 1, 0 },
-        .{ 0, 0, 1 },
-    };
+    // One input per outcome, so the switch below is exercised end to end.
+    //
+    // 1. The basis vectors: one octant, converges to a circular cone.
+    // 2. Two antipodal points plus one more: no hemisphere contains them
+    //    all, so the Farkas check reports infeasibility before iterating.
+    // 3. An irregular triple with an iteration budget of one and a
+    //    tolerance below the f64 floor: the budget runs out first.
+    const octant = [_][3]f64{ .{ 1, 0, 0 }, .{ 0, 1, 0 }, .{ 0, 0, 1 } };
+    const antipodal = [_][3]f64{ .{ 1, 0, 0 }, .{ -1, 0, 0 }, .{ 0, 1, 0 } };
+    const irregular = [_][3]f64{ .{ 1, 0, 0 }, .{ 0.1, 0.97, 0.2 }, .{ -0.2, 0.3, 0.93 } };
 
     // Solve with default options. Pass `.{}` for sensible defaults;
     // override individual fields with named-field syntax:
@@ -34,7 +39,13 @@ pub fn main(init: std.process.Init) !void {
     // arguments — too few points, bad tolerance), `SolveError`
     // (library internal-correctness violation), or `OutOfMemory`.
     // All three propagate via `try`.
-    var outcome = try csar.solve(allocator, &points, .{});
+    try report(allocator, &octant, .{});
+    try report(allocator, &antipodal, .{});
+    try report(allocator, &irregular, .{ .max_outer = 1, .gap_tol = 1e-20 });
+}
+
+fn report(allocator: std.mem.Allocator, points: []const [3]f64, opts: csar.SolveOptions) !void {
+    var outcome = try csar.solve(allocator, points, opts);
     defer outcome.deinit();
 
     switch (outcome) {
