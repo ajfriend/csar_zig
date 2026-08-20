@@ -4,6 +4,10 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -16,3 +20,21 @@ jobs:
         run: zig build
       - name: Test (including slow stress tests)
         run: zig build test -Dslow=true
+      - name: Coverage gate + exclusion ledger
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq kcov just jq
+          just test-slow 2>&1 | tee gate.log
+          { echo '### Coverage'; echo '```'; sed -n '/^csar coverage:/,$p' gate.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Post exclusion ledger on PR
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          { echo '**Coverage exclusion ledger** (ubuntu CI; see dev.md "Coverage exclusions"):'
+            echo '```'
+            sed -n '/^csar coverage:/,$p' gate.log
+            echo '```'
+          } > ledger-comment.md
+          gh pr comment "${{ github.event.pull_request.number }}" --edit-last --body-file ledger-comment.md ||
+            gh pr comment "${{ github.event.pull_request.number }}" --body-file ledger-comment.md

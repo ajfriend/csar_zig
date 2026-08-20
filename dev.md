@@ -114,6 +114,18 @@ stall guard, and the degenerate-seed fallback all looked "unhittable"
 until `tests/trust_paths_test.zig` and the methods-test additions
 constructed inputs for them.
 
+**The ledger is tracked over time.** `just test-slow` prints a
+`coverage exclusions:` summary — the total number of lines the
+exclusion rules remove from the gate, with a per-file breakdown — and
+CI posts the same block as a comment on every PR, so growth is visible
+in review. The number is kcov-native, not a source grep: the gate run
+reports with the exclusion flags, a second `--report-only` pass on a
+copy of the same collected data reports without them, and the ledger
+is the per-file difference in `total_lines`. (Only the line
+classification of the report-only pass is trustworthy; its hit data is
+lossy — kcov's stored database does not faithfully round-trip covered
+lines — so the ledger never uses it.)
+
 ### Why kcov and not LLVM source-based coverage?
 
 Zig 0.15.x / 0.16.x doesn't expose the LLVM coverage flags
