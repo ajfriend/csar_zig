@@ -50,7 +50,10 @@ pub fn build(b: *std.Build) void {
     });
     test_mod.addImport("cases", cases_mod);
     test_mod.addOptions("test_options", test_options);
-    const tests = b.addTest(.{ .name = "csar-test", .root_module = test_mod });
+    // use_llvm: the kcov coverage gate needs LLVM-emitted DWARF; zig's
+    // self-hosted backend (the Debug default on x86_64-linux) emits
+    // debug info kcov v43 can't parse — it silently collects 0 lines.
+    const tests = b.addTest(.{ .name = "csar-test", .root_module = test_mod, .use_llvm = true });
     const run_tests = b.addRunArtifact(tests);
     run_tests.setCwd(b.path(""));
     const test_step = b.step("test", "Run csar tests");
