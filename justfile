@@ -28,19 +28,6 @@ _ci-selfhosted: test-selfhosted
 _ci-selfhosted:
     @echo "note: skipping the self-hosted backend suite — unsupported on aarch64-macos; CI covers it (dev.md 'Two backends')"
 
-build:
-    zig build -Doptimize=ReleaseFast
-
-# `test-slow`, then print where the HTML coverage report landed.
-coverage: test-slow
-    @echo "open coverage/csar-test/index.html"
-
-ex-basic:
-    zig build ex-basic
-
-ex-status:
-    zig build ex-status
-
 # Per-case timing (always ReleaseFast, via build.zig).
 bench:
     zig build ex-bench
