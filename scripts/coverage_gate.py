@@ -36,7 +36,7 @@ LOG = Path('zig-out/test-slow.log')
 GATED_DIR = Path('coverage')
 SUMMARY = GATED_DIR / 'summary.txt'
 SUMMARY_MD = GATED_DIR / 'summary.md'  # fenced form; CI puts it in the step summary + PR comment
-INCLUDE_PATTERN = 'src/,tests/'
+INCLUDE_PATTERN = 'src/,tests/,bench/core.zig'
 # Exclusion rules (see dev.md "Coverage exclusions"): `=> unreachable`
 # switch arms can never execute in a passing run; `kcov-excl` markers
 # carry a per-site reason in-source. (zig 0.16 DWARF attributes some
@@ -74,7 +74,7 @@ shutil.rmtree(GATED_DIR, ignore_errors=True)
 if run_kcov([f'--exclude-line={EXCLUDE_LINE}'], GATED_DIR) != 0:
     print(LOG.read_text(), end='')
     sys.exit(1)
-print(LOG.read_text().splitlines()[-1])  # e.g. "All 53 tests passed."
+print(LOG.read_text().splitlines()[-1])  # e.g. "All N tests passed."
 
 gated = coverage_json(GATED_DIR)
 

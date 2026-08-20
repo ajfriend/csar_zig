@@ -15,8 +15,17 @@ test-selfhosted:
     zig build test -Dslow=true -Dllvm=false
 
 # Compile the library and every executable without running (CI's Build step).
+# The bench package builds too — it lives outside this build graph, so nothing
+# else would notice it rotting. Resolving its manifest fetches the pinned
+# baseline the first time on a machine; see bench/build.zig.
 check:
     zig build check
+    zig build --build-file bench/build.zig check
+
+# A/B the working tree against the pinned baseline (bench/build.zig.zon).
+# `just ab --aa` calibrates; see bench/ab.zig for the injector self-tests.
+ab *ARGS:
+    zig build --build-file bench/build.zig ab -- {{ARGS}}
 
 # Everything CI checks that can run on this machine — use before pushing a PR.
 ci: check test-slow _ci-selfhosted
@@ -33,8 +42,11 @@ bench:
     zig build ex-bench
 
 # Remove build artifacts and coverage output (survey data: `just surveys::clean`).
+# `bench/zig-pkg/` is the baseline unpacked next to the manifest that pins it.
+# Removing it costs an unpack, not a fetch — the tarball stays in zig's global
+# cache (verified: `just clean && just check` goes nowhere near the network).
 clean:
-    rm -rf zig-out .zig-cache coverage
+    rm -rf zig-out .zig-cache coverage bench/.zig-cache bench/zig-pkg
 
 # States/countries survey pipelines: `just --list surveys`.
 mod surveys

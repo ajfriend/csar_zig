@@ -31,8 +31,9 @@
 | `just test-slow` | Full suite + 100% line coverage gate under `kcov`. Builds with `-Dslow=true` so randomized stress tests run. ~10s; the pre-commit / CI check. |
 | `just test-selfhosted` | Full suite under zig's self-hosted backend (`-Dllvm=false`). See "Two backends" below. |
 | `just check` | Compile the library and every executable, running nothing (CI's Build step). |
-| `just bench` | Run the benchmark suite (release-built `ex-bench`). |
-| `just clean` | Remove `zig-out/`, `.zig-cache/`, `coverage/`. |
+| `just bench` | Run the benchmark suite (release-built `ex-bench`) — single-version timing. |
+| `just ab` | A/B the working tree against the pinned baseline, both in one binary. `just ab --aa` calibrates. See "A/B benchmarking" below. |
+| `just clean` | Remove `zig-out/`, `.zig-cache/`, `coverage/`, and the bench package's caches and unpacked baseline. |
 | `just surveys::…` | The states/countries survey pipelines (research/example tooling), grouped in the `surveys` module (`surveys.just`) — `just --list surveys`. |
 
 ### Two test tiers
@@ -94,8 +95,12 @@ Both contain the same aggregate percentages today (one binary, one
 run). If you're debugging a gate failure, the JSON is in the
 hash-suffixed sibling, not the merged dir.
 
-The gate enforces **100% line coverage** across both production code
-(`src/*.zig`, `tests/*.zig`) and the case manifest (`tests/cases/cases.zig`).
+The gate enforces **100% line coverage** over `src/`, `tests/` and
+`bench/core.zig` (`INCLUDE_PATTERN` in `scripts/coverage_gate.py`) —
+production code, the tests themselves including the case manifest, and the
+benchmarking policy. kcov instruments one binary, so a file is in scope only
+if the test binary compiles it; widening the pattern alone reaches nothing
+new (#25).
 Test code isn't exempt — dead test helpers are dead code too. The
 gate runs under `just test-slow`, not `just test` — slow-tier tests
 (currently cap_test) exercise lines that the fast tier doesn't reach.
@@ -244,9 +249,48 @@ To add a new test file: create `tests/<name>_test.zig`, then add
 `_ = @import("<name>_test.zig");` to `tests/all.zig`. The test
 binary picks it up automatically.
 
+## A/B benchmarking
+
+`bench/` is a separate zig package that depends on **both** the working tree
+(`.path = ".."`) and a hash-pinned release, and compiles them into one
+binary. `just ab` measures them side by side: a deterministic diff over every
+fixture (status, iterations and aspect ratio; the certified gap is printed but
+deliberately not compared — see `differs` in `bench/core.zig`), a per-side
+outcome tally, then interleaved timing over a handful of cases.
+
+One binary rather than two processes is the point: a freshly built binary's
+first launch runs 2–5× slow and that survives warm-up and min-over-reps, so a
+two-process A/B can invent a small-cell regression. Fast cases are batched
+rather than special-cased, so clock granularity stops mattering. **Both are
+explained, with everything else, in `bench/core.zig` and `bench/ab.zig`'s
+headers** — the policy next to the constants that encode it, the rest next to
+the binary. Read those before changing any of it.
+
+One limitation to know before reading any ratio: both versions live in one
+binary at a layout fixed at link time, so cache-set and alignment luck can
+favour one side systematically — and unlike everything else, that bias survives
+more reps, more launches, and a rebuild. `--aa` cannot detect it either. The
+argument, the citation and the measured noise floor are in `bench/ab.zig`,
+"Known residual bias: code layout"; the practical rule is to treat a difference
+near the noise floor as unproven.
+
+- `just ab` — current vs the pinned baseline.
+- `just ab --aa` — current vs current. The ratio should read 1.000; whatever it
+  isn't by is that run's noise floor. Nothing is stored — re-measure instead.
+- `just ab --inject-2x` / `--inject-tol` — self-tests. The first must report
+  ~2.0, the second must produce deterministic diffs. Without them, a tool that
+  always printed "no change" would pass every other check.
+
+The baseline pin lives in `bench/build.zig.zon`; resolving it fetches once per
+machine and is then cached (why that's fine, rather than lazy: `bench/build.zig`).
+It is a separate package so the library's manifest never carries a benchmark
+dependency — consumers can't inherit it, and `.paths` ships only `bench/core.zig`
+(which `tests/` imports), not the harness. Reports are for pasting into a PR;
+nothing is written to disk.
+
 ## Examples
 
-Four single-file programs under `examples/`, each wired into
+Five single-file programs under `examples/`, each wired into
 `build.zig` via `addExample`:
 
 | Step | Source | Role |
@@ -255,8 +299,9 @@ Four single-file programs under `examples/`, each wired into
 | `ex-status` | `examples/status.zig` | Full `Outcome` switch with per-variant inspection. |
 | `ex-cases` | `examples/cases.zig` | Runs a bundled case by name (`-- hex`) or iterates the whole manifest (`-- --all`). |
 | `ex-bench` | `examples/bench.zig` | Per-case timing across a hand-picked subset. Forced to `.ReleaseFast` in `build.zig` regardless of the top-level optimize flag — Debug timings are noise. The `csar`/`cases` modules still inherit the project-wide optimize flag, which looks like it would bench a Debug solver but doesn't: the root module's mode governs codegen for the whole compilation (checked — byte-identical binary either way). |
+| `ex-compare` | `examples/compare.zig` | Alternating vs trust solver paths over the manifest and a random wide-cap grid (see `docs/trust-solver.md`). Also forced `.ReleaseFast`. |
 
 `addExample` accepts an optional optimize override (`null` inherits
-the project-wide flag); only `ex-bench` uses it today. Examples
+the project-wide flag); `ex-bench` and `ex-compare` use it. Examples
 also receive pass-through args after `--`; only `ex-cases` reads
 them today.

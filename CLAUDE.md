@@ -53,8 +53,11 @@ cells) — which solve in ~1–2 outer iterations and a few µs. Protect them:
   against a warm one invents small-cell regressions that aren't there.
 
 When changing the solver, the full check is: `just ci` green (suite + coverage
-gate + both backends where supported) + `ex-bench` per-case (small cells not
-slower).
+gate + both backends where supported) + **`just ab`**, which measures the
+working tree against the pinned baseline in one binary and reports a
+deterministic diff over every fixture plus interleaved timing. Attach its
+report to the PR; `just ab --aa` gives the noise floor to read it against. Its
+methodology is documented in `bench/core.zig` and `bench/ab.zig`.
 
 ## Background / history
 
