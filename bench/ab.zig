@@ -8,52 +8,70 @@
 //!
 //! The report is meant to be pasted into a PR. Nothing is written to disk.
 //!
-//! ## Measurement strategy
+//! ## Benchmarking methodology
 //!
-//! Each choice below exists to remove a specific way a solver comparison can
-//! lie. Change them together with the reasoning, not individually.
+//! Each choice below removes a specific way a solver comparison can lie.
+//! Change them together with the reasoning, not individually.
 //!
-//! **One process, both versions.** Not two binaries run in sequence. A freshly
-//! built binary's first *launch* runs 2-5x slow, and that penalty survives an
-//! in-process warm-up and a min-over-reps, so a two-process A/B can invent a
-//! small-cell regression outright — it did, while A/B-ing the 0.16 bump. With
-//! both sides in one process they share the launch cost, the allocator, and
-//! the clock, so it divides out of the ratio.
+//! ### The instrument
 //!
-//! **Warm up, then measure.** N_WARMUP untimed solves per case per side, so
-//! the timed reps see warm caches and a settled allocator. This handles
-//! per-*iteration* warm-up only; the per-*process* effect above is handled by
-//! the single-binary design, not here.
+//! A monotonic clock (`Io.Timestamp`, `.awake`), read once on each side of a
+//! timed interval. Two properties matter and both are per-machine: its
+//! resolution (42ns on aarch64-macos, the 24MHz timebase) and the cost of a
+//! read (tens of ns). Both reads sit INSIDE the measured interval, so their
+//! cost is charged to the solve — but identically on both sides, so it is
+//! common-mode and cancels in a ratio. Resolution does not cancel, which is
+//! what batching below is for.
+//!
+//! ### The design
+//!
+//! **No process isolation, deliberately.** Both versions live in one binary —
+//! the opposite of the usual harness default (JMH and friends fork per variant
+//! to isolate them). Co-location is the point: a freshly built binary's first
+//! *launch* runs 2-5x slow, and that penalty survives an in-process warm-up
+//! and a min-over-reps, so a two-process A/B can invent a small-cell
+//! regression outright. It did, while A/B-ing the 0.16 bump. Sharing one
+//! process means both sides pay the launch cost, the allocator, and the clock,
+//! and all of it divides out.
+//!
+//! **Warm-up iterations.** N_WARMUP untimed solves per case per side, so the
+//! timed reps see warm caches and a settled allocator. Per-*iteration* only —
+//! the per-*process* effect above is handled by the single-binary design, not
+//! here.
 //!
 //! **Batch fast cases.** A solve near the clock's resolution cannot be timed
 //! individually: `hex` at ~0.8us against a 42ns clock is ~19 quanta, ~5%
-//! granularity. Each timed interval therefore covers however many solves it
+//! granularity. Each timed interval therefore spans however many solves it
 //! takes to reach BATCH_TARGET_US, calibrated per case from one probe solve so
-//! it adapts to the machine. Note this is about quantization, not bias —
-//! clock-read cost is common-mode and cancels in the ratio regardless.
+//! it adapts to the machine rather than encoding this one.
 //!
-//! **Interleave at rep granularity.** Both sides are measured inside the same
-//! rep, so thermal state, scheduler pressure, and CPU frequency drift hit them
-//! together instead of favouring whichever ran first. The order within a rep
-//! is fixed (current, then baseline) rather than alternating; `--aa` is what
-//! would expose a resulting bias, and it currently reports 1.000 on every
-//! case, so there is nothing to correct. Revisit if that stops being true.
+//! **Paired: interleave at rep granularity.** Both sides are measured inside
+//! the same rep, making each rep a matched pair drawn under the same thermal
+//! state, scheduler pressure, and CPU frequency — not two independent samples
+//! taken minutes apart. Pairing is what licenses reporting a *ratio*: shared
+//! conditions divide out of it, which is why the ratio travels between
+//! machines when the absolute microseconds do not. The order within a rep is
+//! fixed (current, then baseline) rather than alternating; `--aa` is what
+//! would expose a bias from that, and it reports 1.000 on every case today.
 //!
-//! **Report the min, not the mean or median.** Measurement noise is additive
-//! and one-sided — interrupts, migrations, and contention can only make a
-//! solve look slower, never faster — so the minimum is the closest estimate of
-//! the true cost, while a mean or median tracks whatever else the machine was
-//! doing. (For batched cases this is min-of-batch-means: jitter is averaged
-//! within a batch rather than rejected by the min. The batch is the price of
-//! measuring a sub-us case at all.)
+//! ### The statistic
 //!
-//! **N_REPS is a floor, not a statistic.** It is set high enough that the min
-//! has settled, not to support a confidence interval. There is deliberately no
-//! outlier rejection, no variance estimate, and no significance test: the
-//! report is read by a human against the `--aa` floor, and #18 decides whether
-//! anything ever gates on it.
+//! **The min, not the mean or median.** Timing noise is one-sided
+//! contamination: interrupts, migrations, and contention can only add time,
+//! never remove it. The minimum is therefore a robust estimator of the
+//! uncontaminated cost, while the mean and median estimate something else —
+//! the machine's typical state during this particular run. For batched cases
+//! it is min-of-batch-means: jitter is averaged within a batch rather than
+//! rejected by the min, which is the price of measuring a sub-us case at all.
 //!
-//! **Everything above is checked by `--aa`.** Running a version against itself
+//! N_REPS is a floor for that min to settle against, not a sample size. There
+//! is deliberately no outlier rejection, no variance estimate, and no
+//! significance test — the report is read by a human against the `--aa` floor,
+//! and #18 decides whether anything ever gates on it.
+//!
+//! ### The check
+//!
+//! **`--aa` validates everything above.** Running a version against itself
 //! must yield 1.000; whatever it misses by is that run's noise floor, and no
 //! A/B difference smaller than that means anything. It is the only check that
 //! catches bias in the harness rather than in the solver, so read it first.
@@ -70,7 +88,7 @@ const TIMING_CASES = [_][]const u8{ "hex", "np100", "ha_12", "near_collinear" };
 
 /// Untimed solves before each side's timed reps — warm caches and settle the
 /// allocator. Per-iteration only; the per-process effect is handled by having
-/// one binary at all. See "Measurement strategy" above.
+/// one binary at all. See "Benchmarking methodology" above.
 const N_WARMUP = 5;
 /// Timed reps per side per case. A floor for the min to settle against, not a
 /// sample size for a statistic — nothing here computes a confidence interval.

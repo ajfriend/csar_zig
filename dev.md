@@ -266,10 +266,12 @@ from one probe solve (reported in the `batch` column) so every timed interval
 dwarfs the clock. That is why `hex` and `near_collinear` report equally tight
 ratios despite spanning three orders of magnitude.
 
-**The measurement strategy — warm-up, batching, interleaving, min-not-median,
-and what is deliberately not done — is documented in `bench/ab.zig`'s header**,
-next to the constants it governs. Read that before changing any of it; each
-choice is there to remove a specific way a solver comparison can lie.
+**The benchmarking methodology is documented in `bench/ab.zig`'s header**,
+next to the constants it governs — the instrument (clock resolution and read
+cost), the design (no process isolation, warm-up, batching, paired
+interleaving), the statistic (min, and why not mean or median), and the check
+(`--aa`). Read it before changing any of them; each choice removes a specific
+way a solver comparison can lie.
 
 - `just ab` — current vs the pinned baseline.
 - `just ab --aa` — current vs current. The ratio should read 1.000; whatever it
