@@ -103,4 +103,4 @@ countries-all: countries-gen countries-aspect countries-plot
 
 # Remove build artifacts, coverage output, and generated example data.
 clean:
-    rm -rf zig-out .zig-cache coverage scripts/states/data scripts/countries/data
+    rm -rf zig-out .zig-cache coverage coverage_raw scripts/states/data scripts/countries/data
