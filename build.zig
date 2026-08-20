@@ -20,16 +20,6 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    // Benchmarking methodology, shared with the `bench/` package. Lives under
-    // tests/ so the coverage gate covers it — the code that decides whether a
-    // regression exists should not be the one untested thing in the repo.
-    const benchcore_mod = b.addModule("benchcore", .{
-        .root_source_file = b.path("tests/benchcore.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    _ = benchcore_mod;
-
     const lib = b.addLibrary(.{
         .name = "csar",
         .root_module = csar_mod,

@@ -253,32 +253,20 @@ binary. `just ab` measures them side by side: a deterministic diff (outcome,
 iteration count, full-precision aspect ratio, certified gap) over every
 fixture, then interleaved timing over a handful of cases.
 
-One binary rather than two processes is the point. The per-process cold-start
-penalty is 2–5× on a freshly built binary and survives both an in-process
-warm-up and min-over-reps, so a two-process A/B can manufacture a small-cell
-regression that isn't there. Interleaved in one process, both sides pay the
-same cost and the *ratio* stays honest even when the absolute µs are inflated.
+One binary rather than two processes is the point: a freshly built binary's
+first launch runs 2–5× slow and that survives warm-up and min-over-reps, so a
+two-process A/B can invent a small-cell regression. Fast cases are batched
+rather than special-cased, so clock granularity stops mattering. **Both are
+explained, with everything else, in `bench/core.zig` and `bench/ab.zig`'s
+headers** — the policy next to the constants that encode it, the rest next to
+the binary. Read those before changing any of it.
 
-Fast cases are **batched** rather than special-cased: a single `hex` solve is
-~0.8 µs against a 42 ns clock — about 19 quanta, so ~5% granularity on the very
-cell the hot path cares about. The harness calibrates a batch size per case
-from one probe solve (reported in the `batch` column) so every timed interval
-dwarfs the clock. That is why `hex` and `near_collinear` report equally tight
-ratios despite spanning three orders of magnitude.
-
-One limitation is worth knowing before reading any ratio: both versions live
-in one binary at a layout fixed at link time, so cache-set and alignment luck
-can favour one side systematically, and that bias survives more reps, more
-launches, and a rebuild. Today's `--aa` cannot detect it (identical pins dedupe
-to one module, so it compares one copy with itself). Treat a difference near
-the noise floor — measured at ~0.3% on the smallest case here — as unproven.
-
-**The benchmarking methodology is documented in `bench/ab.zig`'s header**,
-next to the constants it governs — the instrument (clock resolution and read
-cost), the design (no process isolation, warm-up, batching, paired
-interleaving), the statistic (min, and why not mean or median), and the check
-(`--aa`). Read it before changing any of them; each choice removes a specific
-way a solver comparison can lie.
+One limitation to know before reading any ratio: both versions live in one
+binary at a layout fixed at link time, so cache-set and alignment luck can
+favour one side systematically, and that bias survives more reps, more
+launches, and a rebuild. `--aa` cannot detect it (identical pins dedupe to one
+module). Treat a difference near the noise floor — ~0.3% on the smallest case
+here — as unproven.
 
 - `just ab` — current vs the pinned baseline.
 - `just ab --aa` — current vs current. The ratio should read 1.000; whatever it

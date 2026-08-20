@@ -27,9 +27,6 @@ problem). Core: `src/csar.zig` (`solve`, the outer loop, `mveeFw` inner MVEE),
 - The suite must pass under BOTH zig backends (LLVM and self-hosted); CI runs
   both. See dev.md "Two backends".
 - `zig build ex-bench` — per-case timing (ReleaseFast, 100 reps).
-- `just ab` — A/B the working tree against the pinned baseline in one binary
-  (deterministic diff over every fixture + interleaved timing). `just ab --aa`
-  calibrates. Attach the report to the PR; see dev.md "A/B benchmarking".
 - `zig build states-aspect` / `countries-aspect` — standalone survey execs over
   `scripts/*/data/*.json` (per-cell aspect ratios + outcome counts).
 - Full workflow detail (toolchain setup, commands, coverage machinery): dev.md.
@@ -56,8 +53,11 @@ cells) — which solve in ~1–2 outer iterations and a few µs. Protect them:
   against a warm one invents small-cell regressions that aren't there.
 
 When changing the solver, the full check is: `just ci` green (suite + coverage
-gate + both backends where supported) + `ex-bench` per-case (small cells not
-slower).
+gate + both backends where supported) + **`just ab`**, which measures the
+working tree against the pinned baseline in one binary and reports a
+deterministic diff over every fixture plus interleaved timing. Attach its
+report to the PR; `just ab --aa` gives the noise floor to read it against. Its
+methodology is documented in `bench/core.zig` and `bench/ab.zig`.
 
 ## Background / history
 
