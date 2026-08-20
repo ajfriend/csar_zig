@@ -10,19 +10,9 @@
 //!
 //! ## Benchmarking methodology
 //!
-//! The policy — warm-up, batching, pairing, the statistic — lives in `core.zig`
-//! next to the constants that encode it. What follows are the parts that are
-//! properties of *this binary* rather than of those constants.
-//!
-//! ### The instrument
-//!
-//! A monotonic clock (`Io.Timestamp`, `.awake`), read once on each side of a
-//! timed interval. Two properties matter, both per-machine: its resolution
-//! (42ns on aarch64-macos, the 24MHz timebase) and the cost of a read (tens of
-//! ns). Both reads sit INSIDE the measured interval, so their cost is charged
-//! to the solve — but identically on both sides, so it is common-mode and
-//! cancels in a ratio. Resolution does not cancel, which is what batching is
-//! for.
+//! The policy — warm-up, batching, pairing, the statistic — and `Side`, the
+//! adapter that reads the clock, live in `core.zig`. What follows are the
+//! parts that are properties of *this binary* rather than of `core.zig`.
 //!
 //! ### No process isolation, deliberately
 //!
@@ -88,9 +78,6 @@ const TIMING_CASES = blk: {
     break :blk out;
 };
 
-/// Matches the tolerance the test suite runs at, so a report is comparable to
-/// what `just ci` gates on.
-const GAP_TOL = 1e-6;
 /// Tight enough to push borderline cases off the f64 gap floor, for --inject-tol.
 const INJECT_GAP_TOL = 1e-13;
 
@@ -99,92 +86,6 @@ const Opts = struct {
     inject_2x: bool = false,
     inject_tol: bool = false,
 };
-
-/// One side of the comparison: a library version bound to an allocator, a
-/// clock, and the options it solves under. This is the whole "mechanics" half
-/// — everything it feeds into lives in `core.zig`.
-fn Side(comptime lib: type) type {
-    return struct {
-        const Self = @This();
-
-        gpa: std.mem.Allocator,
-        io: std.Io,
-        pts: []const [3]f64 = &.{},
-        gap_tol: f64 = GAP_TOL,
-
-        /// Returns `lib.SolveOptions`, not `cur.SolveOptions` — the two
-        /// versions have distinct types of the same name.
-        ///
-        /// Every solver option is pinned explicitly, including ones that match
-        /// today's defaults. The two sides are different library versions: if
-        /// a default ever changed between them, an unpinned option would make
-        /// them solve different configurations and the difference would
-        /// masquerade as a solver change — precisely what this tool exists to
-        /// detect.
-        fn opts(self: Self) lib.SolveOptions {
-            return .{
-                .gap_tol = self.gap_tol,
-                .n_hull = 10,
-                .coplanarity_tol = 1e-12,
-                .max_outer = 100,
-                // `.trust`, not `.auto`: `.auto` is an alias each version is
-                // free to re-point.
-                .method = .trust,
-            };
-        }
-
-        /// Solve once and reduce to comparable metrics. Errors are reported,
-        /// not propagated: `solve` can still return one on a valid input
-        /// (#1, #2), and a case that errors on one side only is precisely a
-        /// difference worth seeing. Dying here would hide it.
-        fn metrics(self: Self, pts: []const [3]f64) bc.Metrics {
-            var o = lib.solve(self.gpa, pts, self.opts()) catch |e| {
-                return .{ .status = @errorName(e) };
-            };
-            defer o.deinit();
-            // @tagName, not a literal: this switch is exhaustive over the real
-            // union, so a new outcome variant is a compile error HERE, and the
-            // status it produces is the library's own spelling — which the
-            // suite pins `bc.OutcomeTag` to (tests/bench_core_test.zig).
-            const status = @tagName(o);
-            return switch (o) {
-                .converged => |c| .{
-                    .status = status,
-                    .iters = c.diag.totalIters(),
-                    .ar = c.aspectRatio(),
-                    .gap = c.gap,
-                },
-                .infeasible => .{ .status = status },
-                .did_not_converge => |p| .{
-                    .status = status,
-                    .iters = p.diag.totalIters(),
-                    .ar = p.sigma[2] / p.sigma[1],
-                    .gap = p.gap,
-                },
-            };
-        }
-
-        /// `measure` with the clock ignored.
-        fn warmUp(self: *Self) void {
-            _ = self.measure(bc.N_WARMUP);
-        }
-
-        /// What `bc.pairedRun` calls: run `count` solves, return the elapsed
-        /// microseconds. The only place in the harness a clock is read.
-        pub fn measure(self: *Self, count: u32) f64 {
-            const t0 = std.Io.Timestamp.now(self.io, .awake);
-            for (0..count) |_| {
-                // Must stay unreachable: firing here would shorten a *timed*
-                // interval and report a fast, meaningless µs. The caller only
-                // times cases that already solved cleanly.
-                var o = lib.solve(self.gpa, self.pts, self.opts()) catch continue;
-                o.deinit();
-            }
-            const t1 = std.Io.Timestamp.now(self.io, .awake);
-            return @as(f64, @floatFromInt(t0.durationTo(t1).nanoseconds)) / 1000.0;
-        }
-    };
-}
 
 pub fn main(init: std.process.Init) !void {
     var opts = Opts{};
@@ -206,12 +107,13 @@ pub fn main(init: std.process.Init) !void {
     }
     // The baseline side is a comptime choice, so it is dispatched here rather
     // than selected inside: in --aa mode it is the current library again.
-    if (opts.aa) try report(cur, init, opts) else try report(base, init, opts);
+    if (opts.aa) try report(bc.Side(cur), init, opts) else try report(bc.Side(base), init, opts);
 }
 
-/// `BaseLib` is what the current tree is measured against: the pinned baseline
-/// normally, the current library itself under --aa.
-fn report(comptime BaseLib: type, init: std.process.Init, opts: Opts) !void {
+/// `Base` is the adapter for what the current tree is measured against: the
+/// pinned baseline normally, the current library itself under --aa — or, in a
+/// PR whose API change needs one, a shim with `Side`'s two methods.
+fn report(comptime Base: type, init: std.process.Init, opts: Opts) !void {
     const gpa = init.gpa;
     const io = init.io;
 
@@ -224,11 +126,10 @@ fn report(comptime BaseLib: type, init: std.process.Init, opts: Opts) !void {
     // "truncated, exit 0" would be worse than the failure this softens.
     defer out.flush() catch {};
 
-    const cur_tol: f64 = if (opts.inject_tol) INJECT_GAP_TOL else GAP_TOL;
+    const cur_tol: f64 = if (opts.inject_tol) INJECT_GAP_TOL else bc.GAP_TOL;
     const cur_mult: u32 = if (opts.inject_2x) 2 else 1;
 
-    const Cur = Side(cur);
-    const Base = Side(BaseLib);
+    const Cur = bc.Side(cur);
 
     var side_cur = Cur{ .gpa = gpa, .io = io, .gap_tol = cur_tol };
     var side_base = Base{ .gpa = gpa, .io = io };
@@ -290,12 +191,12 @@ fn report(comptime BaseLib: type, init: std.process.Init, opts: Opts) !void {
             continue;
         }
 
-        side_cur.warmUp();
-        side_base.warmUp();
+        bc.warmUp(&side_cur);
+        bc.warmUp(&side_base);
 
-        // Calibrated AFTER warm-up, so the probe measures a warm solve, and
+        // Calibrated AFTER warm-up, so the probes measure warm solves, and
         // from the baseline side so both sides use the same batch.
-        const batch = bc.batchFor(side_base.measure(1));
+        const batch = bc.calibrate(&side_base);
 
         const t = bc.pairedRun(&side_cur, &side_base, batch, cur_mult, &samples_cur, &samples_base);
         try bc.writeTiming(out, case.name, t);
