@@ -12,7 +12,7 @@
         // A second slot pinning the SAME commit must reach it through a URL
         // that hashes differently (a commit-SHA archive rather than this tag
         // archive): zig dedupes identical pins into one module, which would
-        // make a layout-faithful A/A measure one copy against itself.
+        // make a layout-faithful A/A measure one copy against itself. See #22.
         //
         // Lazy so `zig build check` compiles the current-tree side without a
         // network fetch — `just ci` must not depend on reaching GitHub.

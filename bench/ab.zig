@@ -106,7 +106,7 @@
 //! `--aa` cannot currently see it either: identical pins dedupe to one module,
 //! so A/A compares one copy against itself and shares layout by construction.
 //! Measuring it needs two distinct copies of the *same* commit — two pins that
-//! hash differently — which is tracked separately. Until then, treat an A/B
+//! hash differently — tracked in #22. Until then, treat an A/B
 //! difference near the noise floor as unproven, and prefer a change that shows
 //! up across several cases over one that moves a single case slightly.
 //!
