@@ -14,7 +14,7 @@ problem). Core: `src/csar.zig` (`solve`, the outer loop, `mveeFw` inner MVEE),
   two sentences on the user-visible effect, ending with a link to the **PR**
   (or the commit, if no PR was opened). Detail lives in the PR, not here.
 - Release names are just the version (`vX.Y.Z`); detail goes in the release body
-  (which itself points to the PR).
+  (which itself points to the PR). Procedure: dev.md "Releasing".
 
 ## Build & test
 

@@ -271,26 +271,32 @@ working tree into it — a path fetch packs the tree through
 builds and runs it. A path fetch leaves empty directory skeletons behind, which
 is why the listing is of files. #17 covers the tag-time version against the
 published tarball.
+
 ## Releasing
 
-Done by hand until #17 automates the checks. In order, each its own PR
-where it changes the tree:
+By hand until #17 automates the tag-time checks. In order; steps 1 and 5
+are PRs, the rest are not commits.
 
-1. `build.zig.zon` `.version` ← the new version. Same PR: the `changelog.md`
-   `[Unreleased]` section becomes `[X.Y.Z]` — entries stay one or two
-   sentences ending in a PR link (CLAUDE.md). Do not flip the version earlier:
-   #12 had to revert a premature flip when the release moved to its own PR.
-2. `just ci` green on `main` at that commit, including `consumer-smoke` — the
-   tarball is what ships, and that is the check that builds it.
-3. Tag `vX.Y.Z` on that commit and `gh release create vX.Y.Z` — the release
-   name is the version, the body is the changelog section (which points at
-   the PRs). Tag pushes run no workflow today (#17).
-4. Re-pin the A/B baseline: `bench/build.zig.zon`'s `csar_base` URL + hash
-   ← the new tag, and `zig build --build-file bench/build.zig check`. The
-   harness measures against the last release, so the pin advances with each
-   one (#18 records the rule).
-5. Downstream: bump ajfriend/csar_py's pin (its `src/zig/build.zig.zon`) and
-   anything the release changed in the Python surface.
+1. PR, the last one before the tag: set `build.zig.zon`'s `.version`, rename
+   `changelog.md`'s `## [Unreleased]` to `## [X.Y.Z]`, and open a fresh empty
+   `## [Unreleased]` above it. The version is not bumped before this PR (#12
+   had to revert one that was).
+2. Wait for the `ci` run on the merge commit to go green (`gh run watch`); it
+   includes `consumer-smoke`, which builds the tree as a consumer receives it
+   ("Packaging").
+3. On that commit, with `grep version build.zig.zon` agreeing with the tag:
+   `git tag vX.Y.Z && git push origin vX.Y.Z`.
+4. `gh release create vX.Y.Z --title vX.Y.Z --notes-file <the [X.Y.Z]
+   section>` — name and body rules in CLAUDE.md.
+5. PR: re-pin the A/B baseline —
+   `(cd bench && zig fetch --save=csar_base
+   https://github.com/ajfriend/csar_zig/archive/refs/tags/vX.Y.Z.tar.gz)`
+   rewrites the URL and hash in place (the comment block survives), then
+   `zig build --build-file bench/build.zig check`. The harness always measures
+   against the last release (the `csar_base` comment in `bench/build.zig.zon`).
+6. ajfriend/csar_py: the same `zig fetch --save=csar <tarball URL>` in its
+   `src/zig/`, plus whatever the release changed in the Python surface. Until
+   #17, this is also the only build against the *published* tarball.
 
 ## A/B benchmarking
 
