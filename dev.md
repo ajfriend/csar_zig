@@ -7,9 +7,11 @@
 - **[just](https://github.com/casey/just)** — task runner.
   `brew install just`.
 - **[kcov](https://github.com/SimonKagstrom/kcov)** — line-coverage tool
-  used by `just test-slow`. `brew install kcov` on macOS and Linux
-  alike (the formula ships a linux bottle; it's not in the Ubuntu apt
-  repos). CI installs it the same way.
+  used by `just test-slow`. `brew install kcov` works on macOS and
+  Linux alike; on Ubuntu, `apt install kcov` also works on 22.04 and on
+  25.10+, but *not* on 24.04 — the archive skips noble. The exclusion
+  ledger is derived from kcov's own line classification, so if a local
+  kcov and CI's disagree about it, CI is authoritative.
 - **[uv](https://docs.astral.sh/uv/)** — runs the Python scripts
   (`scripts/coverage_gate.py` behind `just test-slow`, and the
   states/countries examples). `brew install uv`.
