@@ -8,8 +8,9 @@
   `brew install just`.
 - **[kcov](https://github.com/SimonKagstrom/kcov)** — line-coverage tool
   used by `just test-slow`. `brew install kcov` on macOS and Linux
-  alike (the formula ships a linux bottle; it's not in the Ubuntu apt
-  repos). CI installs it the same way.
+  alike (the formula ships a linux bottle). On Ubuntu, `apt install
+  kcov` works on 22.04 and on 25.10+, but *not* on 24.04 — the archive
+  skips noble — which is why CI runs on `ubuntu-26.04`.
 - **[uv](https://docs.astral.sh/uv/)** — runs the Python scripts
   (`scripts/coverage_gate.py` behind `just test-slow`, and the
   states/countries examples). `brew install uv`.

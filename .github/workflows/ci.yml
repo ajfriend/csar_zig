@@ -12,18 +12,20 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  HOMEBREW_NO_AUTO_UPDATE: 1
-
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # 26.04 (not ubuntu-latest, which is 24.04) for apt's kcov: the archive
+    # skips noble entirely, so 24.04 forced a brew install that poured 27
+    # dependencies for a 1.5 MB tool — ~45s of a ~90s job. 26.04 ships
+    # kcov 43, the same version dev.md pins locally.
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v4
       - uses: mlugg/setup-zig@v2
         with:
           version: 0.15.2
       - uses: extractions/setup-just@v3
+      - uses: astral-sh/setup-uv@v10
       - name: Build
         run: just check
       - name: Test (self-hosted backend)
@@ -31,14 +33,9 @@ jobs:
         # under the coverage gate.
         run: just test-selfhosted
       - name: Install kcov
-        # Same channel as the local dev install (the brew formula ships
-        # a prebuilt x86_64_linux bottle); the runner image includes
-        # linuxbrew.
         run: |
-          command -v brew > /dev/null || eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-          brew install -q kcov
-          command -v uv > /dev/null || brew install -q uv
-          echo "$(brew --prefix)/bin" >> "$GITHUB_PATH"
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends kcov
       - name: Test (LLVM backend) + coverage gate + exclusion ledger
         run: |
           set -euo pipefail
