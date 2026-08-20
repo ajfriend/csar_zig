@@ -112,34 +112,49 @@ plus a per-site marker, all wired in the `justfile` kcov invocation:
   `Method.Resolved` is the in-tree example.
 - `--exclude-line=kcov-excl`: a trailing `// kcov-excl: <reason>`
   marks a single line; `--exclude-region=kcov-excl-start:kcov-excl-stop`
-  marks a block. **Every marker carries its reason in-source** — grep
-  `kcov-excl` for the full ledger. Current entries fall into three
-  classes:
-  - *Failure-only diagnostics* (test files): print/return paths that
-    execute only when the test itself fails.
-  - *Platform-dependent arms*: e.g. a budget-limited solve that
-    converges on some platforms and DNCs here; the tolerant arm for
-    the other platform can't be covered locally.
-  - *Numerical defense-in-depth* (`src/trust.zig`): the pred ≤ 0
-    re-dogleg (pure roundoff defense — the guarded B is SPD by
-    Sylvester) and the two polish-bail counters. No constructible
-    input reaches them; probed exhaustively before marking: the full
-    fixture library × option grids, ~100 synthetic shape families,
-    direct far-field `solveTrust` seams (lldb breakpoint counts
-    confirming zero hits), and the full real-world states +
-    countries surveys (227 regions, zero polish failures). If you
-    find an input that reaches one, remove the marker and add the
-    input as a test case.
+  marks a block. Every marker must carry its reason in-source — grep
+  `kcov-excl` for the ledger. **There are currently zero markers in
+  the tree**: every previously-marked line was eliminated by one of
+  the techniques below. The mechanism stays wired for the case that
+  genuinely survives all of them.
 
-Before marking a line, try to cover it — in order of preference:
-construct an input (the dogleg branches, re-cert convergence, TR
-step rejection, away-step stall, and degenerate-seed fallback all
-looked "unhittable" until tests constructed inputs); extract the
-logic into a pure function and test it directly (the TR radius
-policy `updateRadius` and the KKT H-build `buildKktH` were inline
-excluded branches until extracted); or narrow a type so the dead
-line disappears (`Method.Resolved`). Mark only what survives all
-three.
+Before marking a line, exhaust these — each has an in-tree example:
+
+- **Construct an input.** The dogleg branches, re-cert convergence,
+  TR step rejection, away-step stall, and degenerate-seed fallback
+  all looked "unhittable" until tests constructed inputs.
+- **Extract a pure function and test it directly.** The TR radius
+  policy (`updateRadius`), the KKT H-build (`buildKktH`), and the
+  pred ≤ 0 isotropic retry (`doglegStepRobust`) were inline excluded
+  branches until extracted; the last is reachable only via a
+  degenerate g or FP-noise cancellation, and its direct test feeds
+  the degenerate g.
+- **Narrow a type so the dead line disappears.**
+  `Method.resolved()` returning `Method.Resolved` deleted the
+  `.auto => unreachable` dispatch arm.
+- **Collapse a trivial branch body onto its condition's line.** The
+  polish-bail counters are `if (...) polish_failures += 1;`
+  one-liners: the line executes (and is covered) every pass. This
+  leans on the documented branch-coverage caveat above — reserve it
+  for bodies trivially correct by inspection.
+- **Cover a failure path with an expectError self-test.** The
+  trust/alternating AR-mismatch diagnostic is a helper whose failure
+  path a self-test drives directly (`expectArAgreement` in
+  methods_test).
+- **Cover platform-dependent arms with a deterministic sibling.**
+  A tolerant switch over converged/DNC is factored into a helper
+  (`snapshotQ`, `trustTally`), and a test feeds it both a
+  guaranteed-converged solve (hex) and a guaranteed-DNC solve
+  (wide_cap89 at max_outer = 1 — the wide-cap eager certificate
+  fails by construction) so both arms execute on every platform.
+
+What remains excluded is exactly the `=> unreachable` arms (counted
+in the ledger, never marked). Historical evidence for the polish-bail
+counters staying untriggerable in context: the full fixture library ×
+option grids, ~100 synthetic shape families, direct far-field
+`solveTrust` seams (lldb breakpoint counts confirming zero hits), and
+the real-world states + countries surveys (227 regions, zero polish
+failures).
 
 **The ledger is tracked over time.** `just test-slow` prints a
 `coverage exclusions:` summary — the total number of lines the

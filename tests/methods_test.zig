@@ -87,10 +87,7 @@ test "trust: agrees with alternating on bundled cases incl. extreme-kappa cells"
         try std.testing.expect(std.meta.activeTag(red_out) == .converged);
         const ar_f = fast_out.converged.aspectRatio();
         const ar_r = red_out.converged.aspectRatio();
-        if (@abs(ar_f - ar_r) > AR_AGREE_REL_TOL * ar_f) {
-            std.debug.print("trust/alternating AR mismatch case={s}: alternating={d:.10} trust={d:.10}\n", .{ name, ar_f, ar_r }); // kcov-excl: failure diagnostic — runs only when this test fails
-            return error.TrustAlternatingArMismatch; // kcov-excl: failure path — runs only when this test fails
-        }
+        try expectArAgreement(name, ar_f, ar_r);
         try std.testing.expect(@abs(red_out.converged.gap) <= GAP_TOL);
     }
 }
@@ -131,6 +128,21 @@ test "auto: resolves to Method.recommended (pure alias, identical outcomes)" {
         try std.testing.expectEqual(trust_out.converged.gap, auto_out.converged.gap);
         try std.testing.expectEqual(trust_out.converged.sigma, auto_out.converged.sigma);
     }
+}
+
+/// AR agreement check with case-name context on failure. The failure
+/// path is real code and is covered by the expectError self-test
+/// below (which prints one clearly-labeled diagnostic line per run as
+/// a side effect).
+fn expectArAgreement(name: []const u8, ar_alternating: f64, ar_trust: f64) !void {
+    if (@abs(ar_alternating - ar_trust) > AR_AGREE_REL_TOL * ar_alternating) {
+        std.debug.print("trust/alternating AR mismatch case={s}: alternating={d:.10} trust={d:.10}\n", .{ name, ar_alternating, ar_trust });
+        return error.TrustAlternatingArMismatch;
+    }
+}
+
+test "expectArAgreement: the mismatch diagnostic fires (self-test; prints one labeled line)" {
+    try std.testing.expectError(error.TrustAlternatingArMismatch, expectArAgreement("diagnostic-selftest", 1.0, 2.0));
 }
 
 test "mveeFwAway: converges the design and keeps weights in the simplex" {

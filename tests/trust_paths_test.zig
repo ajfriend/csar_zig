@@ -62,6 +62,24 @@ test "doglegStep: radius between Cauchy and Newton points interpolates the segme
     try std.testing.expect(step.pred >= pred(B, g, u_grad) - 1e-12);
 }
 
+test "doglegStepRobust: degenerate gradient exercises the isotropic retry" {
+    // g = 0: the Newton point is 0 with pred exactly 0, so the retry
+    // fires; the isotropic Hessian gives the same degenerate answer
+    // and the caller's stationary break handles it. This is the only
+    // constructible route into the retry — with an SPD-guarded B
+    // (Sylvester), a nonpositive pred otherwise needs FP-noise
+    // cancellation.
+    const B = Mat2{ .m = .{ 1.0, 0.0, 0.0, 1.0 } };
+    const g0 = Vec2{ .m = .{ 0.0, 0.0 } };
+    const step = trust.doglegStepRobust(B, g0, 1.0);
+    try std.testing.expectEqual(@as(f64, 0.0), step.pred);
+    try std.testing.expectEqual(@as(f64, 0.0), step.u.norm());
+    // Non-degenerate passthrough: identical to doglegStep.
+    const g = Vec2{ .m = .{ 1.0, 1.0 } };
+    const s2 = trust.doglegStepRobust(B, g, 2.0);
+    try std.testing.expectEqual(trust.doglegStep(B, g, 2.0).pred, s2.pred);
+}
+
 test "updateRadius: every ρ band of the tuned radius policy" {
     const nan = std.math.nan(f64);
 
@@ -146,22 +164,49 @@ test "trust: extreme-anisotropy and arc inputs traverse rejected steps and clipp
         const pts: [][3]f64 = @ptrCast(pts_v);
         var o = try csar.solve(allocator, pts, .{});
         defer o.deinit();
-        switch (o) {
-            .converged => |c| {
-                n_converged += 1;
-                total_tr_iters += c.diag.trust.tr_iters;
-                try std.testing.expect(@abs(c.gap) <= 1e-6);
-                try std.testing.expect(csar.checkFeasibility(c, pts) <= 1e-10);
-            },
-            // Floor-limited miss: consistency of the DNC snapshot is
-            // outcome_consistency_test's job; here it only must not
-            // be misclassified.
-            .did_not_converge => |d| total_tr_iters += d.diag.trust.tr_iters, // kcov-excl: platform-dependent arm — all shapes converge on darwin-aarch64/0.15.2, one DNCs on linux-x86_64 and under 0.16
-            .infeasible => return error.UnexpectedInfeasible, // kcov-excl: failure path — runs only when this test fails
+        const t = trustTally(&o);
+        total_tr_iters += t.tr_iters;
+        if (t.converged) {
+            n_converged += 1;
+            const c = o.converged;
+            try std.testing.expect(@abs(c.gap) <= 1e-6);
+            try std.testing.expect(csar.checkFeasibility(c, pts) <= 1e-10);
         }
+        // Floor-limited DNC misses are tolerated per shape (see above);
+        // consistency of DNC snapshots is outcome_consistency_test's job.
     }
     try std.testing.expect(n_converged >= 5);
     try std.testing.expect(total_tr_iters > 0); // TR actually engaged
+}
+
+const Tally = struct { converged: bool, tr_iters: u32 };
+
+/// Outcome accounting for the anisotropy family. Both arms are
+/// exercised deterministically on every platform: the family's tame
+/// shapes converge everywhere, and the budget-clamped test below DNCs
+/// everywhere — so the per-shape platform variance above leaves no
+/// coverage hole.
+fn trustTally(o: *const csar.Outcome) Tally {
+    return switch (o.*) {
+        .converged => |c| .{ .converged = true, .tr_iters = c.diag.trust.tr_iters },
+        .did_not_converge => |d| .{ .converged = false, .tr_iters = d.diag.trust.tr_iters },
+        .infeasible => unreachable, // solver bug: every family input is strictly feasible by construction
+    };
+}
+
+test "trust: budget-clamped wide cap is an honest DNC everywhere" {
+    // wide_cap89 with max_outer = 1: the wide-cap eager certificate
+    // fails by construction (docs/wide-cap-dnc-report.md), so a single
+    // outer iteration cannot certify — deterministic DNC on every
+    // platform. A shift here is a regression signal, not a number to
+    // bump.
+    const allocator = std.testing.allocator;
+    const cases = @import("cases");
+    const pts = (cases.byName("wide_cap89") orelse unreachable).points;
+    var o = try csar.solve(allocator, pts, .{ .method = .trust, .max_outer = 1 });
+    defer o.deinit();
+    const t = trustTally(&o);
+    try std.testing.expect(!t.converged);
 }
 
 test "trust: tight gap_tol converges through the re-certification phase" {

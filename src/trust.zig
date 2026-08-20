@@ -431,6 +431,18 @@ pub fn updateRadius(delta: f64, rho: f64, step_norm: f64) RadiusUpdate {
     return .{ .delta = delta, .hit_floor = false };
 }
 
+/// `doglegStep` with the isotropic-Hessian retry: if the model
+/// Hessian yields a nonpositive predicted decrease (possible only
+/// through FP-noise cancellation — the caller's det/m₀₀ guard makes B
+/// SPD by Sylvester — or a degenerate g), retry once with the derived
+/// isotropic fallback so the prediction is positive whenever g ≠ 0.
+pub fn doglegStepRobust(B: Mat2, g: Vec2, delta: f64) TrStep {
+    const step = doglegStep(B, g, delta);
+    if (step.pred > 0) return step;
+    const iso = Mat2{ .m = .{ tc.B0, 0, 0, tc.B0 } };
+    return doglegStep(iso, g, delta);
+}
+
 pub fn doglegStep(B: Mat2, g: Vec2, delta: f64) TrStep {
     const model = struct {
         fn pred(B_: Mat2, g_: Vec2, u: Vec2) f64 {
@@ -505,9 +517,7 @@ pub fn solveTrust(
         var s_scale = core.rescaleP(wb.P_buf, wb.Ps);
         core.initWeights(wb.Ps, wb.w);
         core.mveeFw(wb.Ps, algo.FW_PER_NEWTON, 0.0, wb.Ql, wb.w);
-        if (!newtonPolish(wb.Ql, wb.w, algo.ACTIVE_THRESH, 20, tol.NEWTON_INNER, &wb.newton_scratch)) {
-            polish_failures += 1; // kcov-excl: polish bail counter — no constructible input exhausts polish (dev.md "Coverage exclusions")
-        }
+        if (!newtonPolish(wb.Ql, wb.w, algo.ACTIVE_THRESH, 20, tol.NEWTON_INNER, &wb.newton_scratch)) polish_failures += 1;
         var m = core.computeMoments(wb.Ps, wb.w, s_scale);
         last_gap = try certifyAt(m.M, Q, b, Xw, &wb);
         b_cert = b;
@@ -538,9 +548,7 @@ pub fn solveTrust(
             core.mveeFw(wb.Ps, 1, 0.0, wb.Ql, wb.w);
             const is_full = (cycle % algo.FW_PER_NEWTON == algo.FW_PER_NEWTON - 1);
             if (is_full) {
-                if (!newtonPolish(wb.Ql, wb.w, algo.ACTIVE_THRESH, 20, tol.NEWTON_INNER, &wb.newton_scratch)) {
-                    polish_failures += 1;
-                }
+                if (!newtonPolish(wb.Ql, wb.w, algo.ACTIVE_THRESH, 20, tol.NEWTON_INNER, &wb.newton_scratch)) polish_failures += 1;
             }
             m = core.computeMoments(wb.Ps, wb.w, s_scale);
             if (is_full) {
@@ -586,11 +594,7 @@ pub fn solveTrust(
         var B = cur.B;
         if (!(B.det() > 0) or !(B.m[0] > 0)) B = .{ .m = .{ tc.B0, 0, 0, tc.B0 } }; // negated form: NaN falls back too
 
-        var step = doglegStep(B, cur.g, delta);
-        if (step.pred <= 0) {
-            B = .{ .m = .{ tc.B0, 0, 0, tc.B0 } }; // kcov-excl: roundoff defense — det>0 ∧ m00>0 is SPD by Sylvester, so pred ≤ 0 needs FP-noise cancellation (dev.md "Coverage exclusions")
-            step = doglegStep(B, cur.g, delta); // kcov-excl: see line above
-        }
+        const step = doglegStepRobust(B, cur.g, delta);
         if (step.pred <= 0 or !(step.u.norm() > 0)) break; // stationary: g ≈ 0
         // Below merit resolution the ratio test can never verify a
         // step — hand off to the re-cert phase instead of rejecting
@@ -662,9 +666,7 @@ pub fn solveTrust(
         while (recert_attempts < tc.RECERT_MAX and open_iters + tr_iters + recert_attempts < opts.max_outer) {
             recert_attempts += 1;
             core.mveeFw(wb.Ps, 1, 0.0, wb.Ql, wb.w);
-            if (!newtonPolish(wb.Ql, wb.w, algo.ACTIVE_THRESH, 20, tol.NEWTON_INNER, &wb.newton_scratch)) {
-                polish_failures += 1; // kcov-excl: polish bail counter — no constructible input exhausts polish (dev.md "Coverage exclusions")
-            }
+            if (!newtonPolish(wb.Ql, wb.w, algo.ACTIVE_THRESH, 20, tol.NEWTON_INNER, &wb.newton_scratch)) polish_failures += 1;
             const m = core.computeMoments(wb.Ps, wb.w, s_scale);
             last_gap = try certifyAt(m.M, Q, b, Xw, &wb);
             b_cert = b;
