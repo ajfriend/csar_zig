@@ -1,7 +1,5 @@
 //! A/B harness: measures the working tree against a pinned baseline, both
-//! compiled into THIS binary. One process, one allocator, one clock, reps
-//! interleaved — so the per-process cold-start effect that manufactured a
-//! phantom small-cell regression while A/B-ing the 0.16 bump cannot arise.
+//! compiled into THIS binary.
 //!
 //!   zig build ab                 # A/B: current vs pinned baseline
 //!   zig build ab -- --aa         # calibration: current vs current
@@ -9,6 +7,56 @@
 //!   zig build ab -- --inject-tol # self-test: current side runs a tight gap_tol
 //!
 //! The report is meant to be pasted into a PR. Nothing is written to disk.
+//!
+//! ## Measurement strategy
+//!
+//! Each choice below exists to remove a specific way a solver comparison can
+//! lie. Change them together with the reasoning, not individually.
+//!
+//! **One process, both versions.** Not two binaries run in sequence. A freshly
+//! built binary's first *launch* runs 2-5x slow, and that penalty survives an
+//! in-process warm-up and a min-over-reps, so a two-process A/B can invent a
+//! small-cell regression outright — it did, while A/B-ing the 0.16 bump. With
+//! both sides in one process they share the launch cost, the allocator, and
+//! the clock, so it divides out of the ratio.
+//!
+//! **Warm up, then measure.** N_WARMUP untimed solves per case per side, so
+//! the timed reps see warm caches and a settled allocator. This handles
+//! per-*iteration* warm-up only; the per-*process* effect above is handled by
+//! the single-binary design, not here.
+//!
+//! **Batch fast cases.** A solve near the clock's resolution cannot be timed
+//! individually: `hex` at ~0.8us against a 42ns clock is ~19 quanta, ~5%
+//! granularity. Each timed interval therefore covers however many solves it
+//! takes to reach BATCH_TARGET_US, calibrated per case from one probe solve so
+//! it adapts to the machine. Note this is about quantization, not bias —
+//! clock-read cost is common-mode and cancels in the ratio regardless.
+//!
+//! **Interleave at rep granularity.** Both sides are measured inside the same
+//! rep, so thermal state, scheduler pressure, and CPU frequency drift hit them
+//! together instead of favouring whichever ran first. The order within a rep
+//! is fixed (current, then baseline) rather than alternating; `--aa` is what
+//! would expose a resulting bias, and it currently reports 1.000 on every
+//! case, so there is nothing to correct. Revisit if that stops being true.
+//!
+//! **Report the min, not the mean or median.** Measurement noise is additive
+//! and one-sided — interrupts, migrations, and contention can only make a
+//! solve look slower, never faster — so the minimum is the closest estimate of
+//! the true cost, while a mean or median tracks whatever else the machine was
+//! doing. (For batched cases this is min-of-batch-means: jitter is averaged
+//! within a batch rather than rejected by the min. The batch is the price of
+//! measuring a sub-us case at all.)
+//!
+//! **N_REPS is a floor, not a statistic.** It is set high enough that the min
+//! has settled, not to support a confidence interval. There is deliberately no
+//! outlier rejection, no variance estimate, and no significance test: the
+//! report is read by a human against the `--aa` floor, and #18 decides whether
+//! anything ever gates on it.
+//!
+//! **Everything above is checked by `--aa`.** Running a version against itself
+//! must yield 1.000; whatever it misses by is that run's noise floor, and no
+//! A/B difference smaller than that means anything. It is the only check that
+//! catches bias in the harness rather than in the solver, so read it first.
 
 const std = @import("std");
 const cur = @import("cur");
@@ -20,11 +68,18 @@ const cases = @import("cases");
 /// what a report should highlight. Deterministic metrics run over everything.
 const TIMING_CASES = [_][]const u8{ "hex", "np100", "ha_12", "near_collinear" };
 
+/// Untimed solves before each side's timed reps — warm caches and settle the
+/// allocator. Per-iteration only; the per-process effect is handled by having
+/// one binary at all. See "Measurement strategy" above.
 const N_WARMUP = 5;
+/// Timed reps per side per case. A floor for the min to settle against, not a
+/// sample size for a statistic — nothing here computes a confidence interval.
 const N_REPS = 100;
 /// Timed intervals are grown to at least this long, so clock granularity
 /// stops being a factor. ~2400x the 42ns clock seen on aarch64-macos.
 const BATCH_TARGET_US = 100.0;
+/// Matches the tolerance the test suite runs at, so a report is comparable to
+/// what `just ci` gates on.
 const GAP_TOL = 1e-6;
 /// Tight enough to push borderline cases off the f64 gap floor, for --inject-tol.
 const INJECT_GAP_TOL = 1e-13;
