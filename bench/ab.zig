@@ -22,6 +22,9 @@ const TIMING_CASES = [_][]const u8{ "hex", "np100", "ha_12", "near_collinear" };
 
 const N_WARMUP = 5;
 const N_REPS = 100;
+/// Timed intervals are grown to at least this long, so clock granularity
+/// stops being a factor. ~2400x the 42ns clock seen on aarch64-macos.
+const BATCH_TARGET_US = 100.0;
 const GAP_TOL = 1e-6;
 /// Tight enough to push borderline cases off the f64 gap floor, for --inject-tol.
 const INJECT_GAP_TOL = 1e-13;
@@ -82,26 +85,52 @@ fn isOutcome(status: []const u8) bool {
         std.mem.eql(u8, status, "did_not_converge");
 }
 
-/// Time one side. `extra` repeats the solve within the measured interval —
-/// the 2x injector, which must be deterministic per rep because we report a
-/// min: a stochastic injector has no effect on a minimum.
+/// Time `batch` solves as one interval and record µs per solve, dividing by
+/// `divisor`.
+///
+/// Batching is what makes a fast case measurable rather than a special case.
+/// A single `hex` solve is ~0.8µs against a 42ns clock — ~19 quanta, so ~5%
+/// granularity, which shows up as ratio noise on exactly the hot-path cell
+/// CLAUDE.md says to protect. Timing a batch of them puts the interval far
+/// above the clock's resolution and the ratio becomes readable.
+///
+/// `batch` and `divisor` differ only under the 2x injector: the interval then
+/// holds twice the solves but is still divided by the un-injected count, so
+/// the reported per-solve time doubles, which is the point.
+///
+/// Note the statistic: with batching this is min-of-batch-means, not
+/// min-of-single-solves — jitter is averaged within a batch rather than
+/// rejected by the min.
 fn timeSide(
     comptime lib: type,
     gpa: std.mem.Allocator,
     io: std.Io,
     pts: []const [3]f64,
     gap_tol: f64,
-    extra: u32,
+    batch: u32,
+    divisor: u32,
     out: []f64,
     rep: usize,
 ) void {
     const t0 = std.Io.Timestamp.now(io, .awake);
-    for (0..extra) |_| {
+    for (0..batch) |_| {
         var o = lib.solve(gpa, pts, .{ .gap_tol = gap_tol, .coplanarity_tol = 1e-12 }) catch continue;
         o.deinit();
     }
     const t1 = std.Io.Timestamp.now(io, .awake);
-    out[rep] = @as(f64, @floatFromInt(t0.durationTo(t1).nanoseconds)) / 1000.0;
+    const total_us = @as(f64, @floatFromInt(t0.durationTo(t1).nanoseconds)) / 1000.0;
+    out[rep] = total_us / @as(f64, @floatFromInt(divisor));
+}
+
+/// Solves per timed interval: enough that the interval dwarfs the clock, one
+/// when the case is already slow enough. Calibrated per case from a single
+/// timed solve, so it adapts to the machine rather than encoding one.
+fn batchFor(t_single_us: f64) u32 {
+    if (t_single_us <= 0) return 1;
+    const n = @ceil(BATCH_TARGET_US / t_single_us);
+    if (n <= 1) return 1;
+    if (n >= 4096) return 4096;
+    return @intFromFloat(n);
 }
 
 pub fn main(init: std.process.Init) !void {
@@ -164,7 +193,7 @@ pub fn main(init: std.process.Init) !void {
 
     // ---- timing, interleaved per rep ------------------------------------
     try out.print("timing (min of {d} reps, µs)\n", .{N_REPS});
-    try out.print("  {s:20} {s:>10} {s:>10} {s:>8}\n", .{ "case", "cur", "base", "ratio" });
+    try out.print("  {s:20} {s:>10} {s:>10} {s:>8} {s:>7}\n", .{ "case", "cur", "base", "ratio", "batch" });
 
     var t_cur: [N_REPS]f64 = undefined;
     var t_base: [N_REPS]f64 = undefined;
@@ -190,26 +219,29 @@ pub fn main(init: std.process.Init) !void {
             var o2 = base.solve(gpa, pts, .{ .gap_tol = GAP_TOL }) catch continue;
             o2.deinit();
         }
+
+        // Calibrate the batch from one timed solve on the baseline side, so
+        // both sides use the same count and the ratio stays a like-for-like
+        // comparison.
+        var probe: [1]f64 = undefined;
+        timeSide(base, gpa, io, pts, GAP_TOL, 1, 1, &probe, 0);
+        const batch = batchFor(probe[0]);
+
         for (0..N_REPS) |r| {
             // Interleaved: both sides see the same thermal/scheduler state.
-            timeSide(cur, gpa, io, pts, cur_tol, cur_extra, &t_cur, r);
+            timeSide(cur, gpa, io, pts, cur_tol, batch * cur_extra, batch, &t_cur, r);
             if (opts.aa) {
-                timeSide(cur, gpa, io, pts, GAP_TOL, 1, &t_base, r);
+                timeSide(cur, gpa, io, pts, GAP_TOL, batch, batch, &t_base, r);
             } else {
-                timeSide(base, gpa, io, pts, GAP_TOL, 1, &t_base, r);
+                timeSide(base, gpa, io, pts, GAP_TOL, batch, batch, &t_base, r);
             }
         }
         std.mem.sort(f64, &t_cur, {}, cmpF64);
         std.mem.sort(f64, &t_base, {}, cmpF64);
 
-        // Below clock resolution a ratio is noise divided by noise; report the
-        // times and skip it rather than dividing by ~0. (Carried over from
-        // examples/compare.zig.)
-        if (t_base[0] < 1.0) {
-            try out.print("  {s:20} {d:10.2} {d:10.2} {s:>8}\n", .{ name, t_cur[0], t_base[0], "sub-µs" });
-        } else {
-            try out.print("  {s:20} {d:10.2} {d:10.2} {d:8.3}\n", .{ name, t_cur[0], t_base[0], t_cur[0] / t_base[0] });
-        }
+        try out.print("  {s:20} {d:10.3} {d:10.3} {d:8.3} {d:>7}\n", .{
+            name, t_cur[0], t_base[0], t_cur[0] / t_base[0], batch,
+        });
     }
     try out.flush();
 }
