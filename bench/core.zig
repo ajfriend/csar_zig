@@ -1,11 +1,15 @@
 //! Benchmarking policy: how many solves go in a timed interval, how samples
-//! reduce to a statistic, and what counts as a difference.
+//! reduce to a statistic, what counts as a difference — and `Side`, the
+//! default adapter from a library version to the numbers the policy consumes.
 //!
-//! Knows nothing about the solver, the clock, or the two library versions —
-//! everything here takes plain numbers, which is what lets `tests/` verify it
-//! without timing flakiness. The mechanics that read a clock and call a solver
-//! live in `ab.zig`, alongside the parts of the methodology that are properties
-//! of *one binary and one clock* rather than of these constants.
+//! The policy functions take plain numbers and know nothing about the solver
+//! or the clock, which is what lets `tests/` verify them to the ulp with a
+//! scripted stand-in. `Side` is the one piece that reads a clock and calls a
+//! solver; it is generic over the library, so the suite instantiates it
+//! against the current one and covers every branch on real fixtures. What is
+//! left in `ab.zig` is arg parsing, printing and loop wiring, plus the parts
+//! of the methodology that are properties of *one binary* (process isolation,
+//! the A/A check, layout bias).
 
 const std = @import("std");
 
@@ -39,7 +43,7 @@ pub const N_REPS: usize = 100;
 // however many solves it takes to reach BATCH_TARGET_US, calibrated per case
 // from a probe so it adapts to the machine rather than encoding one.
 //
-// This is about quantization, not bias — see ab.zig, "The instrument".
+// This is about quantization, not bias — see "The instrument" below.
 // ---------------------------------------------------------------------------
 
 /// ~2400x the 42ns clock seen on aarch64-macos.
@@ -48,6 +52,20 @@ pub const BATCH_TARGET_US: f64 = 100.0;
 /// Upper bound, so a pathologically fast case cannot spin unboundedly. Also
 /// where a useless probe lands — see `batchFor`.
 pub const BATCH_MAX: u32 = 4096;
+
+/// Single-solve probes taken before choosing a batch; the min is used. One
+/// probe would let a single contaminated read set the batch for every timed
+/// interval of that case (seen: `ha_12` flipping 2 -> 2 -> 1 across launches).
+/// The min of a few is the same statistic the reps use, for the same reason.
+pub const N_PROBE: u32 = 3;
+
+/// Choose the batch for `side`, which must already be warmed up so the probes
+/// measure a warm solve. `side` exposes `measure` as `pairedRun` requires.
+pub fn calibrate(side: anytype) u32 {
+    var probe = std.math.inf(f64);
+    for (0..N_PROBE) |_| probe = @min(probe, side.measure(1));
+    return batchFor(probe);
+}
 
 /// Solves per timed interval: enough that the interval dwarfs the clock, one
 /// when the case is already slow enough.
@@ -285,4 +303,113 @@ pub fn writeDiff(w: *std.Io.Writer, name: []const u8, a: Metrics, b: Metrics) st
         "  {s:<22} cur={s}/{d}/{d:.17}/{e:.2}  base={s}/{d}/{d:.17}/{e:.2}\n",
         .{ name, a.status, a.iters, a.ar, a.gap, b.status, b.iters, b.ar, b.gap },
     );
+}
+
+// ---------------------------------------------------------------------------
+// The instrument, and the default adapter
+//
+// A monotonic clock (`Io.Timestamp`, `.awake`), read once on each side of a
+// timed interval. Two properties matter, both per-machine: its resolution
+// (42ns on aarch64-macos, the 24MHz timebase) and the cost of a read (tens of
+// ns). Both reads sit INSIDE the measured interval, so their cost is charged
+// to the solve — but identically on both sides, so it is common-mode and
+// cancels in a ratio. Resolution does not cancel, which is what batching is
+// for.
+// ---------------------------------------------------------------------------
+
+/// Matches the tolerance the test suite runs at, so a report is comparable to
+/// what `just ci` gates on.
+pub const GAP_TOL = 1e-6;
+
+/// One side of a comparison: a library version bound to an allocator, a clock,
+/// and the options it solves under. Exposes `metrics` for the deterministic
+/// pass and `measure` for `pairedRun` / `calibrate`.
+///
+/// This is the *default* adapter, for when both versions share an API. It is
+/// also the shim escape hatch: a PR that changes `solve`'s signature or
+/// reshapes `Outcome` writes its own `Side`-shaped adapter for the older side
+/// in `ab.zig` and passes that to `pairedRun` — nothing here changes. Such a
+/// shim is dead once the baseline pin moves past the change; delete it then.
+pub fn Side(comptime lib: type) type {
+    return struct {
+        const Self = @This();
+
+        gpa: std.mem.Allocator,
+        io: std.Io,
+        pts: []const [3]f64 = &.{},
+        gap_tol: f64 = GAP_TOL,
+
+        /// Returns `lib.SolveOptions`, not any one version's — the two
+        /// versions have distinct types of the same name.
+        ///
+        /// Every solver option is pinned explicitly, including ones that match
+        /// today's defaults. The two sides are different library versions: if
+        /// a default ever changed between them, an unpinned option would make
+        /// them solve different configurations and the difference would
+        /// masquerade as a solver change — precisely what this tool exists to
+        /// detect.
+        fn opts(self: Self) lib.SolveOptions {
+            return .{
+                .gap_tol = self.gap_tol,
+                .n_hull = 10,
+                .coplanarity_tol = 1e-12,
+                .max_outer = 100,
+                // `.trust`, not `.auto`: `.auto` is an alias each version is
+                // free to re-point.
+                .method = .trust,
+            };
+        }
+
+        /// Solve once and reduce to comparable metrics. Errors are reported,
+        /// not propagated: `solve` can still return one on a valid input
+        /// (#1, #2), and a case that errors on one side only is precisely a
+        /// difference worth seeing. Dying here would hide it.
+        pub fn metrics(self: Self, pts: []const [3]f64) Metrics {
+            var o = lib.solve(self.gpa, pts, self.opts()) catch |e| {
+                return .{ .status = @errorName(e) };
+            };
+            defer o.deinit();
+            // @tagName, not a literal: this switch is exhaustive over the real
+            // union, so a new outcome variant is a compile error HERE, and the
+            // status it produces is the library's own spelling — which the
+            // suite pins `OutcomeTag` to (tests/bench_core_test.zig).
+            const status = @tagName(o);
+            return switch (o) {
+                .converged => |c| .{
+                    .status = status,
+                    .iters = c.diag.totalIters(),
+                    .ar = c.aspectRatio(),
+                    .gap = c.gap,
+                },
+                .infeasible => .{ .status = status },
+                .did_not_converge => |p| .{
+                    .status = status,
+                    .iters = p.diag.totalIters(),
+                    .ar = p.sigma[2] / p.sigma[1],
+                    .gap = p.gap,
+                },
+            };
+        }
+
+        /// `measure` with the clock ignored.
+        pub fn warmUp(self: *Self) void {
+            _ = self.measure(N_WARMUP);
+        }
+
+        /// What `pairedRun` and `calibrate` call: run `count` solves on
+        /// `pts`, return the elapsed microseconds. The only place in the
+        /// harness a clock is read.
+        pub fn measure(self: *Self, count: u32) f64 {
+            const t0 = std.Io.Timestamp.now(self.io, .awake);
+            for (0..count) |_| {
+                // A solve that fails is skipped, which shortens a *timed*
+                // interval and reports a fast, meaningless µs. Callers only
+                // time cases that `metrics` already reported as an outcome.
+                var o = lib.solve(self.gpa, self.pts, self.opts()) catch continue;
+                o.deinit();
+            }
+            const t1 = std.Io.Timestamp.now(self.io, .awake);
+            return @as(f64, @floatFromInt(t0.durationTo(t1).nanoseconds)) / 1000.0;
+        }
+    };
 }

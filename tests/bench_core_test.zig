@@ -4,6 +4,8 @@
 
 const std = @import("std");
 const csar = @import("../src/root.zig");
+const cases = @import("cases");
+const test_options = @import("test_options");
 const bc = @import("../bench/core.zig");
 
 test "OutcomeTag is the library's Outcome vocabulary, name for name" {
@@ -84,6 +86,16 @@ test "batchFor: clamped, and a useless probe asks for the longest interval" {
     try std.testing.expectEqual(bc.BATCH_MAX, bc.batchFor(-1));
     try std.testing.expectEqual(bc.BATCH_MAX, bc.batchFor(std.math.nan(f64)));
     try std.testing.expectEqual(bc.BATCH_MAX, bc.batchFor(std.math.inf(f64)));
+}
+
+test "calibrate: the batch comes from the min of the probes" {
+    // A contaminated first probe must not shrink the batch for the whole
+    // case: that is why there are N_PROBE of them and the min is taken.
+    var clean: Fake = .{ .per_solve_us = 2.0 };
+    var spiked: Fake = .{ .per_solve_us = 2.0, .spike_at = 1 };
+    try std.testing.expectEqual(bc.batchFor(2.0), bc.calibrate(&clean));
+    try std.testing.expectEqual(bc.batchFor(2.0), bc.calibrate(&spiked));
+    try std.testing.expectEqual(bc.N_PROBE, clean.calls);
 }
 
 test "Tally counts each outcome, and anything unrecognised as an error" {
@@ -205,4 +217,104 @@ test "writeDiff survives an aspect ratio that expands to hundreds of digits" {
     const huge: bc.Metrics = .{ .status = "did_not_converge", .iters = 1, .ar = std.math.floatMax(f64) };
     try bc.writeDiff(&w, "pathological", huge, huge);
     try std.testing.expect(w.buffered().len > 650);
+}
+
+// ---------------------------------------------------------------------------
+// Side(csar): the adapter, against the real library and real fixtures.
+// ---------------------------------------------------------------------------
+
+const Real = bc.Side(csar);
+
+fn side() Real {
+    return .{ .gpa = std.testing.allocator, .io = std.testing.io };
+}
+
+fn points(comptime name: []const u8) []const [3]f64 {
+    return (comptime cases.byName(name) orelse @compileError("unknown case: " ++ name)).points;
+}
+
+test "Side.metrics: a converged outcome carries iters, AR and gap" {
+    // np100 rather than hex: hex settles in the opening phase with zero
+    // outer iterations, so it cannot show that iters is carried through.
+    const m = side().metrics(points("np100"));
+    try std.testing.expectEqualStrings("converged", m.status);
+    try std.testing.expect(m.iters > 0);
+    try std.testing.expect(m.gap <= bc.GAP_TOL);
+    // Same answer the suite gates on, at the suite's tolerance.
+    const expected = (comptime cases.byName("np100").?).expected.converged.ar;
+    try std.testing.expectApproxEqAbs(expected, m.ar, 1e-6);
+}
+
+test "Side.metrics: infeasible is a status and nothing else" {
+    const m = side().metrics(points("infeas_antipodal"));
+    try std.testing.expectEqualStrings("infeasible", m.status);
+    try std.testing.expectEqual(@as(u32, 0), m.iters);
+}
+
+test "Side.metrics: did_not_converge still reports the iterate's AR" {
+    // A tolerance below the f64 gap floor for this case (what --inject-tol
+    // runs at), so the solver honestly gives up.
+    var s = side();
+    s.gap_tol = 1e-13;
+    const m = s.metrics(points("dnc_small_wide"));
+    try std.testing.expectEqualStrings("did_not_converge", m.status);
+    try std.testing.expect(m.iters > 0);
+    try std.testing.expect(std.math.isFinite(m.ar) and m.ar > 1.0);
+}
+
+test "Side.metrics: a solve error becomes a status, not a crash" {
+    // Invalid input rather than a #1/#2 repro, so this keeps reaching the
+    // branch after #6 makes every valid input return an Outcome.
+    const m = side().metrics(&.{});
+    try std.testing.expectEqualStrings("InsufficientPoints", m.status);
+    try std.testing.expect(!bc.isOutcome(m.status));
+}
+
+test "Side.measure: a failing solve is skipped, not propagated" {
+    // The branch `measure` documents as one callers must not reach: it still
+    // has to be total, because the clock reads bracket it.
+    var s = side();
+    s.pts = &.{};
+    try std.testing.expect(s.measure(2) >= 0);
+}
+
+test "the clock is sane: finite, non-negative, and monotone in the workload" {
+    // `pairedRun` trusts `Io.Timestamp` blindly, and clock behaviour is the
+    // one thing that varies per OS. The deterministic tests avoid clocks
+    // entirely, so they cannot catch a platform where this fails.
+    var s = side();
+    s.pts = points("hex");
+    s.warmUp();
+    var short = std.math.inf(f64);
+    var long = std.math.inf(f64);
+    for (0..5) |_| {
+        short = @min(short, s.measure(1));
+        long = @min(long, s.measure(200));
+    }
+    try std.testing.expect(std.math.isFinite(short) and short >= 0);
+    try std.testing.expect(long >= short);
+}
+
+test "A/A: the harness measures the same code against itself at ~1.0" {
+    // Slow tier: it times real solves. It asserts a RATIO, so a loaded
+    // runner, another arch, or kcov instrumenting every line slows both
+    // sides alike and divides out. The failures A/A exists to catch are
+    // systematic and large — a wrong divisor, batching off by one, an
+    // interleave that favours a side, measuring the wrong side — and read as
+    // 2x or 0.5x, so the bound is loose on purpose.
+    //
+    // Flake policy: if this ever fails on a healthy change, loosen the bound
+    // or delete the test. Never wrap it in a retry.
+    if (!test_options.slow) return error.SkipZigTest;
+    var a = side();
+    var b = side();
+    a.pts = points("hex");
+    b.pts = points("hex");
+    a.warmUp();
+    b.warmUp();
+    const batch = bc.calibrate(&b);
+    var sa: [20]f64 = undefined;
+    var sb: [20]f64 = undefined;
+    const t = bc.pairedRun(&a, &b, batch, 1, &sa, &sb);
+    try std.testing.expect(t.ratio() > 0.8 and t.ratio() < 1.25);
 }
