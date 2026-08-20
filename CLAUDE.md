@@ -47,6 +47,10 @@ cells) — which solve in ~1–2 outer iterations and a few µs. Protect them:
 - Many finest-resolution S2/A5 cells hit an f64 gap floor above the strict 1e-6
   tolerance and honestly DNC there — not a bug. WHICH cells sit above vs below
   the floor is path-dependent at noise level (`.trust` vs `.alternating`).
+- **Discard the first launch of a freshly built binary.** It can run several
+  times slower than steady state, and `bench.zig`'s in-process warm-up does not
+  cover it — the penalty survives min-over-reps. Comparing a first launch
+  against a warm one invents small-cell regressions that aren't there.
 
 When changing the solver, the full check is: `just ci` green (suite + coverage
 gate + both backends where supported) + `ex-bench` per-case (small cells not
