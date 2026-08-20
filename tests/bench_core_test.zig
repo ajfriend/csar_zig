@@ -27,6 +27,17 @@ test "differs: status, iteration count, and AR each trip it" {
     try std.testing.expect(bc.differs(converged, other));
 }
 
+test "differs: a NaN AR does not make a case differ from itself" {
+    // `nan != nan`, so a naive comparison would flag identical rows as
+    // differing — and would do it under --aa, breaking the harness check.
+    const nan_ar: bc.Metrics = .{ .status = "did_not_converge", .iters = 9, .ar = std.math.nan(f64) };
+    try std.testing.expect(!bc.differs(nan_ar, nan_ar));
+
+    var other = nan_ar;
+    other.ar = 1.0;
+    try std.testing.expect(bc.differs(nan_ar, other));
+}
+
 test "differs: gap is reported but not compared" {
     // gap is a certified bound, not a target: it moves with iterate order
     // without indicating a behavioural change.
@@ -76,7 +87,7 @@ test "Tally counts each outcome, and anything unrecognised as an error" {
     var buf: [128]u8 = undefined;
     try std.testing.expectEqualStrings(
         "2 converged / 1 DNC / 1 infeasible / 1 errored",
-        try t.format(&buf),
+        try std.fmt.bufPrint(&buf, "{f}", .{t}),
     );
 }
 
@@ -109,7 +120,6 @@ test "pairedRun: identical sides report 1.0 exactly" {
     const t = run(&a, &b, 10, 1);
     try std.testing.expectEqual(@as(f64, 1.0), t.ratio());
     try std.testing.expectEqual(@as(f64, 3.0), t.cur_us);
-    try std.testing.expectEqual(@as(u32, 10), t.batch);
 }
 
 test "pairedRun: batching divides out, so per-solve time is batch-independent" {

@@ -13,14 +13,10 @@
         // that hashes differently (a commit-SHA archive rather than this tag
         // archive): zig dedupes identical pins into one module, which would
         // make a layout-faithful A/A measure one copy against itself. See #22.
-        //
-        // Lazy so `zig build check` compiles the current-tree side without a
-        // network fetch — `just ci` must not depend on reaching GitHub.
         .csar_base = .{
             .url = "https://github.com/ajfriend/csar_zig/archive/refs/tags/v0.2.0.tar.gz",
             .hash = "csar-0.2.0-bkw2IXevBwC60WK8mkK8v1yFaOJ0bKVhr9l7xZrgzqf5",
-            .lazy = true,
         },
     },
-    .paths = .{ "build.zig", "build.zig.zon", "ab.zig" },
+    .paths = .{ "build.zig", "build.zig.zon", "ab.zig", "core.zig" },
 }

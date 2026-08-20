@@ -112,11 +112,8 @@ fn Side(comptime lib: type) type {
         pts: []const [3]f64 = &.{},
         gap_tol: f64 = GAP_TOL,
 
-        /// Note the return type is `lib.SolveOptions`, not `cur.SolveOptions`:
-        /// the two library versions have distinct types of the same name, and
-        /// each side must build its own. That is the dual-import design
-        /// showing through, and the seam a shim would live on if the option
-        /// sets ever diverge.
+        /// Returns `lib.SolveOptions`, not `cur.SolveOptions` — the two
+        /// versions have distinct types of the same name.
         ///
         /// Every solver option is pinned explicitly, including ones that match
         /// today's defaults. The two sides are different library versions: if
@@ -154,11 +151,9 @@ fn Side(comptime lib: type) type {
             };
         }
 
-        fn warmUp(self: Self) void {
-            for (0..bc.N_WARMUP) |_| {
-                var o = lib.solve(self.gpa, self.pts, self.opts()) catch continue;
-                o.deinit();
-            }
+        /// `measure` with the clock ignored.
+        fn warmUp(self: *Self) void {
+            _ = self.measure(bc.N_WARMUP);
         }
 
         /// What `bc.pairedRun` calls: run `count` solves, return the elapsed
@@ -166,10 +161,9 @@ fn Side(comptime lib: type) type {
         pub fn measure(self: *Self, count: u32) f64 {
             const t0 = std.Io.Timestamp.now(self.io, .awake);
             for (0..count) |_| {
-                // Unreachable in practice: the caller only times cases that
-                // already solved cleanly in the deterministic pass. If it did
-                // fire it would shorten a *timed* interval and report a fast,
-                // meaningless µs — so it must stay unreachable.
+                // Must stay unreachable: firing here would shorten a *timed*
+                // interval and report a fast, meaningless µs. The caller only
+                // times cases that already solved cleanly.
                 var o = lib.solve(self.gpa, self.pts, self.opts()) catch continue;
                 o.deinit();
             }
@@ -201,8 +195,14 @@ fn report(comptime BaseLib: type, init: std.process.Init, opts: Opts) !void {
     var buf: [8192]u8 = undefined;
     var w = std.Io.File.stdout().writer(io, &buf);
     const out = &w.interface;
-    var line: [256]u8 = undefined;
-    var line2: [256]u8 = undefined;
+    // Emit whatever formatted successfully even if a later row fails: losing
+    // an entire diff to one unprintable number is the wrong failure for a tool
+    // whose contract is "an empty deterministic diff".
+    defer out.flush() catch {};
+    // Sized for the worst case `{d:.17}` can produce: fixed-point, so a huge
+    // aspect ratio expands its whole integer part (~327 bytes at floatMax),
+    // twice per diff row.
+    var line: [1024]u8 = undefined;
 
     const cur_tol: f64 = if (opts.inject_tol) INJECT_GAP_TOL else GAP_TOL;
     const cur_mult: u32 = if (opts.inject_2x) 2 else 1;
@@ -222,6 +222,8 @@ fn report(comptime BaseLib: type, init: std.process.Init, opts: Opts) !void {
     try out.print("  zig       : {s}\n", .{builtin.zig_version_string});
     try out.print("  baseline  : {s}\n", .{if (opts.aa) "(A/A: the working tree)" else build_options.baseline});
     try out.print("  reps      : {d} (+{d} warm-up), interleaved\n", .{ bc.N_REPS, bc.N_WARMUP });
+    try out.print("  note      : compare ratios, not µs — absolute times vary up to ~2.5x\n", .{});
+    try out.print("              between launches as the CPU ramps; the ratio does not.\n", .{});
     if (opts.inject_2x) try out.print("  injected  : 2x on the current side\n", .{});
     if (opts.inject_tol) try out.print("  injected  : gap_tol={e} on the current side\n", .{INJECT_GAP_TOL});
     try out.print("\n", .{});
@@ -245,8 +247,8 @@ fn report(comptime BaseLib: type, init: std.process.Init, opts: Opts) !void {
     } else {
         try out.print("  {d} case(s) differ\n", .{n_diff});
     }
-    try out.print("  outcomes  cur : {s}\n", .{try tally_cur.format(&line)});
-    try out.print("            base: {s}\n", .{try tally_base.format(&line2)});
+    try out.print("  outcomes  cur : {f}\n", .{tally_cur});
+    try out.print("            base: {f}\n", .{tally_base});
     try out.print("\n", .{});
 
     // ---- timing, paired and interleaved ---------------------------------
@@ -278,5 +280,4 @@ fn report(comptime BaseLib: type, init: std.process.Init, opts: Opts) !void {
         const t = bc.pairedRun(&side_cur, &side_base, batch, cur_mult, &samples_cur, &samples_base);
         try out.print("{s}\n", .{try bc.formatTiming(&line, case.name, t)});
     }
-    try out.flush();
 }

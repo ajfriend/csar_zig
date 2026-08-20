@@ -95,8 +95,10 @@ Both contain the same aggregate percentages today (one binary, one
 run). If you're debugging a gate failure, the JSON is in the
 hash-suffixed sibling, not the merged dir.
 
-The gate enforces **100% line coverage** across both production code
-(`src/*.zig`, `tests/*.zig`) and the case manifest (`tests/cases/cases.zig`).
+The gate enforces **100% line coverage** across production code
+(`src/*.zig`), the tests themselves (`tests/*.zig`, including the case
+manifest `tests/cases/cases.zig`), and the benchmarking policy
+(`bench/core.zig`, reached because `tests/bench_core_test.zig` imports it).
 Test code isn't exempt — dead test helpers are dead code too. The
 gate runs under `just test-slow`, not `just test` — slow-tier tests
 (currently cap_test) exercise lines that the fast tier doesn't reach.
@@ -249,9 +251,11 @@ binary picks it up automatically.
 
 `bench/` is a separate zig package that depends on **both** the working tree
 (`.path = ".."`) and a hash-pinned release, and compiles them into one
-binary. `just ab` measures them side by side: a deterministic diff (outcome,
-iteration count, full-precision aspect ratio, certified gap) over every
-fixture, then interleaved timing over a handful of cases.
+binary. `just ab` measures them side by side: a deterministic diff over every
+fixture — outcome, iteration count and full-precision aspect ratio are
+compared exactly; the certified gap is printed for context but not compared,
+since it moves with iterate order without indicating a behavioural change —
+plus a per-side outcome tally, then interleaved timing over a handful of cases.
 
 One binary rather than two processes is the point: a freshly built binary's
 first launch runs 2–5× slow and that survives warm-up and min-over-reps, so a
@@ -275,15 +279,16 @@ here — as unproven.
   ~2.0, the second must produce deterministic diffs. Without them, a tool that
   always printed "no change" would pass every other check.
 
-The baseline pin lives in `bench/build.zig.zon` and is **lazy**, so
-`just check` compiles the harness without a network fetch. It is a separate
-package so the library's manifest never carries a benchmark dependency —
+The baseline pin lives in `bench/build.zig.zon`. Resolving it fetches a 172 KB
+tarball the first time on a machine, which zig then caches permanently — the
+same deal as the toolchain, so it isn't worth machinery to avoid. It is a
+separate package so the library's manifest never carries a benchmark dependency —
 consumers can't inherit it, and `.paths` keeps `bench/` out of the published
 tarball. Reports are for pasting into a PR; nothing is written to disk.
 
 ## Examples
 
-Four single-file programs under `examples/`, each wired into
+Five single-file programs under `examples/`, each wired into
 `build.zig` via `addExample`:
 
 | Step | Source | Role |
@@ -292,8 +297,9 @@ Four single-file programs under `examples/`, each wired into
 | `ex-status` | `examples/status.zig` | Full `Outcome` switch with per-variant inspection. |
 | `ex-cases` | `examples/cases.zig` | Runs a bundled case by name (`-- hex`) or iterates the whole manifest (`-- --all`). |
 | `ex-bench` | `examples/bench.zig` | Per-case timing across a hand-picked subset. Forced to `.ReleaseFast` in `build.zig` regardless of the top-level optimize flag — Debug timings are noise. The `csar`/`cases` modules still inherit the project-wide optimize flag, which looks like it would bench a Debug solver but doesn't: the root module's mode governs codegen for the whole compilation (checked — byte-identical binary either way). |
+| `ex-compare` | `examples/compare.zig` | Alternating vs trust solver paths over the manifest and a random wide-cap grid (see `docs/trust-solver.md`). Also forced `.ReleaseFast`. |
 
 `addExample` accepts an optional optimize override (`null` inherits
-the project-wide flag); only `ex-bench` uses it today. Examples
+the project-wide flag); `ex-bench` and `ex-compare` use it. Examples
 also receive pass-through args after `--`; only `ex-cases` reads
 them today.

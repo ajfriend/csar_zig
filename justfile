@@ -16,7 +16,8 @@ test-selfhosted:
 
 # Compile the library and every executable without running (CI's Build step).
 # The bench package builds too — it lives outside this build graph, so nothing
-# else would notice it rotting. No network: its baseline pin is lazy.
+# else would notice it rotting. Resolving bench's manifest fetches the pinned
+# baseline the first time (172 KB, cached thereafter).
 check:
     zig build check
     zig build --build-file bench/build.zig check
@@ -42,7 +43,7 @@ bench:
 
 # Remove build artifacts and coverage output (survey data: `just surveys::clean`).
 clean:
-    rm -rf zig-out .zig-cache coverage
+    rm -rf zig-out .zig-cache coverage bench/.zig-cache bench/zig-pkg
 
 # States/countries survey pipelines: `just --list surveys`.
 mod surveys

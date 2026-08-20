@@ -39,8 +39,7 @@ pub const N_REPS: usize = 100;
 // however many solves it takes to reach BATCH_TARGET_US, calibrated per case
 // from a probe so it adapts to the machine rather than encoding one.
 //
-// This is about quantization, not bias: the cost of the two clock reads is
-// common-mode across an A/B pair and cancels in the ratio regardless.
+// This is about quantization, not bias — see ab.zig, "The instrument".
 // ---------------------------------------------------------------------------
 
 /// ~2400x the 42ns clock seen on aarch64-macos.
@@ -59,9 +58,7 @@ pub fn batchFor(probe_us: f64) u32 {
     // seen so far; the branch is a guard at an API boundary.)
     if (!std.math.isFinite(probe_us) or probe_us <= 0) return BATCH_MAX;
     const n = @ceil(BATCH_TARGET_US / probe_us);
-    if (n <= 1) return 1;
-    if (n >= @as(f64, BATCH_MAX)) return BATCH_MAX;
-    return @intFromFloat(n);
+    return @intFromFloat(std.math.clamp(n, 1, @as(f64, BATCH_MAX)));
 }
 
 // ---------------------------------------------------------------------------
@@ -96,11 +93,15 @@ pub const Timing = struct {
 // ---------------------------------------------------------------------------
 // Pairing
 //
-// Both sides are measured inside the same rep, making each rep a matched pair
-// drawn under the same thermal state, scheduler pressure and CPU frequency —
-// not two independent samples taken minutes apart. Pairing is what licenses
-// reporting a *ratio*: the shared conditions divide out of it, which is why
-// the ratio travels between machines when the absolute microseconds do not.
+// Both sides are measured inside the same rep, so the two sample sets are
+// drawn under the same thermal state, scheduler pressure and CPU frequency
+// rather than minutes apart. That is what licenses reporting a *ratio*: the
+// shared conditions are common to both sides and divide out, which is why the
+// ratio travels between machines when the absolute microseconds do not.
+//
+// Note the reduction is min-of-cur over min-of-base, not a per-rep difference:
+// interleaving equalises the conditions the samples come from, it does not
+// pair them up arithmetically.
 // ---------------------------------------------------------------------------
 
 /// Interleave both sides rep by rep, reduce each to its min, and pair them.
@@ -129,8 +130,8 @@ pub fn pairedRun(
     const divisor: f64 = @floatFromInt(batch);
     for (0..scratch_cur.len) |r| {
         // Order within a rep is fixed (current, then baseline) rather than
-        // alternating. `--aa` is what would expose a bias from that, and it
-        // reports 1.000 on every case today.
+        // alternating. `--aa` is what would expose a bias from that; measured
+        // at ~0.3% on the smallest case, ~0.1% elsewhere.
         scratch_cur[r] = cur.measure(batch * cur_mult) / divisor;
         scratch_base[r] = base.measure(batch) / divisor;
     }
@@ -161,34 +162,34 @@ pub const Metrics = struct {
 /// Aggregate, not per-case: a report that says 27 cases differ makes you read
 /// 27 rows to learn which *direction* things moved. This says it in one line.
 ///
-/// Deliberately a whole-corpus tally rather than a per-family convergence
-/// rate. That metric is #19's, and it is blocked on the corpus rather than on
-/// code: the `dggs` fixtures are five families of four cells, so a "percentage"
-/// there can only be 0/25/50/75/100.
+/// Whole-corpus, not per-family: a per-family convergence rate is #19's, and
+/// needs a finer corpus than five families of four cells before a percentage
+/// means anything.
 pub const Tally = struct {
     converged: u32 = 0,
-    infeasible: u32 = 0,
     did_not_converge: u32 = 0,
+    infeasible: u32 = 0,
     errored: u32 = 0,
 
     pub fn add(self: *Tally, m: Metrics) void {
-        if (std.mem.eql(u8, m.status, "converged")) {
-            self.converged += 1;
-        } else if (std.mem.eql(u8, m.status, "infeasible")) {
-            self.infeasible += 1;
-        } else if (std.mem.eql(u8, m.status, "did_not_converge")) {
-            self.did_not_converge += 1;
-        } else {
+        // Exhaustive, so a new outcome variant becomes a compile error here
+        // rather than a silent bump of `errored`.
+        const tag = std.meta.stringToEnum(OutcomeTag, m.status) orelse {
             self.errored += 1;
+            return;
+        };
+        switch (tag) {
+            .converged => self.converged += 1,
+            .infeasible => self.infeasible += 1,
+            .did_not_converge => self.did_not_converge += 1,
         }
     }
 
-    pub fn format(self: Tally, buf: []u8) ![]const u8 {
-        return std.fmt.bufPrint(
-            buf,
-            "{d} converged / {d} DNC / {d} infeasible / {d} errored",
-            .{ self.converged, self.did_not_converge, self.infeasible, self.errored },
-        );
+    /// zig's `{f}` formatting hook.
+    pub fn format(self: Tally, w: *std.Io.Writer) std.Io.Writer.Error!void {
+        try w.print("{d} converged / {d} DNC / {d} infeasible / {d} errored", .{
+            self.converged, self.did_not_converge, self.infeasible, self.errored,
+        });
     }
 };
 
@@ -206,18 +207,25 @@ pub const Tally = struct {
 pub fn differs(a: Metrics, b: Metrics) bool {
     if (!std.mem.eql(u8, a.status, b.status)) return true;
     if (a.iters != b.iters) return true;
-    if (a.ar != b.ar) return true;
+    // Bit comparison, not `!=`: exact is the point (see above), but `nan != nan`
+    // would flag a case as differing from itself — visibly identical rows, and
+    // it would fire under `--aa`, breaking the one check that validates the
+    // harness. An uncertified DNC iterate can produce a NaN ratio.
+    if (@as(u64, @bitCast(a.ar)) != @as(u64, @bitCast(b.ar))) return true;
     return false;
 }
 
+/// The solver outcomes, as `Metrics.status` spells them. Declared once so
+/// `isOutcome` and `Tally.add` cannot disagree about what counts as an error.
+pub const OutcomeTag = enum { converged, infeasible, did_not_converge };
+
 pub fn isOutcome(status: []const u8) bool {
-    return std.mem.eql(u8, status, "converged") or
-        std.mem.eql(u8, status, "infeasible") or
-        std.mem.eql(u8, status, "did_not_converge");
+    return std.meta.stringToEnum(OutcomeTag, status) != null;
 }
 
-/// Column widths, defined once: both format strings below are generated from
-/// them, so the header and the rows cannot disagree.
+/// Column widths for the timing table, defined once: `timing_header` and
+/// `formatTiming` are both generated from them, so those two cannot disagree.
+/// (`formatDiff` below is a different shape and sets its own.)
 const w_name = 20;
 const w_time = 10;
 const w_ratio = 8;

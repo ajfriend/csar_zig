@@ -20,22 +20,24 @@ pub fn build(b: *std.Build) void {
     const options = b.addOptions();
     options.addOption([]const u8, "baseline", BASELINE_REF);
 
-    // The baseline is lazy: `check` builds without it, `ab` needs it.
-    if (b.lazyDependency("csar_base", .{ .target = target, .optimize = optimize })) |base| {
-        const mod = abModule(b, target, optimize, cur, base.module("csar"), options);
-        const exe = b.addExecutable(.{ .name = "csar-ab", .root_module = mod });
-        const run = b.addRunArtifact(exe);
-        if (b.args) |args| run.addArgs(args);
-        b.step("ab", "A/B the working tree against the pinned baseline").dependOn(&run.step);
-    }
+    // Resolved eagerly. A lazy pin plus a gate would keep `just check` off the
+    // network, but that costs a manifest flag, a build option and a justfile
+    // flag to save one 172 KB fetch that zig then caches forever — and it makes
+    // a missing baseline surface as "no step named 'ab'" instead of a fetch.
+    const base = b.dependency("csar_base", .{ .target = target, .optimize = optimize });
+    const mod = abModule(b, target, optimize, cur, base.module("csar"), options);
+    const exe = b.addExecutable(.{ .name = "csar-ab", .root_module = mod });
+    const run = b.addRunArtifact(exe);
+    if (b.args) |args| run.addArgs(args);
+    b.step("ab", "A/B the working tree against the pinned baseline").dependOn(&run.step);
 
     // Compile-only, so the root `just check` keeps this package from rotting
     // the way examples/ did before #12.
     //
     // It stubs the baseline with the current library, so what it compiles is
-    // the A/A shape. That means it cannot catch baseline-API drift — the one
-    // failure a compile-only step most looks like it should catch. Absorbing
-    // such drift is `Side`'s job (#23), and `just ab` is what proves it.
+    // the A/A shape: it cannot catch baseline-API drift, the one failure a
+    // compile-only step most looks like it should catch. Absorbing such drift
+    // is `Side`'s job (#23), and `just ab` is what proves it.
     const check_mod = abModule(b, target, optimize, cur, cur.module("csar"), options);
     const check_exe = b.addExecutable(.{ .name = "csar-ab-check", .root_module = check_mod });
     b.step("check", "Compile the harness without running or fetching the baseline")
