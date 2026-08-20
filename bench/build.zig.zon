@@ -18,5 +18,5 @@
             .hash = "csar-0.2.0-bkw2IXevBwC60WK8mkK8v1yFaOJ0bKVhr9l7xZrgzqf5",
         },
     },
-    .paths = .{ "build.zig", "build.zig.zon", "main.zig", "ab.zig", "core.zig" },
+    .paths = .{ "build.zig", "build.zig.zon", "ab.zig", "core.zig" },
 }

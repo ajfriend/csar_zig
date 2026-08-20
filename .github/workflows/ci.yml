@@ -57,11 +57,6 @@ jobs:
           kcov --version
           just test-slow
           { echo '### Coverage'; cat coverage/summary.md; } >> "$GITHUB_STEP_SUMMARY"
-      - name: DIAGNOSTIC (temporary) — files kcov sees for ex-cases, no filter
-        if: always()
-        run: |
-          rm -rf /tmp/kd; kcov /tmp/kd zig-out/bin/csar-ex-cases hex >/dev/null 2>&1
-          python3 -c "import json,glob;d=json.load(open(glob.glob('/tmp/kd/csar-ex-cases.*/coverage.json')[0]));print(len(d['files']),'files;',sorted(f['file'].split('csar_zig/')[-1] for f in d['files'] if 'examples' in f['file'] or 'cases.zig' in f['file'] or 'root.zig' in f['file']))"
       - name: Upload the gate's log
         # Every kcov invocation and the per-binary line totals behind the
         # ledger — what you need when the ledger disagrees with a local run.

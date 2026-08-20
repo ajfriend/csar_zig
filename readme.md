@@ -56,7 +56,7 @@ The original alternating solver was removed in 0.3.0.
 - `cases/cases.zig` — comptime manifest over the .zon files; exposed as the `cases` build module
 - `cases/zon/*.zon` — fixture point sets + expected outcomes (data only)
 - `test_root.zig` — test-target root at repo level
-- `examples/basic.zig`, `examples/status.zig`, `examples/cases.zig` — end-user usage demos (built via `examples/root.zig`; see dev.md "Coverage" for why)
+- `examples/basic.zig`, `examples/status.zig`, `examples/cases.zig` — end-user usage demos
 - `examples/bench.zig` — per-case timing (release-built; run via `zig build ex-bench`)
 - `dev.md` — developer-workflow guide (coverage, layout, conventions)
 
