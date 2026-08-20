@@ -27,6 +27,9 @@ problem). Core: `src/csar.zig` (`solve`, the outer loop, `mveeFw` inner MVEE),
 - The suite must pass under BOTH zig backends (LLVM and self-hosted); CI runs
   both. See dev.md "Two backends".
 - `zig build ex-bench` — per-case timing (ReleaseFast, 100 reps).
+- `just ab` — A/B the working tree against the pinned baseline in one binary
+  (deterministic diff over every fixture + interleaved timing). `just ab --aa`
+  calibrates. Attach the report to the PR; see dev.md "A/B benchmarking".
 - `zig build states-aspect` / `countries-aspect` — standalone survey execs over
   `scripts/*/data/*.json` (per-cell aspect ratios + outcome counts).
 - Full workflow detail (toolchain setup, commands, coverage machinery): dev.md.

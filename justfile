@@ -15,8 +15,16 @@ test-selfhosted:
     zig build test -Dslow=true -Dllvm=false
 
 # Compile the library and every executable without running (CI's Build step).
+# The bench package builds too — it lives outside this build graph, so nothing
+# else would notice it rotting. No network: its baseline pin is lazy.
 check:
     zig build check
+    zig build --build-file bench/build.zig check
+
+# A/B the working tree against the pinned baseline (bench/build.zig.zon).
+# `just ab --aa` calibrates; see bench/ab.zig for the injector self-tests.
+ab *ARGS:
+    zig build --build-file bench/build.zig ab -- {{ARGS}}
 
 # Everything CI checks that can run on this machine — use before pushing a PR.
 ci: check test-slow _ci-selfhosted
