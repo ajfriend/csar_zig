@@ -11,8 +11,6 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    env:
-      KCOV_VERSION: v43
     steps:
       - uses: actions/checkout@v4
       - uses: mlugg/setup-zig@v2
@@ -25,33 +23,17 @@ jobs:
         # See dev.md "Two backends". The LLVM-backend suite runs below,
         # under the coverage gate.
         run: just test-selfhosted
-      - name: Cache kcov
-        id: kcov-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/kcov
-          key: kcov-${{ env.KCOV_VERSION }}-${{ runner.os }}-${{ runner.arch }}
-      - name: Build kcov
-        # kcov is not in ubuntu-latest's apt repos and publishes no
-        # binaries; build the pinned version (matching the local brew
-        # install) from source.
-        if: steps.kcov-cache.outputs.cache-hit != 'true'
+      - name: Install kcov
+        # Same channel as the local dev install (the brew formula ships
+        # a prebuilt x86_64_linux bottle); the runner image includes
+        # linuxbrew.
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq binutils-dev libdw-dev libelf-dev libcurl4-openssl-dev cmake
-          git clone --depth 1 --branch "$KCOV_VERSION" https://github.com/SimonKagstrom/kcov /tmp/kcov-src
-          cmake -S /tmp/kcov-src -B /tmp/kcov-build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$HOME/kcov"
-          cmake --build /tmp/kcov-build -j"$(nproc)"
-          cmake --install /tmp/kcov-build
-      - name: kcov runtime libs (cache-restored binary)
-        if: steps.kcov-cache.outputs.cache-hit == 'true'
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq libdw1t64 || sudo apt-get install -y -qq libdw1
+          command -v brew > /dev/null || eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          brew install -q kcov
+          echo "$(brew --prefix)/bin" >> "$GITHUB_PATH"
       - name: Test (LLVM backend) + coverage gate + exclusion ledger
         run: |
           set -euo pipefail
-          export PATH="$HOME/kcov/bin:$PATH"
           kcov --version
           just test-slow
           { echo '### Coverage'; echo '```'; cat coverage/summary.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
