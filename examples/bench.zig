@@ -9,6 +9,9 @@ const std = @import("std");
 const csar = @import("csar");
 const cases = @import("cases");
 
+/// Warms the process, not the binary: a freshly built exe's first *launch*
+/// still runs several times slow, and that survives min-over-reps. Discard it
+/// — see CLAUDE.md "Performance & regression monitoring".
 const N_WARMUP: u32 = 5;
 const N_RUNS: u32 = 100;
 const TOL: f64 = 1e-6;
@@ -56,6 +59,10 @@ pub fn main() !void {
 
         var last_outcome: ?csar.Outcome = null;
         defer if (last_outcome) |*lo| lo.deinit();
+        // The two clock reads sit inside the measured interval, so their cost is
+        // charged to the solve: a few percent on the smallest cases, negligible
+        // elsewhere. It is common-mode across an A/B pair, so read small-case
+        // ratios rather than absolutes.
         for (0..N_RUNS) |r| {
             const t0 = std.time.nanoTimestamp();
             const outcome = try csar.solve(allocator, X, .{ .gap_tol = TOL, .n_hull = 10, .coplanarity_tol = 1e-12 });

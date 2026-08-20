@@ -246,7 +246,7 @@ Four single-file programs under `examples/`, each wired into
 | `ex-basic` | `examples/basic.zig` | Minimum API call — solve + read AR + axis. |
 | `ex-status` | `examples/status.zig` | Full `Outcome` switch with per-variant inspection. |
 | `ex-cases` | `examples/cases.zig` | Runs a bundled case by name (`-- hex`) or iterates the whole manifest (`-- --all`). |
-| `ex-bench` | `examples/bench.zig` | Per-case timing across a hand-picked subset. Forced to `.ReleaseFast` in `build.zig` regardless of the top-level optimize flag — Debug timings are noise. |
+| `ex-bench` | `examples/bench.zig` | Per-case timing across a hand-picked subset. Forced to `.ReleaseFast` in `build.zig` regardless of the top-level optimize flag — Debug timings are noise. The `csar`/`cases` modules still inherit the project-wide optimize flag, which looks like it would bench a Debug solver but doesn't: the root module's mode governs codegen for the whole compilation (checked — byte-identical binary either way). |
 
 `addExample` accepts an optional optimize override (`null` inherits
 the project-wide flag); only `ex-bench` uses it today. Examples
