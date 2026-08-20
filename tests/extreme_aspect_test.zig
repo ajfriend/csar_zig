@@ -72,6 +72,7 @@ const csar = @import("../src/root.zig");
 const halfspace = @import("../src/halfspace.zig");
 const linalg = @import("../src/linalg.zig");
 const core = @import("../src/csar.zig");
+const helpers = @import("helpers.zig");
 
 fn deg(d: f64) f64 {
     return d * std.math.pi / 180.0;
@@ -145,7 +146,7 @@ fn checkRotationInvariance(
     const c = switch (rot_outcome) {
         .converged => |c| c,
         else => {
-            std.debug.print(
+            helpers.diagPrint(
                 "rotation status mismatch case={s} k={d}: expected converged, got {s}\n",
                 .{ label, k, @tagName(rot_outcome) },
             );
@@ -154,7 +155,7 @@ fn checkRotationInvariance(
     };
     const gap_abs = @abs(c.gap);
     if (gap_abs >= tol) {
-        std.debug.print(
+        helpers.diagPrint(
             "rotation gap exceeds tol case={s} k={d}: |gap|={e:.3} tol={e:.3}\n",
             .{ label, k, gap_abs, tol },
         );
@@ -163,7 +164,7 @@ fn checkRotationInvariance(
     const ar_delta = @abs(canon_ar - c.aspectRatio());
     const ar_tol = ar_rel_tol * canon_ar;
     if (ar_delta > ar_tol) {
-        std.debug.print(
+        helpers.diagPrint(
             "rotation AR drift case={s} k={d}: canon={d:.10} rot={d:.10} delta={e:.3} tol={e:.3}\n",
             .{ label, k, canon_ar, c.aspectRatio(), ar_delta, ar_tol },
         );
@@ -172,6 +173,8 @@ fn checkRotationInvariance(
 }
 
 test "checkRotationInvariance: status branch prints case+k label" {
+    helpers.quiet_diagnostics = true;
+    defer helpers.quiet_diagnostics = false;
     const fake: csar.Outcome = .{ .infeasible = .{
         .cert = .{ .indices = &[_]u32{}, .lambdas = &[_]f64{} },
         .residual = 0,
@@ -184,6 +187,8 @@ test "checkRotationInvariance: status branch prints case+k label" {
 }
 
 test "checkRotationInvariance: gap branch prints case+k label" {
+    helpers.quiet_diagnostics = true;
+    defer helpers.quiet_diagnostics = false;
     const fake: csar.Outcome = .{ .converged = .{
         .Q = csar.Mat3.zero,
         .sigma = .{ 0, 1, 1 },
@@ -199,6 +204,8 @@ test "checkRotationInvariance: gap branch prints case+k label" {
 }
 
 test "checkRotationInvariance: AR branch prints case+k label" {
+    helpers.quiet_diagnostics = true;
+    defer helpers.quiet_diagnostics = false;
     // sigma[2]/sigma[1] = 2.0, which deviates from canon_ar = 1.0
     // by far more than ar_rel_tol * canon_ar = 1e-4.
     const fake: csar.Outcome = .{ .converged = .{

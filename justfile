@@ -6,14 +6,11 @@ kcov_exclude := "=> unreachable,kcov-excl"
 
 # Skips the long-running randomized stress tests (e.g. cap_test) and
 # the coverage gate; use while iterating, and run `just test-slow`
-# (or `just ci`) before committing. Prints only the pass/fail summary;
-# the full runner output (incl. the case=diagnostic-selftest lines)
-# lands in zig-out/test.log and is shown in full on failure.
+# (or `just ci`) before committing. zig's build runner does the output
+# handling natively: pass counts on success, captured output on failure.
 # Fast test loop (sub-second inner loop, no coverage gate).
 test:
-    @zig build install-test
-    @./zig-out/bin/csar-test > zig-out/test.log 2>&1 || { cat zig-out/test.log; exit 1; }
-    @tail -1 zig-out/test.log
+    zig build test --summary all
 
 # Exclusion policy and the ledger's meaning: dev.md "Coverage
 # exclusions". The report-only second pass derives the exclusion

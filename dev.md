@@ -48,11 +48,13 @@ Slow tests show up as `SKIP` in the fast tier and `OK` in the slow
 tier. Coverage only makes sense on the slow tier — fast-tier
 coverage would be incomplete by design.
 
-Both tiers print only their summary lines on success; the full runner
-output (every per-test line, plus the deliberate
-`case=diagnostic-selftest` prints) is captured in `zig-out/test.log` /
-`zig-out/test-slow.log` and dumped to the terminal in full when a run
-fails.
+Both tiers are quiet on success and show full output on failure. The
+fast tier gets this natively from zig's build runner (which is why
+failure-diagnostic self-tests set `helpers.quiet_diagnostics` — stray
+stderr from a passing run would otherwise be forwarded). The slow
+tier must run the installed binary under kcov, which streams
+everything, so the recipe captures it to `zig-out/test-slow.log` and
+dumps that only when the run fails.
 
 ### Two backends
 
@@ -149,11 +151,11 @@ Before marking a line, exhaust these — each has an in-tree example:
   diagnostic lives in a helper, and a self-test drives it with fake
   inputs, asserting the expected error (`expectArAgreement` in
   methods_test; `checkRotationInvariance`'s three self-tests in
-  extreme_aspect_test). Side effect: each prints its diagnostic once
-  per suite run — every such line is labeled
-  `case=diagnostic-selftest`, so log output that mentions mismatches
-  is self-identifying (they land in `zig-out/test*.log`, not the
-  terminal).
+  extreme_aspect_test). Such self-tests set
+  `helpers.quiet_diagnostics` (with a `defer` restore) so the
+  deliberately-driven diagnostic stays out of passing-run output; the
+  fake inputs are labeled `case=diagnostic-selftest` so the line is
+  self-identifying if it ever does surface.
 - **Cover platform-dependent arms with a deterministic sibling.**
   The tolerant switch over converged/DNC lives once, in
   `tests/helpers.zig` (`resolvedView`), and its own test feeds it

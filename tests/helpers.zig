@@ -9,6 +9,18 @@ const cases = @import("cases");
 
 const Vec3 = csar.Vec3;
 
+/// Failure diagnostics print through here so the expectError
+/// self-tests — which deliberately drive failure paths during passing
+/// runs — can keep stderr silent (set `quiet_diagnostics`, restore
+/// via defer). With no stray stderr, `zig build test` is quiet on
+/// success and shows the captured diagnostics only on failure — no
+/// shell-level log plumbing needed for the fast tier.
+pub var quiet_diagnostics = false;
+
+pub fn diagPrint(comptime fmt: []const u8, args: anytype) void {
+    if (!quiet_diagnostics) std.debug.print(fmt, args);
+}
+
 /// N points on the boundary of an anisotropic "elliptical cap": tangent
 /// ellipse (half-angles `half_a` × `half_b`) at `center`, mapped to the
 /// sphere via the exponential map, optionally over a partial arc.

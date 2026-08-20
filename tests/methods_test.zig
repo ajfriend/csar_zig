@@ -16,6 +16,7 @@
 const std = @import("std");
 const csar = @import("../src/root.zig");
 const cases = @import("cases");
+const helpers = @import("helpers.zig");
 
 const GAP_TOL: f64 = 1e-6;
 /// The certified gap bounds primal suboptimality, but AR is a ratio of
@@ -131,17 +132,17 @@ test "auto: resolves to Method.recommended (pure alias, identical outcomes)" {
 }
 
 /// AR agreement check with case-name context on failure. The failure
-/// path is real code and is covered by the expectError self-test
-/// below (which prints one clearly-labeled diagnostic line per run as
-/// a side effect).
+/// path is real code, covered by the quiet expectError self-test below.
 fn expectArAgreement(name: []const u8, ar_alternating: f64, ar_trust: f64) !void {
     if (@abs(ar_alternating - ar_trust) > AR_AGREE_REL_TOL * ar_alternating) {
-        std.debug.print("trust/alternating AR mismatch case={s}: alternating={d:.10} trust={d:.10}\n", .{ name, ar_alternating, ar_trust });
+        helpers.diagPrint("trust/alternating AR mismatch case={s}: alternating={d:.10} trust={d:.10}\n", .{ name, ar_alternating, ar_trust });
         return error.TrustAlternatingArMismatch;
     }
 }
 
-test "expectArAgreement: the mismatch diagnostic fires (self-test; prints one labeled line)" {
+test "expectArAgreement: the mismatch diagnostic fires (quiet self-test)" {
+    helpers.quiet_diagnostics = true;
+    defer helpers.quiet_diagnostics = false;
     try std.testing.expectError(error.TrustAlternatingArMismatch, expectArAgreement("diagnostic-selftest", 1.0, 2.0));
 }
 
