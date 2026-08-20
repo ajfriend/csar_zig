@@ -113,8 +113,12 @@ def lines_by_file(out_dir):
     xmls = [x for x in out_dir.glob('*/cobertura.xml') if '.' in x.parent.name]
     assert len(xmls) == 1, f'{out_dir}: expected one per-binary report, found {xmls}'
     out = {}
-    for cls in ET.parse(xmls[0]).getroot().iter('class'):
-        f = out.setdefault(cls.get('filename'), {})
+    root = ET.parse(xmls[0]).getroot()
+    # `filename` is relative to the report's <source> base — the common
+    # prefix of the files in THAT report, so it varies per run; rejoin it.
+    base = root.find('sources/source').text
+    for cls in root.iter('class'):
+        f = out.setdefault(str(Path(base) / cls.get('filename')), {})
         for l in cls.iter('line'):
             n = int(l.get('number'))
             f[n] = max(f.get(n, 0), int(l.get('hits')))
