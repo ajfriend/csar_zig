@@ -121,12 +121,13 @@ plus a per-site marker, all wired in the `justfile` kcov invocation:
   type removes it instead — `Method.resolved()` returning
   `Method.Resolved` is the in-tree example.
 - `--exclude-line=kcov-excl`: a trailing `// kcov-excl: <reason>`
-  marks a single line; `--exclude-region=kcov-excl-start:kcov-excl-stop`
-  marks a block. Every marker must carry its reason in-source — grep
-  `kcov-excl` for the ledger. **There are currently zero markers in
-  the tree**: every previously-marked line was eliminated by one of
+  marks a single line. Every marker must carry its reason in-source —
+  grep `kcov-excl` for the ledger. **There are currently zero markers
+  in the tree**: every previously-marked line was eliminated by one of
   the techniques below. The mechanism stays wired for the case that
-  genuinely survives all of them.
+  genuinely survives all of them. (kcov also supports
+  `--exclude-region` start/stop markers for blocks; add that flag back
+  with its first user if one ever appears.)
 
 Before marking a line, exhaust these — each has an in-tree example:
 

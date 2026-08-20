@@ -22,7 +22,7 @@ test:
 test-slow:
     @zig build install-test -Dslow=true
     @rm -rf coverage coverage_raw
-    @kcov --include-pattern={{kcov_include}} --exclude-line='{{kcov_exclude}}' --exclude-region=kcov-excl-start:kcov-excl-stop coverage zig-out/bin/csar-test > zig-out/test-slow.log 2>&1 || { cat zig-out/test-slow.log; exit 1; }
+    @kcov --include-pattern={{kcov_include}} --exclude-line='{{kcov_exclude}}' coverage zig-out/bin/csar-test > zig-out/test-slow.log 2>&1 || { cat zig-out/test-slow.log; exit 1; }
     @tail -1 zig-out/test-slow.log
     @cp -r coverage coverage_raw
     @kcov --report-only --include-pattern={{kcov_include}} coverage_raw zig-out/bin/csar-test >> zig-out/test-slow.log 2>&1
