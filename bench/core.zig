@@ -151,10 +151,11 @@ pub fn pairedRun(
 /// `isOutcome` and `Tally.add` cannot disagree about what counts as an error.
 ///
 /// A transcription of the library's `Outcome` tag names, not the enum itself:
-/// this module stays solver-free so the tests can drive it without one. The
-/// transcription is checked where the two vocabularies meet — `ab.zig`'s
-/// `metrics` builds every status with `@tagName`, over a switch that is
-/// exhaustive on the real union.
+/// this module stays solver-free so the tests can drive it without one.
+/// `tests/bench_core_test.zig` asserts the transcription matches the real
+/// union's tags, and `ab.zig`'s `metrics` builds every status with `@tagName`
+/// over a switch that is exhaustive on that union — so the two vocabularies
+/// cannot drift apart without a test or compile failure.
 pub const OutcomeTag = enum { converged, infeasible, did_not_converge };
 
 pub fn isOutcome(status: []const u8) bool {
@@ -192,9 +193,8 @@ pub const Tally = struct {
 
     pub fn add(self: *Tally, m: Metrics) void {
         // Anything `OutcomeTag` does not name is an @errorName from a failed
-        // solve. A new solver outcome would land here silently — the compile
-        // error that catches it fires at the seam, in `ab.zig`'s `metrics`,
-        // whose switch is exhaustive over the real union (see `OutcomeTag`).
+        // solve. A new solver outcome cannot land here silently: the test
+        // that pins `OutcomeTag` to the real union fails first (see there).
         const tag = std.meta.stringToEnum(OutcomeTag, m.status) orelse {
             self.errored += 1;
             return;

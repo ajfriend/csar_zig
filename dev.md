@@ -95,12 +95,12 @@ Both contain the same aggregate percentages today (one binary, one
 run). If you're debugging a gate failure, the JSON is in the
 hash-suffixed sibling, not the merged dir.
 
-The gate enforces **100% line coverage** over `src/`, `tests/` and `bench/`
-(`INCLUDE_PATTERN` in `scripts/coverage_gate.py`) — production code, the tests
-themselves including the case manifest, and the benchmarking policy. In
-practice `bench/core.zig` is the only `bench/` file in scope, because kcov
-instruments one binary and that is the only one `tests/bench_core_test.zig`
-pulls in; widening the pattern alone reaches nothing new (#25).
+The gate enforces **100% line coverage** over `src/`, `tests/` and
+`bench/core.zig` (`INCLUDE_PATTERN` in `scripts/coverage_gate.py`) —
+production code, the tests themselves including the case manifest, and the
+benchmarking policy. kcov instruments one binary, so a file is in scope only
+if the test binary compiles it; widening the pattern alone reaches nothing
+new (#25).
 Test code isn't exempt — dead test helpers are dead code too. The
 gate runs under `just test-slow`, not `just test` — slow-tier tests
 (currently cap_test) exercise lines that the fast tier doesn't reach.

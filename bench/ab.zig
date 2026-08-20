@@ -122,7 +122,15 @@ fn Side(comptime lib: type) type {
         /// masquerade as a solver change — precisely what this tool exists to
         /// detect.
         fn opts(self: Self) lib.SolveOptions {
-            return .{ .gap_tol = self.gap_tol, .coplanarity_tol = 1e-12 };
+            return .{
+                .gap_tol = self.gap_tol,
+                .n_hull = 10,
+                .coplanarity_tol = 1e-12,
+                .max_outer = 100,
+                // `.trust`, not `.auto`: `.auto` is an alias each version is
+                // free to re-point.
+                .method = .trust,
+            };
         }
 
         /// Solve once and reduce to comparable metrics. Errors are reported,
@@ -136,8 +144,8 @@ fn Side(comptime lib: type) type {
             defer o.deinit();
             // @tagName, not a literal: this switch is exhaustive over the real
             // union, so a new outcome variant is a compile error HERE, and the
-            // status it produces then matches `bc.OutcomeTag` by construction
-            // rather than by two people spelling it the same way.
+            // status it produces is the library's own spelling — which the
+            // suite pins `bc.OutcomeTag` to (tests/bench_core_test.zig).
             const status = @tagName(o);
             return switch (o) {
                 .converged => |c| .{
@@ -182,9 +190,19 @@ pub fn main(init: std.process.Init) !void {
     var opts = Opts{};
     const argv = try init.minimal.args.toSlice(init.arena.allocator());
     for (argv[1..]) |a| {
-        if (std.mem.eql(u8, a, "--aa")) opts.aa = true;
-        if (std.mem.eql(u8, a, "--inject-2x")) opts.inject_2x = true;
-        if (std.mem.eql(u8, a, "--inject-tol")) opts.inject_tol = true;
+        if (std.mem.eql(u8, a, "--aa")) {
+            opts.aa = true;
+        } else if (std.mem.eql(u8, a, "--inject-2x")) {
+            opts.inject_2x = true;
+        } else if (std.mem.eql(u8, a, "--inject-tol")) {
+            opts.inject_tol = true;
+        } else {
+            // Fail rather than ignore: a misspelt `--inject-2x` would
+            // otherwise run a plain A/B and print a report that looks like a
+            // passed self-test.
+            std.debug.print("unknown argument: {s}\nusage: just ab [--aa] [--inject-2x] [--inject-tol]\n", .{a});
+            return error.UnknownArgument;
+        }
     }
     // The baseline side is a comptime choice, so it is dispatched here rather
     // than selected inside: in --aa mode it is the current library again.
@@ -268,7 +286,7 @@ fn report(comptime BaseLib: type, init: std.process.Init, opts: Opts) !void {
         if (!bc.isOutcome(side_cur.metrics(case.points).status) or
             !bc.isOutcome(side_base.metrics(case.points).status))
         {
-            try out.print("  {s:<20} (error — see the diff above)\n", .{case.name});
+            try out.print("  {s:<20} (errored on at least one side)\n", .{case.name});
             continue;
         }
 

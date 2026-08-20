@@ -3,7 +3,18 @@
 //! is — which is the point of keeping the policy separate from the mechanics.
 
 const std = @import("std");
+const csar = @import("../src/root.zig");
 const bc = @import("../bench/core.zig");
+
+test "OutcomeTag is the library's Outcome vocabulary, name for name" {
+    // core.zig stays solver-free, so it transcribes the tag names; this is
+    // what keeps the transcription honest. A rename or new variant fails here
+    // rather than being tallied as `errored` and dropped from timing.
+    const lib = std.meta.fieldNames(std.meta.Tag(csar.Outcome));
+    const ours = std.meta.fieldNames(bc.OutcomeTag);
+    try std.testing.expectEqual(lib.len, ours.len);
+    for (lib, ours) |a, b| try std.testing.expectEqualStrings(a, b);
+}
 
 const converged: bc.Metrics = .{ .status = "converged", .iters = 3, .ar = 1.5, .gap = 1e-9 };
 
