@@ -38,9 +38,11 @@ SUMMARY = GATED_DIR / 'summary.txt'
 SUMMARY_MD = GATED_DIR / 'summary.md'  # fenced form; CI puts it in the step summary + PR comment
 INCLUDE_PATTERN = 'src/,tests/'
 # Exclusion rules (see dev.md "Coverage exclusions"): `=> unreachable`
-# switch arms can never execute in a passing run; `kcov-excl` markers
-# carry a per-site reason in-source.
-EXCLUDE_LINE = '=> unreachable,kcov-excl'
+# switch arms can never execute in a passing run; `///` doc-comment
+# lines are never executable (zig 0.16 DWARF sometimes attributes an
+# instruction to one); `kcov-excl` markers carry a per-site reason
+# in-source.
+EXCLUDE_LINE = '=> unreachable,kcov-excl,///'
 GATE_PERCENT = 100.0
 
 
