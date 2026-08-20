@@ -5,6 +5,11 @@
 - **[zig](https://ziglang.org/)** 0.16.0+ — the language. Managed via
   [mise](https://mise.jdx.dev/), pinned by the committed `mise.toml`:
   `brew install mise` on macOS, then `mise install` in the repo root.
+  On macOS 0.16.0 is a hard floor, not a preference: 0.15.x fails to link
+  against macOS 26.x SDKs — the build runner itself dies with
+  `undefined symbol: _free` and a dozen similar — so `zig build` cannot
+  run at all there, and `--sysroot` doesn't help (the runner is compiled
+  before the flag applies).
 - **[just](https://github.com/casey/just)** — task runner.
   `brew install just`.
 - **[kcov](https://github.com/SimonKagstrom/kcov)** — line-coverage tool
