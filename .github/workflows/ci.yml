@@ -25,7 +25,8 @@ jobs:
         with:
           version: 0.15.2
       - uses: extractions/setup-just@v3
-      - uses: astral-sh/setup-uv@v10
+      # Exact version: setup-uv stopped publishing moving major tags after v7.
+      - uses: astral-sh/setup-uv@v10.0.1
       - name: Build
         run: just check
       - name: Test (self-hosted backend)
