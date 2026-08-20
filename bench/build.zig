@@ -32,7 +32,7 @@ pub fn build(b: *std.Build) void {
     const base = b.dependency("csar_base", .{ .target = target, .optimize = optimize });
 
     const mod = b.createModule(.{
-        .root_source_file = b.path("ab.zig"),
+        .root_source_file = b.path("main.zig"), // imports ab.zig; see main.zig
         .target = target,
         .optimize = optimize,
     });

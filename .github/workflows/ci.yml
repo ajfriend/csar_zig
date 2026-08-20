@@ -57,20 +57,6 @@ jobs:
           kcov --version
           just test-slow
           { echo '### Coverage'; cat coverage/summary.md; } >> "$GITHUB_STEP_SUMMARY"
-      - name: DIAGNOSTIC (temporary) — kcov master, and the self-hosted backend
-        if: always()
-        run: |
-          set +e
-          echo "== A. kcov built from master"
-          sudo apt-get install -y -qq cmake binutils-dev libssl-dev libelf-dev libstdc++-12-dev zlib1g-dev libdw-dev libiberty-dev libcurl4-openssl-dev >/dev/null 2>&1
-          git clone -q --depth 1 https://github.com/SimonKagstrom/kcov /tmp/kcov-src && cmake -S /tmp/kcov-src -B /tmp/kcov-build -DCMAKE_BUILD_TYPE=Release >/dev/null 2>&1 && cmake --build /tmp/kcov-build -j >/dev/null 2>&1 && ls -la /tmp/kcov-build/src/kcov
-          /tmp/kcov-build/src/kcov --version
-          rm -rf /tmp/km; /tmp/kcov-build/src/kcov /tmp/km zig-out/bin/csar-ex-cases hex >/dev/null 2>&1
-          python3 -c "import json,glob;d=json.load(open(glob.glob('/tmp/km/csar-ex-cases.*/coverage.json')[0]));print(len(d['files']),'files; root-ish:',[f['file'].split('csar_zig/')[-1] for f in d['files'] if 'examples' in f['file'] or 'cases.zig' in f['file'] or 'root.zig' in f['file']])"
-          echo "== B. self-hosted backend build of the example, apt kcov"
-          zig build-exe examples/cases.zig --dep csar --dep cases -Mroot=examples/cases.zig -Mcsar=src/root.zig -Mcases=cases/cases.zig -fno-llvm -femit-bin=/tmp/cases-sh 2>&1 | tail -3
-          rm -rf /tmp/ks; kcov /tmp/ks /tmp/cases-sh hex >/dev/null 2>&1
-          python3 -c "import json,glob;g=glob.glob('/tmp/ks/cases-sh.*/coverage.json');d=json.load(open(g[0])) if g else {'files':[]};print(len(d['files']),'files; root-ish:',[f['file'].split('csar_zig/')[-1] for f in d['files'] if 'examples' in f['file'] or 'cases.zig' in f['file']])"
       - name: Upload the gate's log
         # Every kcov invocation and the per-binary line totals behind the
         # ledger — what you need when the ledger disagrees with a local run.

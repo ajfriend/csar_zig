@@ -106,6 +106,18 @@ need downloaded survey data; `scripts/consumer_smoke/build.zig` is a
 build script, not a runtime binary; the `.zon` fixtures are comptime
 data with no line table.
 
+**A module's root file is invisible to kcov on Linux.** zig's DWARF5
+line tables put each module's root at file index 0, and kcov's ELF
+reader drops it (kcov 43 and master alike; macOS kcov has its own
+Mach-O reader and does not). Imported files, index ≥ 1, are fine. So
+anything worth measuring must be an import: the example binaries are
+built from `examples/root.zig`, a comptime switch on the `example` build
+option that imports the chosen example's `main`, and the harness from
+`bench/main.zig`, which imports `ab.zig`. `src/root.zig` and
+`test_root.zig` are roots too, and hold nothing executable — keep it
+that way. Found by the ledger cross-check below: on Linux the examples'
+markers "excluded nothing" because their files were not measured at all.
+
 Everything is built Debug for the gate (`-Dcoverage=true`, which
 overrides the ReleaseFast forced on `ex-bench` and `csar-ab`): line
 coverage of an optimized binary is unreliable. The whole run is ~20s
@@ -391,7 +403,9 @@ nothing is written to disk.
 ## Examples
 
 Four single-file programs under `examples/`, each wired into
-`build.zig` via `addExample`:
+`build.zig` via `addExample` and built from the shared `examples/root.zig`
+(which imports the selected one — see "Coverage" for why the example file
+is not the root itself):
 
 | Step | Source | Role |
 | --- | --- | --- |

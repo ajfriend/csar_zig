@@ -137,6 +137,9 @@ pub fn build(b: *std.Build) void {
 
 }
 
+/// The examples, as `examples/root.zig` switches on them.
+const Example = enum { basic, status, cases, bench };
+
 fn addExample(
     ex: anytype,
     stem: []const u8,
@@ -147,13 +150,19 @@ fn addExample(
     description: []const u8,
 ) void {
     const b: *std.Build = ex.b;
+    // Built from examples/root.zig, which imports `examples/<stem>.zig`
+    // by the `example` option — see root.zig for why the example file is
+    // not the root itself.
+    const which = b.addOptions();
+    which.addOption(Example, "example", std.meta.stringToEnum(Example, stem).?);
     const mod = b.createModule(.{
-        .root_source_file = b.path(b.fmt("examples/{s}.zig", .{stem})),
+        .root_source_file = b.path("examples/root.zig"),
         .target = ex.target,
         .optimize = if (ex.coverage) ex.optimize else optimize_override orelse ex.optimize,
     });
     mod.addImport("csar", ex.csar);
     mod.addImport("cases", ex.cases);
+    mod.addOptions("build_options", which);
     const exe = b.addExecutable(.{
         .name = b.fmt("csar-ex-{s}", .{stem}),
         .root_module = mod,
