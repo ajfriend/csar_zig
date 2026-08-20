@@ -14,6 +14,10 @@ concurrency:
 
 env:
   HOMEBREW_NO_AUTO_UPDATE: 1
+  HOMEBREW_NO_INSTALL_CLEANUP: 1
+  HOMEBREW_NO_ENV_HINTS: 1
+  # Bump to invalidate the kcov cache (picks up a newer kcov on the next run).
+  CACHE_EPOCH: v1
 
 jobs:
   test:
@@ -24,21 +28,48 @@ jobs:
         with:
           version: 0.15.2
       - uses: extractions/setup-just@v3
+      - uses: astral-sh/setup-uv@v10
       - name: Build
         run: just check
       - name: Test (self-hosted backend)
         # See dev.md "Two backends". The LLVM-backend suite runs below,
         # under the coverage gate.
         run: just test-selfhosted
+      - name: Cache kcov
+        # `brew install kcov` pours 27 dependencies (openssl, krb5, curl,
+        # elfutils, …) for a 1.5 MB tool — ~45s. Cache the poured tree so
+        # later runs untar it in seconds. Bump CACHE_EPOCH to force a
+        # reinstall (e.g. to pick up a newer kcov).
+        uses: actions/cache@v4
+        with:
+          path: /tmp/kcov-brew.tar
+          key: kcov-brew-${{ env.CACHE_EPOCH }}-${{ runner.os }}-${{ runner.arch }}
       - name: Install kcov
-        # Same channel as the local dev install (the brew formula ships
-        # a prebuilt x86_64_linux bottle); the runner image includes
-        # linuxbrew.
+        # Cache hit: untar. Miss (or an unusable cache): install via brew —
+        # the same channel as the local dev install — and repack. The
+        # `kcov --version` check makes a bad cache self-healing rather than
+        # a red build.
         run: |
-          command -v brew > /dev/null || eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-          brew install -q kcov
-          command -v uv > /dev/null || brew install -q uv
-          echo "$(brew --prefix)/bin" >> "$GITHUB_PATH"
+          set -euo pipefail
+          # Hardcoded so the cache-hit path never starts Ruby: every `brew`
+          # invocation costs seconds, which is what this step is avoiding.
+          prefix=/home/linuxbrew/.linuxbrew
+
+          install_and_pack() {
+            eval "$("$prefix/bin/brew" shellenv)"
+            brew install -q kcov
+            local paths=("$prefix/bin/kcov") f
+            for f in kcov $(brew deps kcov); do
+              paths+=("$prefix/Cellar/$f" "$prefix/opt/$f")
+            done
+            tar -cf /tmp/kcov-brew.tar "${paths[@]}"
+          }
+
+          [ -f /tmp/kcov-brew.tar ] && tar -xf /tmp/kcov-brew.tar -C / || true
+          "$prefix/bin/kcov" --version > /dev/null 2>&1 \
+            || { rm -f /tmp/kcov-brew.tar; install_and_pack; }
+
+          echo "$prefix/bin" >> "$GITHUB_PATH"
       - name: Test (LLVM backend) + coverage gate + exclusion ledger
         run: |
           set -euo pipefail
