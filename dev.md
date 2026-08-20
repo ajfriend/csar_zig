@@ -48,6 +48,12 @@ Slow tests show up as `SKIP` in the fast tier and `OK` in the slow
 tier. Coverage only makes sense on the slow tier — fast-tier
 coverage would be incomplete by design.
 
+Both tiers print only their summary lines on success; the full runner
+output (every per-test line, plus the deliberate
+`case=diagnostic-selftest` prints) is captured in `zig-out/test.log` /
+`zig-out/test-slow.log` and dumped to the terminal in full when a run
+fails.
+
 ### Two backends
 
 Zig has two code generators (LLVM, and its own self-hosted backend —
@@ -145,8 +151,9 @@ Before marking a line, exhaust these — each has an in-tree example:
   methods_test; `checkRotationInvariance`'s three self-tests in
   extreme_aspect_test). Side effect: each prints its diagnostic once
   per suite run — every such line is labeled
-  `case=diagnostic-selftest`, so passing-run output that mentions
-  mismatches is self-identifying.
+  `case=diagnostic-selftest`, so log output that mentions mismatches
+  is self-identifying (they land in `zig-out/test*.log`, not the
+  terminal).
 - **Cover platform-dependent arms with a deterministic sibling.**
   The tolerant switch over converged/DNC lives once, in
   `tests/helpers.zig` (`resolvedView`), and its own test feeds it

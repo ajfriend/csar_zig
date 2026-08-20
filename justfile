@@ -6,24 +6,29 @@ kcov_exclude := "=> unreachable,kcov-excl"
 
 # Skips the long-running randomized stress tests (e.g. cap_test) and
 # the coverage gate; use while iterating, and run `just test-slow`
-# (or `just ci`) before committing.
+# (or `just ci`) before committing. Prints only the pass/fail summary;
+# the full runner output (incl. the case=diagnostic-selftest lines)
+# lands in zig-out/test.log and is shown in full on failure.
 # Fast test loop (sub-second inner loop, no coverage gate).
 test:
-    zig build install-test
-    ./zig-out/bin/csar-test
+    @zig build install-test
+    @./zig-out/bin/csar-test > zig-out/test.log 2>&1 || { cat zig-out/test.log; exit 1; }
+    @tail -1 zig-out/test.log
 
 # Exclusion policy and the ledger's meaning: dev.md "Coverage
 # exclusions". The report-only second pass derives the exclusion
 # ledger from the same collected data (its line classification only;
 # report-only hit data is lossy and never consulted). The summary
-# block lands in coverage/summary.txt for CI to post on PRs.
+# block lands in coverage/summary.txt for CI to post on PRs; full
+# runner output lands in zig-out/test-slow.log, shown on failure.
 # Full suite + 100% line-coverage gate + exclusion ledger (~10s; the pre-commit / CI check).
 test-slow:
-    zig build install-test -Dslow=true
-    rm -rf coverage coverage_raw
-    kcov --include-pattern={{kcov_include}} --exclude-line='{{kcov_exclude}}' --exclude-region=kcov-excl-start:kcov-excl-stop coverage zig-out/bin/csar-test
-    cp -r coverage coverage_raw
-    kcov --report-only --include-pattern={{kcov_include}} coverage_raw zig-out/bin/csar-test
+    @zig build install-test -Dslow=true
+    @rm -rf coverage coverage_raw
+    @kcov --include-pattern={{kcov_include}} --exclude-line='{{kcov_exclude}}' --exclude-region=kcov-excl-start:kcov-excl-stop coverage zig-out/bin/csar-test > zig-out/test-slow.log 2>&1 || { cat zig-out/test-slow.log; exit 1; }
+    @tail -1 zig-out/test-slow.log
+    @cp -r coverage coverage_raw
+    @kcov --report-only --include-pattern={{kcov_include}} coverage_raw zig-out/bin/csar-test >> zig-out/test-slow.log 2>&1
     @n=$(ls -1d coverage/csar-test.*/ 2>/dev/null | wc -l | tr -d ' '); \
         if [ "$n" != "1" ]; then echo "expected exactly 1 coverage/csar-test.*/ dir, got $n"; exit 1; fi
     @{ jq -r '"csar coverage: \(.percent_covered)%"' coverage/csar-test.*/coverage.json; \

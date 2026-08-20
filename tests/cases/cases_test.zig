@@ -29,7 +29,7 @@ fn checkArEq(label: []const u8, expected: f64, actual: f64, tol: f64) !void {
 test "checkArEq prints case label on failure" {
     try std.testing.expectError(
         error.AspectRatioMismatch,
-        checkArEq("test_label", 1.0, 1.1, 1e-6),
+        checkArEq("diagnostic-selftest", 1.0, 1.1, 1e-6),
     );
 }
 
