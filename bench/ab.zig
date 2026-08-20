@@ -12,7 +12,7 @@
 //!
 //! The policy — warm-up, batching, pairing, the statistic — and `Side`, the
 //! adapter that reads the clock, live in `core.zig`. What follows are the
-//! parts that are properties of *this binary* rather than of those.
+//! parts that are properties of *this binary* rather than of `core.zig`.
 //!
 //! ### No process isolation, deliberately
 //!
@@ -107,12 +107,13 @@ pub fn main(init: std.process.Init) !void {
     }
     // The baseline side is a comptime choice, so it is dispatched here rather
     // than selected inside: in --aa mode it is the current library again.
-    if (opts.aa) try report(cur, init, opts) else try report(base, init, opts);
+    if (opts.aa) try report(bc.Side(cur), init, opts) else try report(bc.Side(base), init, opts);
 }
 
-/// `BaseLib` is what the current tree is measured against: the pinned baseline
-/// normally, the current library itself under --aa.
-fn report(comptime BaseLib: type, init: std.process.Init, opts: Opts) !void {
+/// `Base` is the adapter for what the current tree is measured against: the
+/// pinned baseline normally, the current library itself under --aa — or, in a
+/// PR whose API change needs one, a shim with `Side`'s two methods.
+fn report(comptime Base: type, init: std.process.Init, opts: Opts) !void {
     const gpa = init.gpa;
     const io = init.io;
 
@@ -129,7 +130,6 @@ fn report(comptime BaseLib: type, init: std.process.Init, opts: Opts) !void {
     const cur_mult: u32 = if (opts.inject_2x) 2 else 1;
 
     const Cur = bc.Side(cur);
-    const Base = bc.Side(BaseLib);
 
     var side_cur = Cur{ .gpa = gpa, .io = io, .gap_tol = cur_tol };
     var side_base = Base{ .gpa = gpa, .io = io };
@@ -191,8 +191,8 @@ fn report(comptime BaseLib: type, init: std.process.Init, opts: Opts) !void {
             continue;
         }
 
-        side_cur.warmUp();
-        side_base.warmUp();
+        bc.warmUp(&side_cur);
+        bc.warmUp(&side_base);
 
         // Calibrated AFTER warm-up, so the probes measure warm solves, and
         // from the baseline side so both sides use the same batch.

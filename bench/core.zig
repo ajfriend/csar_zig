@@ -6,10 +6,9 @@
 //! or the clock, which is what lets `tests/` verify them to the ulp with a
 //! scripted stand-in. `Side` is the one piece that reads a clock and calls a
 //! solver; it is generic over the library, so the suite instantiates it
-//! against the current one and covers every branch on real fixtures. What is
-//! left in `ab.zig` is arg parsing, printing and loop wiring, plus the parts
-//! of the methodology that are properties of *one binary* (process isolation,
-//! the A/A check, layout bias).
+//! against the current one and covers every branch on real fixtures. The
+//! parts of the methodology that are properties of one *binary* are in
+//! `ab.zig`.
 
 const std = @import("std");
 
@@ -60,11 +59,16 @@ pub const BATCH_MAX: u32 = 4096;
 pub const N_PROBE: u32 = 3;
 
 /// Choose the batch for `side`, which must already be warmed up so the probes
-/// measure a warm solve. `side` exposes `measure` as `pairedRun` requires.
+/// measure warm solves.
 pub fn calibrate(side: anytype) u32 {
-    var probe = std.math.inf(f64);
-    for (0..N_PROBE) |_| probe = @min(probe, side.measure(1));
-    return batchFor(probe);
+    var probes: [N_PROBE]f64 = undefined;
+    for (&probes) |*p| p.* = side.measure(1);
+    return batchFor(std.mem.min(f64, &probes));
+}
+
+/// Untimed solves before a side's timed reps — see "Warm-up" above.
+pub fn warmUp(side: anytype) void {
+    _ = side.measure(N_WARMUP);
 }
 
 /// Solves per timed interval: enough that the interval dwarfs the clock, one
@@ -125,7 +129,7 @@ pub const Timing = struct {
 /// Interleave both sides rep by rep, reduce each to its min, and pair them.
 ///
 /// `cur` and `base` are anything exposing `fn measure(self: *Self, count: u32)
-/// f64` — one library version each in `ab.zig`, a scripted fake in the tests.
+/// f64` — a `Side` each in `ab.zig`, a scripted fake in the tests.
 ///
 /// Both sides use the SAME batch, so the comparison stays like-for-like.
 /// `cur_mult` is the injector: it multiplies how many solves the current side
@@ -171,7 +175,7 @@ pub fn pairedRun(
 /// A transcription of the library's `Outcome` tag names, not the enum itself:
 /// this module stays solver-free so the tests can drive it without one.
 /// `tests/bench_core_test.zig` asserts the transcription matches the real
-/// union's tags, and `ab.zig`'s `metrics` builds every status with `@tagName`
+/// union's tags, and `Side.metrics` below builds every status with `@tagName`
 /// over a switch that is exhaustive on that union — so the two vocabularies
 /// cannot drift apart without a test or compile failure.
 pub const OutcomeTag = enum { converged, infeasible, did_not_converge };
@@ -183,7 +187,7 @@ pub fn isOutcome(status: []const u8) bool {
 /// One side's result for one case. `status` carries an `@errorName` when
 /// `solve` failed, which is why it is a string rather than the outcome enum:
 /// an error on one side only is a difference worth reporting, not a reason to
-/// abort (see `ab.zig`).
+/// abort (see `Side.metrics`).
 ///
 /// `ar` is not necessarily finite: an uncertified DNC iterate can divide two
 /// singular values that are both zero. `differs` and `formatDiff` both handle
@@ -322,14 +326,12 @@ pub fn writeDiff(w: *std.Io.Writer, name: []const u8, a: Metrics, b: Metrics) st
 pub const GAP_TOL = 1e-6;
 
 /// One side of a comparison: a library version bound to an allocator, a clock,
-/// and the options it solves under. Exposes `metrics` for the deterministic
-/// pass and `measure` for `pairedRun` / `calibrate`.
+/// and the options it solves under. Exposes `metrics` and `measure`.
 ///
-/// This is the *default* adapter, for when both versions share an API. It is
-/// also the shim escape hatch: a PR that changes `solve`'s signature or
-/// reshapes `Outcome` writes its own `Side`-shaped adapter for the older side
-/// in `ab.zig` and passes that to `pairedRun` — nothing here changes. Such a
-/// shim is dead once the baseline pin moves past the change; delete it then.
+/// This is the *default* adapter, for when both versions share an API.
+/// Anything with the same two methods can stand in for a side — which is how
+/// a baseline with a different API gets shimmed, in `ab.zig`, without touching
+/// this module. Such a shim is dead once the pin moves past the change.
 pub fn Side(comptime lib: type) type {
     return struct {
         const Self = @This();
@@ -372,7 +374,7 @@ pub fn Side(comptime lib: type) type {
             // @tagName, not a literal: this switch is exhaustive over the real
             // union, so a new outcome variant is a compile error HERE, and the
             // status it produces is the library's own spelling — which the
-            // suite pins `OutcomeTag` to (tests/bench_core_test.zig).
+            // suite pins `OutcomeTag` to.
             const status = @tagName(o);
             return switch (o) {
                 .converged => |c| .{
@@ -391,13 +393,9 @@ pub fn Side(comptime lib: type) type {
             };
         }
 
-        /// `measure` with the clock ignored.
-        pub fn warmUp(self: *Self) void {
-            _ = self.measure(N_WARMUP);
-        }
-
-        /// What `pairedRun` and `calibrate` call: run `count` solves on
-        /// `pts`, return the elapsed microseconds. The only place in the
+        /// The timed interval: run `count` solves on `pts`, return the
+        /// elapsed microseconds. What every policy loop (`warmUp`,
+        /// `calibrate`, `pairedRun`) consumes, and the only place in the
         /// harness a clock is read.
         pub fn measure(self: *Self, count: u32) f64 {
             const t0 = std.Io.Timestamp.now(self.io, .awake);
