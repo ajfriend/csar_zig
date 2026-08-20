@@ -3,6 +3,13 @@
 Notable changes to csar. Terse by design — each entry points to the PR or
 commit that carries the full detail.
 
+## [Unreleased]
+
+- New `just ab`: A/B the working tree against the pinned baseline release in
+  one binary — a deterministic diff over every fixture plus interleaved timing.
+  The published tarball now also carries `bench/core.zig`, which `tests/`
+  imports. Details in [#21](https://github.com/ajfriend/csar_zig/pull/21).
+
 ## [0.2.0]
 
 - Minimum zig raised to **0.16.0** (breaking for source builders); toolchain
