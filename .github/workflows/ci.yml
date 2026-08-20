@@ -1,7 +1,13 @@
 name: ci
 
+# A bare `push:` alongside `pull_request:` runs every PR commit twice: both
+# events fire for a same-repo branch, and the concurrency group below can't
+# dedupe them (github.ref is refs/heads/<branch> for one and refs/pull/N/merge
+# for the other). Restricting push to main gives each commit exactly one run —
+# PRs via pull_request, main (including merge commits) via push.
 on:
   push:
+    branches: [main]
   pull_request:
 
 permissions:
