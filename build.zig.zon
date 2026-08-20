@@ -4,12 +4,8 @@
     .fingerprint = 0x9c8d1b0e21364c6e,
     .minimum_zig_version = "0.16.0",
     .dependencies = .{},
-    // What a consumer receives — only what compiling the `csar` module needs.
-    // tests/, cases/, examples/, bench/ stay out: `build.zig` still references
-    // them, but a dependency's steps are only made when requested, so a
-    // consumer asking for the `csar` module never opens those paths. That is
-    // a property of the build system, not a hope: `just consumer-smoke`
-    // fetches THIS tree through `.paths` and builds against it.
+    // Only what compiling the `csar` module needs; `just consumer-smoke`
+    // proves the tree builds through this list. See dev.md "Packaging".
     .paths = .{
         "build.zig",
         "build.zig.zon",

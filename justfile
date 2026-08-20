@@ -27,19 +27,10 @@ check:
 ab *ARGS:
     zig build --build-file bench/build.zig ab -- {{ARGS}}
 
-# Build a scratch consumer against THIS tree packed through `.paths` — what a
-# release tarball would contain — and solve through it (scripts/consumer_smoke).
+# Build scripts/consumer_smoke against this tree as a consumer receives it
+# (packed through `.paths`) — the only check of the shipped package.
 consumer-smoke:
-    #!/usr/bin/env sh
-    set -eu
-    dir=$(mktemp -d)
-    cp scripts/consumer_smoke/* "$dir"
-    cd "$dir"
-    zig fetch --save=csar "{{justfile_directory()}}"
-    # Files, not dirs: a path fetch leaves empty directory skeletons behind.
-    echo "shipped:"; (cd zig-pkg/csar-*/ && find . -type f | sort | sed 's|^./|  |')
-    zig build run
-    rm -rf "$dir"
+    sh scripts/consumer_smoke/run.sh
 
 # Everything CI checks that can run on this machine — use before pushing a PR.
 ci: check consumer-smoke test-slow _ci-selfhosted

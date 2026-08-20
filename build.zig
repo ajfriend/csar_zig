@@ -10,10 +10,10 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    // The fixture corpus (cases/zon/*.zon) + its compile-time manifest. A
-    // top-level directory, not test code: it is shared by the tests, the
-    // examples and the A/B harness. The manifest lives next to the .zon files
-    // so it can `@import` them without crossing module-path boundaries.
+    // The fixture corpus (cases/zon/*.zon) + its comptime manifest, which sits
+    // beside the .zon files so it can `@import` them without crossing
+    // module-path boundaries. Exported for path dependents (bench/); not in
+    // `.paths`, so not available to tarball consumers (dev.md "Packaging").
     const cases_mod = b.addModule("cases", .{
         .root_source_file = b.path("cases/cases.zig"),
         .target = target,

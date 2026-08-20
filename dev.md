@@ -26,12 +26,12 @@
 
 | Command | What it does |
 | --- | --- |
-| `just ci` | Everything CI checks that can run on this machine: `check` + `test-slow` (+ `test-selfhosted` where supported). Run before pushing a PR. |
+| `just ci` | Everything CI checks that can run on this machine, in the order the `ci` recipe lists. Run before pushing a PR. |
 | `just test` | Fast test loop — skips long-running randomized stress tests, no coverage gate. Sub-second; the inner-loop iteration command. |
 | `just test-slow` | Full suite + 100% line coverage gate under `kcov`. Builds with `-Dslow=true` so randomized stress tests run. ~10s; the pre-commit / CI check. |
 | `just test-selfhosted` | Full suite under zig's self-hosted backend (`-Dllvm=false`). See "Two backends" below. |
 | `just check` | Compile the library and every executable, running nothing (CI's Build step). |
-| `just consumer-smoke` | Fetch the working tree into a scratch consumer package — packed through `build.zig.zon`'s `.paths`, exactly as a release tarball is — and solve through it. The only check that exercises what a consumer *receives* (13 files: `src/`, `build.zig`, `build.zig.zon`, `changelog.md`, `readme.md`, `LICENSE`) rather than the working tree. `scripts/consumer_smoke/` is the consumer. |
+| `just consumer-smoke` | Build `scripts/consumer_smoke/` against the tree as a consumer receives it, and print the shipped file list. The only check of the published package rather than the working tree; see "Packaging". |
 | `just bench` | Run the benchmark suite (release-built `ex-bench`) — single-version timing. |
 | `just ab` | A/B the working tree against the pinned baseline, both in one binary. `just ab --aa` calibrates. See "A/B benchmarking" below. |
 | `just clean` | Remove `zig-out/`, `.zig-cache/`, `coverage/`, and the bench package's caches and unpacked baseline. |
@@ -249,6 +249,29 @@ To add a new test file: create `tests/<name>_test.zig`, then add
 `_ = @import("<name>_test.zig");` to `tests/all.zig`. The test
 binary picks it up automatically.
 
+## Packaging
+
+`build.zig.zon`'s `.paths` is the allowlist for what a consumer receives, and
+it lists only what compiling the `csar` module needs — `src/` plus the build
+and doc files. `tests/`, `cases/`, `examples/` and `bench/` stay out.
+
+`build.zig` still references those paths. That is safe by construction, not by
+luck: a dependency's `build()` constructs its step graph, but `b.path(...)` is
+a `LazyPath` resolved only when a step that uses it is *made*, and a consumer
+asking for `csar.module("csar")` never makes the test, example or survey
+steps. Keep `build.zig` free of configure-time filesystem access (`std.fs`,
+`@embedFile` of a fixture) and that stays true. The `cases` module is exported
+for path dependents (`bench/`) and is not available to tarball consumers.
+
+`just consumer-smoke` verifies it on every `just ci` run and in CI: it copies
+`scripts/consumer_smoke/` (a package depending on `csar`, with
+`examples/basic.zig` as its program) into a temp dir, `zig fetch`es the
+working tree into it — a path fetch packs the tree through
+`.paths`, exactly as a release tarball is filtered — prints what arrived, and
+builds and runs it. A path fetch leaves empty directory skeletons behind, which
+is why the listing is of files. #17 covers the tag-time version against the
+published tarball.
+
 ## A/B benchmarking
 
 `bench/` is a separate zig package that depends on **both** the working tree
@@ -284,8 +307,8 @@ near the noise floor as unproven.
 The baseline pin lives in `bench/build.zig.zon`; resolving it fetches once per
 machine and is then cached (why that's fine, rather than lazy: `bench/build.zig`).
 It is a separate package so the library's manifest never carries a benchmark
-dependency — consumers can't inherit it, and `.paths` ships only `bench/core.zig`
-(which `tests/` imports), not the harness. Reports are for pasting into a PR;
+dependency — consumers can't inherit it, and nothing under `bench/` ships
+(see "Packaging"). Reports are for pasting into a PR;
 nothing is written to disk.
 
 ## Examples

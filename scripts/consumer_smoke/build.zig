@@ -1,9 +1,7 @@
-//! A consumer of the published package, as small as one can be: depends on
-//! `csar` and calls `solve`. `just consumer-smoke` copies this directory to a
-//! scratch location, `zig fetch`es the working tree into it — which packs the
-//! tree through `build.zig.zon`'s `.paths`, exactly as a release tarball is —
-//! and builds. It is the only check that exercises what a consumer receives
-//! rather than the working tree (#17 automates the tag-time version).
+//! The smallest consumer of the published package: depends on `csar` and
+//! compiles `examples/basic.zig` against it — the documented minimal example,
+//! which the package itself no longer ships. Driven by `run.sh`; see dev.md
+//! "Packaging".
 const std = @import("std");
 
 pub fn build(b: *std.Build) void {
