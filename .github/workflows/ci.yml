@@ -14,10 +14,11 @@ concurrency:
 
 jobs:
   test:
-    # 26.04 (not ubuntu-latest, which is 24.04) for apt's kcov: the archive
-    # skips noble entirely, so 24.04 forced a brew install that poured 27
-    # dependencies for a 1.5 MB tool — ~45s of a ~90s job. 26.04 ships
-    # kcov 43, the same version dev.md pins locally.
+    # Pinned, not ubuntu-latest (24.04): apt has no kcov for noble, which
+    # would force a slow brew install (see dev.md "Dependencies"). Revert to
+    # ubuntu-latest once it maps to 26.04 or later — apt kcov stays valid
+    # there. 26.04 is a *preview* image; if it churns, revert the whole
+    # commit, since the apt step depends on the pin.
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v4
@@ -25,8 +26,13 @@ jobs:
         with:
           version: 0.15.2
       - uses: extractions/setup-just@v3
-      # Exact version: setup-uv stopped publishing moving major tags after v7.
+      # No moving major tag past v7, so pin the exact release. Caching is off
+      # because there is nothing to cache: coverage_gate.py declares no
+      # dependencies, so `auto` stores an empty entry that never invalidates
+      # and warns on every run.
       - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: false
       - name: Build
         run: just check
       - name: Test (self-hosted backend)
@@ -34,9 +40,7 @@ jobs:
         # under the coverage gate.
         run: just test-selfhosted
       - name: Install kcov
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends kcov
+        run: sudo apt-get update -qq && sudo apt-get install -y kcov
       - name: Test (LLVM backend) + coverage gate + exclusion ledger
         run: |
           set -euo pipefail
@@ -48,7 +52,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          { echo '**Coverage exclusion ledger** (ubuntu CI; see dev.md "Coverage exclusions"):'
+          # Name the image and kcov build: the ledger is derived from kcov's
+          # line classification, so if a runner-image change ever moves it,
+          # that shows up here next to the ledger it changed.
+          { printf '**Coverage exclusion ledger** (%s, %s; see dev.md "Coverage exclusions"):\n' \
+              "${ImageOS:-ubuntu}" "$(kcov --version)"
             cat coverage/summary.md
           } > ledger-comment.md
           gh pr comment "${{ github.event.pull_request.number }}" --edit-last --create-if-none --body-file ledger-comment.md
