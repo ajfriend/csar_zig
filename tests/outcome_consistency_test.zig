@@ -23,7 +23,7 @@ test "budget-limited trust DNC returns a self-consistent certified snapshot" {
     // Status may be either (converged if the budget suffices on some
     // platform); the invariant under test is snapshot consistency.
     const Qm = switch (o) {
-        .converged => |c| c.Q,
+        .converged => |c| c.Q, // kcov-excl: platform-dependent arm — this budget converges on some platforms, DNCs here (see comment above)
         .did_not_converge => |p| p.Q,
         .infeasible => unreachable,
     };

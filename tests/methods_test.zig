@@ -88,8 +88,8 @@ test "trust: agrees with alternating on bundled cases incl. extreme-kappa cells"
         const ar_f = fast_out.converged.aspectRatio();
         const ar_r = red_out.converged.aspectRatio();
         if (@abs(ar_f - ar_r) > AR_AGREE_REL_TOL * ar_f) {
-            std.debug.print("trust/alternating AR mismatch case={s}: alternating={d:.10} trust={d:.10}\n", .{ name, ar_f, ar_r });
-            return error.TrustAlternatingArMismatch;
+            std.debug.print("trust/alternating AR mismatch case={s}: alternating={d:.10} trust={d:.10}\n", .{ name, ar_f, ar_r }); // kcov-excl: failure diagnostic — runs only when this test fails
+            return error.TrustAlternatingArMismatch; // kcov-excl: failure path — runs only when this test fails
         }
         try std.testing.expect(@abs(red_out.converged.gap) <= GAP_TOL);
     }
@@ -165,6 +165,50 @@ test "mveeFwAway: converges the design and keeps weights in the simplex" {
             try std.testing.expect(@abs(gi - 3.0) < 1e-6);
         }
     }
+}
+
+test "mveeFwAway: kappa-limited input exits via the stall guard, invariants intact" {
+    // Near-collinear chart points: the lifted design is ill-conditioned,
+    // so the away-step gap hits an f64 floor well above zero and stops
+    // improving geometrically — the noise-floor stall exit must fire
+    // (inner_tol = 0 makes the convergence break unreachable) and the
+    // weights must still be a valid design. Guards the stall exit the
+    // convergent-input test never reaches.
+    const csar_core = @import("../src/csar.zig");
+    var P: [8][2]f64 = undefined;
+    var Ql: [8]csar.Vec3 = undefined;
+    var w: [8]f64 = undefined;
+    for (&P, 0..) |*p, i| {
+        const x = -1.0 + 2.0 * @as(f64, @floatFromInt(i)) / 7.0;
+        // ~1e-9 transverse spread: comfortably above degeneracy, far
+        // below conditioning that would let the gap reach the tol.
+        p.* = .{ x, 1e-9 * (1.0 + 0.3 * x + x * x) };
+        w[i] = 1.0 / 8.0;
+    }
+    csar_core.mveeFwAway(&P, 100_000, 0.0, &Ql, &w);
+
+    var sum: f64 = 0;
+    for (w) |wi| {
+        try std.testing.expect(wi >= 0);
+        sum += wi;
+    }
+    try std.testing.expectApproxEqAbs(@as(f64, 1.0), sum, 1e-12);
+}
+
+test "initWeights: fully degenerate input falls back to uniform weights" {
+    // All points coincident: the farthest-point seed's d0 scan finds
+    // nothing above tol.TINY and must fall back to uniform weights
+    // (n > SEED_SPARSE_MIN_POINTS so the sparse-seed path is taken;
+    // n and the coordinates are powers of two so the centroid sum and
+    // scale are binary-exact and the point-to-centroid distances are
+    // exactly zero).
+    const csar_core = @import("../src/csar.zig");
+    const n = 32;
+    var P: [n][2]f64 = undefined;
+    var w: [n]f64 = undefined;
+    for (&P) |*p| p.* = .{ 0.5, -0.25 };
+    csar_core.initWeights(&P, &w);
+    for (w) |wi| try std.testing.expectApproxEqAbs(1.0 / @as(f64, n), wi, 1e-15);
 }
 
 test "trust: certificate sanity on a wide-cap solve" {

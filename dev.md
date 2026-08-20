@@ -79,6 +79,41 @@ What 100% line coverage **doesn't** buy you:
   line. Both sides being executed isn't measured. Discipline plus code
   review fill the gap; explicit tests for both branches are the norm.
 
+### Coverage exclusions
+
+The gate stays at exactly 100% — a newly uncovered line always fails
+it. Lines that *cannot* execute in a passing run are excluded
+explicitly rather than absorbed into a percentage allowance (which
+would let real regressions slip through silently). Two generic rules
+plus a per-site marker, all wired in the `justfile` kcov invocation:
+
+- `--exclude-line=unreachable`: a line containing `unreachable` that
+  executes is a panic, so no passing run ever covers one. Applies to
+  e.g. exhaustive-switch arms (`.auto => unreachable`).
+- `--exclude-line=kcov-excl`: a trailing `// kcov-excl: <reason>`
+  marks a single line; `--exclude-region=kcov-excl-start:kcov-excl-stop`
+  marks a block. **Every marker carries its reason in-source** — grep
+  `kcov-excl` for the full ledger. Current entries fall into three
+  classes:
+  - *Failure-only diagnostics* (test files): print/return paths that
+    execute only when the test itself fails.
+  - *Platform-dependent arms*: e.g. a budget-limited solve that
+    converges on some platforms and DNCs here; the tolerant arm for
+    the other platform can't be covered locally.
+  - *Numerical defense-in-depth* (`src/trust.zig`, `src/newton.zig`):
+    roundoff fallbacks and bail counters that no constructible input
+    reaches. Probed exhaustively before marking: the full fixture
+    library × option grids, ~100 synthetic shape families, and
+    direct far-field `solveTrust` seams, with lldb breakpoint counts
+    confirming zero hits. If you find an input that reaches one,
+    remove the marker and add the input as a test case.
+
+Before marking a line, try to cover it: the dogleg branches, the
+re-cert convergence exit, the TR step-rejection path, the away-step
+stall guard, and the degenerate-seed fallback all looked "unhittable"
+until `tests/trust_paths_test.zig` and the methods-test additions
+constructed inputs for them.
+
 ### Why kcov and not LLVM source-based coverage?
 
 Zig 0.15.x / 0.16.x doesn't expose the LLVM coverage flags

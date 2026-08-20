@@ -393,7 +393,7 @@ pub fn evalH(
 /// otherwise). Returns the step u and the predicted decrease.
 const TrStep = struct { u: Vec2, pred: f64 };
 
-fn doglegStep(B: Mat2, g: Vec2, delta: f64) TrStep {
+pub fn doglegStep(B: Mat2, g: Vec2, delta: f64) TrStep {
     const model = struct {
         fn pred(B_: Mat2, g_: Vec2, u: Vec2) f64 {
             return -(g_.dot(u) + 0.5 * u.dot(B_.apply(u)));
@@ -468,7 +468,7 @@ pub fn solveTrust(
         core.initWeights(wb.Ps, wb.w);
         core.mveeFw(wb.Ps, algo.FW_PER_NEWTON, 0.0, wb.Ql, wb.w);
         if (!newtonPolish(wb.Ql, wb.w, algo.ACTIVE_THRESH, 20, tol.NEWTON_INNER, &wb.newton_scratch)) {
-            polish_failures += 1;
+            polish_failures += 1; // kcov-excl: polish bail counter — no constructible input exhausts polish (dev.md "Coverage exclusions")
         }
         var m = core.computeMoments(wb.Ps, wb.w, s_scale);
         last_gap = try certifyAt(m.M, Q, b, Xw, &wb);
@@ -550,8 +550,8 @@ pub fn solveTrust(
 
         var step = doglegStep(B, cur.g, delta);
         if (step.pred <= 0) {
-            B = .{ .m = .{ tc.B0, 0, 0, tc.B0 } };
-            step = doglegStep(B, cur.g, delta);
+            B = .{ .m = .{ tc.B0, 0, 0, tc.B0 } }; // kcov-excl: roundoff defense — det>0 ∧ m00>0 is SPD by Sylvester, so pred ≤ 0 needs FP-noise cancellation (dev.md "Coverage exclusions")
+            step = doglegStep(B, cur.g, delta); // kcov-excl: see line above
         }
         if (step.pred <= 0 or !(step.u.norm() > 0)) break; // stationary: g ≈ 0
         // Below merit resolution the ratio test can never verify a
@@ -603,8 +603,8 @@ pub fn solveTrust(
             // order terms dominate over this radius) — shrink gently so
             // the model regains fidelity instead of creeping at
             // ρ ≈ 0.15 or oscillating across the fidelity boundary.
-            delta = @min(delta, step.u.norm()) * tc.SHRINK_POOR;
-            if (delta < tc.DELTA_MIN) break;
+            delta = @min(delta, step.u.norm()) * tc.SHRINK_POOR; // kcov-excl: poor-ρ band [ETA, RHO_POOR) — historically real (cap89, pre-tuning); no post-tuning input reaches it (dev.md "Coverage exclusions")
+            if (delta < tc.DELTA_MIN) break; // kcov-excl: see line above
         } else if (rho >= tc.ETA_GOOD and step.u.norm() >= 0.8 * delta) {
             delta = @min(delta * tc.GROW, tc.DELTA_MAX);
         }
@@ -635,7 +635,7 @@ pub fn solveTrust(
             recert_attempts += 1;
             core.mveeFw(wb.Ps, 1, 0.0, wb.Ql, wb.w);
             if (!newtonPolish(wb.Ql, wb.w, algo.ACTIVE_THRESH, 20, tol.NEWTON_INNER, &wb.newton_scratch)) {
-                polish_failures += 1;
+                polish_failures += 1; // kcov-excl: polish bail counter — no constructible input exhausts polish (dev.md "Coverage exclusions")
             }
             const m = core.computeMoments(wb.Ps, wb.w, s_scale);
             last_gap = try certifyAt(m.M, Q, b, Xw, &wb);

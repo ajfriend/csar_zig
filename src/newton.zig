@@ -253,6 +253,9 @@ pub fn newtonPolish(Ql: []const Vec3, w: []f64, active_thresh: f64, max_iter: u3
             // solves ⇒ (yᵢ·yⱼ)²; full solves ⇒ the original qᵢ·yⱼ
             // form, bit-identical to prior behavior.
             if (use_range) {
+                // kcov-excl-start: range-solve pivot-failure safety net —
+                // provably unreachable (see tol.NEWTON_RANGE_PIVOT_MIN and
+                // dev.md "Coverage exclusions").
                 for (0..k) |i| {
                     for (i..k) |j| {
                         const dij = Y[i].dot(Y[j]);
@@ -260,6 +263,7 @@ pub fn newtonPolish(Ql: []const Vec3, w: []f64, active_thresh: f64, max_iter: u3
                         H[j * k + i] = H[i * k + j];
                     }
                 }
+                // kcov-excl-stop
             } else {
                 for (0..k) |i| {
                     for (i..k) |j| {

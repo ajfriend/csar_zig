@@ -11,10 +11,14 @@ test:
 # Full test suite + 100% line coverage gate. Builds with -Dslow=true
 # so the randomized stress tests run, then measures coverage under
 # kcov. Slower (~10s) — the pre-commit / CI check.
+# Exclusions keep the 100% gate exact, not lax (any NEWLY uncovered
+# line still fails): `unreachable` lines can never execute in a passing
+# run by definition, and `kcov-excl` markers carry a per-site reason —
+# the ledger lives in dev.md "Coverage exclusions".
 test-slow:
     zig build install-test -Dslow=true
     rm -rf coverage
-    kcov --include-pattern=src/,tests/ coverage zig-out/bin/csar-test
+    kcov --include-pattern=src/,tests/ --exclude-line=unreachable,kcov-excl --exclude-region=kcov-excl-start:kcov-excl-stop coverage zig-out/bin/csar-test
     @n=$(ls -1d coverage/csar-test.*/ 2>/dev/null | wc -l | tr -d ' '); \
         if [ "$n" != "1" ]; then echo "expected exactly 1 coverage/csar-test.*/ dir, got $n"; exit 1; fi
     @jq -r '"csar coverage: \(.percent_covered)%"' coverage/csar-test.*/coverage.json
