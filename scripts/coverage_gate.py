@@ -103,6 +103,7 @@ def per_binary_totals(out_dir):
     rule, for the next time the ledger disagrees between machines."""
     totals = {}
     with open(LOG, 'a') as log:
+        log.write(f'\n{out_dir.name}/ contains: {", ".join(sorted(p.name for p in out_dir.iterdir()))}\n')
         for d in sorted(out_dir.iterdir()):
             if not d.is_dir() or d.name == 'kcov-merged' or '.' not in d.name:
                 continue
@@ -166,4 +167,14 @@ SUMMARY_MD.write_text(f'```\n{text}```\n')
 print(text, end='')
 
 if float(gated['percent_covered']) < GATE_PERCENT:
+    # Name the lines, so a failure on another machine is diagnosable from
+    # the log alone.
+    import xml.etree.ElementTree as ET
+    tree = ET.parse(GATED_DIR / 'kcov-merged' / 'cobertura.xml').getroot()
+    with open(LOG, 'a') as log:
+        for cls in tree.iter('class'):
+            missed = [l.get('number') for l in cls.iter('line') if l.get('hits') == '0']
+            if missed:
+                log.write(f'uncovered {cls.get("filename")}: {",".join(missed)}\n')
+    print(f'uncovered lines are listed in {LOG}')
     sys.exit(1)
