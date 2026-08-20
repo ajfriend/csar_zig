@@ -57,22 +57,20 @@ jobs:
           kcov --version
           just test-slow
           { echo '### Coverage'; cat coverage/summary.md; } >> "$GITHUB_STEP_SUMMARY"
-      - name: DIAGNOSTIC (temporary) — how ubuntu's kcov sees an executable's root file
+      - name: DIAGNOSTIC (temporary) — the path kcov constructs for an executable's root file
         if: always()
         run: |
           set +e
-          echo "== DWARF line-table entries mentioning cases.zig (readelf)"
-          readelf --debug-dump=line zig-out/bin/csar-ex-cases 2>/dev/null | grep -n -B3 -A3 "cases.zig" | head -60
-          echo "== directory table head"
-          readelf --debug-dump=line zig-out/bin/csar-ex-cases 2>/dev/null | grep -n -A6 "The Directory Table" | head -20
-          for i in 1 2 3; do
-            rm -rf /tmp/kd$i
-            kcov --include-pattern=examples/,src/ /tmp/kd$i zig-out/bin/csar-ex-cases hex >/dev/null 2>&1
-            python3 -c "import json,glob;d=json.load(open(glob.glob('/tmp/kd$i/csar-ex-cases.*/coverage.json')[0]));print('run $i files:',sorted(f['file'].split('csar_zig/')[-1] for f in d['files']))"
-          done
-          echo "== kcov debug output mentioning examples"
-          rm -rf /tmp/kd4; kcov --debug=15 --include-pattern=examples/ /tmp/kd4 zig-out/bin/csar-ex-basic 2>&1 | grep -i "examples\|basic.zig\|onLine\|Adding" | head -30
-          echo "== elfutils version"; dpkg -s libdw1t64 2>/dev/null | grep Version || dpkg -l | grep -i libdw | head -3
+          echo "== CU comp_dirs (unique)"
+          readelf --debug-dump=info zig-out/bin/csar-ex-cases 2>/dev/null | grep -E "DW_AT_comp_dir" | sed 's/.*: //' | sort | uniq -c | head
+          echo "== directory table that the cases.zig file entries point at"
+          readelf --debug-dump=line zig-out/bin/csar-ex-cases 2>/dev/null | grep -n -B12 "cases.zig" | grep -E "Directory Table|^[0-9]+-  0\s" | head -8
+          echo "== kcov with NO include filter: every reported path containing cases.zig or basic.zig"
+          rm -rf /tmp/kd; kcov /tmp/kd zig-out/bin/csar-ex-cases hex >/dev/null 2>&1
+          python3 -c "import json,glob;d=json.load(open(glob.glob('/tmp/kd/csar-ex-cases.*/coverage.json')[0]));print(len(d['files']),'files');print([f['file'] for f in d['files'] if 'cases.zig' in f['file'] or 'examples' in f['file']])"
+          echo "== same for csar-ab"
+          rm -rf /tmp/kd2; kcov /tmp/kd2 bench/zig-out/bin/csar-ab --aa >/dev/null 2>&1
+          python3 -c "import json,glob;d=json.load(open(glob.glob('/tmp/kd2/csar-ab.*/coverage.json')[0]));print([f['file'] for f in d['files'] if 'ab.zig' in f['file'] or 'bench' in f['file']])"
       - name: Upload the gate's log
         # Every kcov invocation and the per-binary line totals behind the
         # ledger — what you need when the ledger disagrees with a local run.
