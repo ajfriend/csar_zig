@@ -238,9 +238,12 @@ it.) The script then checks that ledger against the source: every
 excluded line must sit on a `kcov-excl` marker, inside a
 `kcov-excl-start/end` region, or on a `=> unreachable` arm, and every
 marker must have excluded something. A disagreement fails the gate —
-so a kcov build that silently ignores a rule, or a marker left behind
-after the code moved, is caught rather than posted as a smaller
-number.
+so a kcov build that silently ignores a rule (the Linux failure that
+motivated this), or a marker that no longer sits on an executable
+line, is caught rather than posted as a smaller number. What it cannot
+catch: a marker on a line that *would* have been covered — kcov
+excludes it before measuring, and the report-only pass's hit data is
+lossy. That one is what the ledger in the PR comment is for.
 
 ### Why kcov and not LLVM source-based coverage?
 

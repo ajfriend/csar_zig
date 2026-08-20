@@ -172,7 +172,10 @@ excluded = {f: ls for f, ls in excluded.items() if ls}
 # Cross-check the ledger against the source: every excluded line must be
 # explained by a marker (`kcov-excl` on the line, inside a
 # kcov-excl-start/end region, or a `=> unreachable` arm), and every marker
-# must have excluded something — else it is stale, or kcov did not apply it.
+# must have excluded something — else kcov did not apply the rule (seen on
+# ubuntu's kcov), or the marker no longer sits on an executable line. A
+# marker on a line that would have been covered is NOT detectable here:
+# kcov excludes it before measuring, and the raw pass's hit data is lossy.
 problems = []
 marked = {}
 for file in sorted(set(raw) | set(gated)):
