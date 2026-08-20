@@ -89,12 +89,12 @@ a binary as a black box — traps at each source line, recording which
 execute — so `scripts/coverage_gate.py` runs it once per binary (and
 once per *mode* where one invocation cannot reach a binary's branches:
 `ex-cases` four ways, `csar-ab` in each of its modes plus a bad
-argument), all into `coverage/`, where kcov merges them:
-
-- `coverage/kcov-merged/` — the merged report the gate reads
-  (`coverage.json`) and the HTML to browse (`index.html`).
-- `coverage/<binary>.<hash>/` — one per binary, if you need to know
-  which run reached a line.
+argument). Each run gets its own output dir, `coverage/NN-<binary>-<args>/`
+(browse `<binary>/index.html` inside it), and the script merges the
+runs' line-level reports itself. Not kcov's own many-runs-one-dir
+merge: on ubuntu's kcov 43+dfsg-2 that proved non-deterministic —
+binaries and files dropped out of the merged report between identical
+runs — while one binary per dir has been reliable on every platform.
 
 Scope is `INCLUDE_PATTERN` in the script: `src/`, `tests/`, `cases/`,
 `examples/`, `bench/`. A file is measured through whichever binary
@@ -225,17 +225,22 @@ option grids, ~100 synthetic shape families, direct far-field
 the real-world states + countries surveys (227 regions, zero polish
 failures).
 
-**The ledger is tracked over time.** `just test-slow` prints a
-`coverage exclusions:` summary — the total number of lines the
-exclusion rules remove from the gate, with a per-file breakdown — and
-CI posts the same block as a comment on every PR, so growth is visible
-in review. The number is kcov-native, not a source grep: the gate run
-reports with the exclusion flags, a second `--report-only` pass on a
-copy of the same collected data reports without them, and the ledger
-is the per-file difference in `total_lines`. (Only the line
-classification of the report-only pass is trustworthy; its hit data is
-lossy — kcov's stored database does not faithfully round-trip covered
-lines — so the ledger never uses it.)
+**The ledger is tracked over time, and cross-checked.** `just
+test-slow` prints a `coverage exclusions:` summary — the lines the
+exclusion rules remove from the gate, per file — and CI posts the same
+block as a comment on every PR, so growth is visible in review. The
+number is kcov-native: the gate run reports with the exclusion flags, a
+second `--report-only` pass on a copy of each run's collected data
+reports without them, and the excluded lines are the ones present raw
+and absent gated. (Only the line classification of the report-only
+pass is trustworthy; its hit data is lossy, so the ledger never uses
+it.) The script then checks that ledger against the source: every
+excluded line must sit on a `kcov-excl` marker, inside a
+`kcov-excl-start/end` region, or on a `=> unreachable` arm, and every
+marker must have excluded something. A disagreement fails the gate —
+so a kcov build that silently ignores a rule, or a marker left behind
+after the code moved, is caught rather than posted as a smaller
+number.
 
 ### Why kcov and not LLVM source-based coverage?
 
