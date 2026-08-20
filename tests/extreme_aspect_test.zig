@@ -193,7 +193,7 @@ test "checkRotationInvariance: gap branch prints case+k label" {
         .Q = csar.Mat3.zero,
         .sigma = .{ 0, 1, 1 },
         .gap = 1.0,
-        .diag = .{ .alternating = .{ .outer_iters = 0, .newton_polish_failures = 0 } },
+        .diag = .{ .trust = std.mem.zeroes(csar.TrustDiagnostics) },
         .cert = .{ .indices = &[_]u32{}, .lambdas = &[_]f64{} },
         .allocator = std.testing.allocator,
     } };
@@ -212,7 +212,7 @@ test "checkRotationInvariance: AR branch prints case+k label" {
         .Q = csar.Mat3.zero,
         .sigma = .{ 0, 1, 2 },
         .gap = 0,
-        .diag = .{ .alternating = .{ .outer_iters = 0, .newton_polish_failures = 0 } },
+        .diag = .{ .trust = std.mem.zeroes(csar.TrustDiagnostics) },
         .cert = .{ .indices = &[_]u32{}, .lambdas = &[_]f64{} },
         .allocator = std.testing.allocator,
     } };
@@ -358,17 +358,13 @@ test "coplanarity check flags great-circle inputs" {
     // NEAR-coplanar rejection. Exactly rank-deficient input has no
     // meaningful enclosing-cone answer, so it is rejected as the same
     // typed CoplanarInput on EVERY path even with the check disabled
-    // (tol.COPLANAR_FLOOR) — previously the paths diverged into
-    // per-path garbage on this input: .alternating burned max_outer
-    // to a sentinel-gap DNC, .trust surfaced an internal
-    // SolveError.SingularMoment that the docs told the caller to file
-    // as a library bug.
-    inline for (.{ csar.Method.alternating, csar.Method.trust }) |method| {
-        try std.testing.expectError(
-            csar.InputError.CoplanarInput,
-            csar.solve(allocator, canon_pts[0..], .{ .gap_tol = tol, .coplanarity_tol = -1, .max_outer = max_outer, .method = method }),
-        );
-    }
+    // (tol.COPLANAR_FLOOR) — previously the solver surfaced an internal
+    // SolveError.SingularMoment on this input that the docs told the
+    // caller to file as a library bug.
+    try std.testing.expectError(
+        csar.InputError.CoplanarInput,
+        csar.solve(allocator, canon_pts[0..], .{ .gap_tol = tol, .coplanarity_tol = -1, .max_outer = max_outer }),
+    );
 }
 
 test "solve rejects malformed inputs with typed errors" {

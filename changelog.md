@@ -5,6 +5,9 @@ commit that carries the full detail.
 
 ## [Unreleased]
 
+- **Breaking:** the original alternating solver is removed — `Method.alternating`,
+  `AlternatingDiagnostics`, and `examples/compare.zig` are gone; `.auto` and
+  `.trust` are unchanged. Details in [#30](https://github.com/ajfriend/csar_zig/pull/30).
 - The published package now contains only what compiling `csar` needs; tests,
   fixtures and examples no longer ship. The fixture corpus moved to `cases/`.
   Details in [#28](https://github.com/ajfriend/csar_zig/pull/28).

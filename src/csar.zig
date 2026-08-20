@@ -1,9 +1,10 @@
 //! Minimum-volume ellipsoidal cone (spherical aspect ratio) solver.
 //!
-//! Idiomatic Zig port of csrc/csar.c. Uses @Vector(N, f64) + generic helpers
-//! for 3D math. The algorithm is: Farkas halfspace check, optional convex
-//! hull preprocessing, FW step + Newton polish + constructed dual certificate
-//! in a single outer loop.
+//! Shared solver core: preprocessing (Farkas halfspace check, optional
+//! convex-hull reduction, coplanarity rejection), the gnomonic-chart MVEE
+//! primitives (FW steps, moments, damped axis step, Newton polish,
+//! constructed dual certificate), and `solve`, which dispatches to
+//! `trust.zig`. Uses @Vector(N, f64) + generic helpers for 3D math.
 //!
 //! Allocator convention:
 //!   - solve() takes any std.mem.Allocator. The returned Info.cert lives on
@@ -98,7 +99,7 @@ pub inline fn computeMoments(Ps: []const [2]f64, w: []const f64, s_scale: f64) M
 
 /// Damping controller for the axis update. Shrinks the step when |c|
 /// grew, grows it when |c| shrank, bounded in [algo.DAMP_MIN, algo.DAMP_MAX].
-/// (`pub` for the trust path's alternating-cadence opening rounds.)
+/// (`pub`: used by `trust.zig`'s opening rounds.)
 pub const DampState = struct {
     alpha: f64 = 1.0,
     prev_c_norm: f64 = 1e30,
@@ -114,39 +115,6 @@ pub const DampState = struct {
         self.prev_c_norm = c_norm;
     }
 };
-
-/// Quasi-Newton axis-update direction in the tangent plane. Returns u =
-/// M⁻¹·center (preconditioned by the 2D moment) when M is anisotropic
-/// enough to benefit; else u = center. u's magnitude is renormalized to
-/// ‖center‖, so on isotropic M the step is bit-identical to the old
-/// damped gradient, and the damping signal (`c_norm`, returned alongside)
-/// is ‖center‖ either way.
-///
-/// Skip the whole check for the first algo.AXIS_WARMUP iters — easy cases
-/// converge inside the warmup and pay zero preconditioner cost. See
-/// docs/mvee_derivation.md "Quasi-Newton axis update" appendix for history.
-pub const AxisStep = struct { u: Vec2, c_norm: f64 };
-
-pub inline fn quasiNewtonAxisDirection(outer: u32, M: Mat2, center: Vec2) AxisStep {
-    const c_norm = center.norm();
-    var u: Vec2 = center;
-    if (outer >= algo.AXIS_WARMUP and c_norm > tol.TINY) {
-        const eigM = eig2(M.m);
-        const eig_lo = eigM.vals[0];
-        const eig_hi = eigM.vals[1];
-        // cond(M) > algo.PRECOND_COND_MIN  ⟺  eig_hi > algo.PRECOND_COND_MIN · eig_lo,
-        // division-free and robust to a near-zero eig_lo that we'd
-        // otherwise guard separately.
-        if (eig_hi > algo.PRECOND_COND_MIN * eig_lo) {
-            const u_p = M.inverse().apply(center);
-            const u_norm_2d = u_p.norm();
-            if (u_norm_2d > tol.TINY) {
-                u = u_p.scale(c_norm / u_norm_2d);
-            }
-        }
-    }
-    return .{ .u = u, .c_norm = c_norm };
-}
 
 /// Feasibility-safeguarded b update, fused with the projection that the
 /// next cycle will consume. The raw step b + α·Q·u can walk b out of the
@@ -587,7 +555,7 @@ const newton = @import("newton.zig");
 const NewtonScratch = newton.NewtonScratch;
 const newtonPolish = newton.newtonPolish;
 
-// The trust solver path (`SolveOptions.method`).
+// The solver (`trust.solveTrust`).
 const trust = @import("trust.zig");
 
 // ----------------------------------------------------------------
@@ -610,36 +578,6 @@ pub const GapScratch = struct {
         };
     }
 };
-
-/// Per-call working buffers backing the outer loop. All allocations
-/// live on the scratch arena passed to `init`, so there's no `deinit` —
-/// `solve` frees the arena once at the end. The fields are mutable
-/// slices; methods that take them (`mveeFw`, `newtonPolish`,
-/// `dualityGapConstructed`, etc.) read or write directly.
-const WorkBuffers = struct {
-    P_buf: [][2]f64,
-    Ps: [][2]f64,
-    Ql: []Vec3,
-    w: []f64,
-    cert_active: []usize,
-    cert_lambdas: []f64,
-    newton_scratch: NewtonScratch,
-    gap_scratch: GapScratch,
-
-    fn init(scratch: std.mem.Allocator, nw: usize) !WorkBuffers {
-        return .{
-            .P_buf = try scratch.alloc([2]f64, nw),
-            .Ps = try scratch.alloc([2]f64, nw),
-            .Ql = try scratch.alloc(Vec3, nw),
-            .w = try scratch.alloc(f64, nw),
-            .cert_active = try scratch.alloc(usize, nw),
-            .cert_lambdas = try scratch.alloc(f64, nw),
-            .newton_scratch = try NewtonScratch.init(scratch, nw),
-            .gap_scratch = try GapScratch.init(scratch, nw),
-        };
-    }
-};
-
 
 // ----------------------------------------------------------------
 // Dual-certificate gap
@@ -916,7 +854,7 @@ fn isCoplanarInput(points: []const Vec3, b: Vec3, threshold: f64) bool {
     return tr <= 0 or 4.0 * det < threshold * tr * tr;
 }
 
-/// Preprocessed problem handed to a solver path: a strictly feasible
+/// Preprocessed problem handed to the solver: a strictly feasible
 /// axis, the (possibly hull-reduced) working point set, and the map
 /// back to the caller's original indices (`null` = identity).
 pub const Prep = struct {
@@ -932,7 +870,7 @@ const PrepResult = union(enum) {
     ready: Prep,
 };
 
-/// Steps shared by every solver path: input validation, Farkas
+/// Everything before the solver: input validation, Farkas
 /// feasibility check, optional hull reduction, coplanarity rejection.
 /// `scratch_alloc` backs `Xw`/`work_to_orig` (arena, freed by `solve`);
 /// `allocator` backs the Farkas cert on the infeasible branch.
@@ -982,9 +920,8 @@ fn preprocess(
     //      `InsufficientPoints` — both are "X is structurally bad."
     //      `coplanarity_tol <= 0` opts out of the NEAR-coplanar
     //      rejection only: exactly rank-deficient input is always
-    //      rejected (tol.COPLANAR_FLOOR), uniformly across solver
-    //      paths — there is no meaningful answer for it, and the
-    //      per-path alternatives were a max_outer burn vs. an internal
+    //      rejected (tol.COPLANAR_FLOOR) — there is no meaningful
+    //      answer for it, and letting it through surfaced an internal
     //      error mislabeled as a library bug.
     const cop_tol = if (opts.coplanarity_tol > 0) opts.coplanarity_tol else tol.COPLANAR_FLOOR;
     if (isCoplanarInput(hp.Xw, b, cop_tol)) {
@@ -994,119 +931,9 @@ fn preprocess(
     return .{ .ready = .{ .b0 = b, .Xw = hp.Xw, .work_to_orig = hp.work_to_orig } };
 }
 
-/// The alternating path: alternating axis/MVEE outer loop (FW + Newton polish
-/// + constructed dual certificate). This is the original `solve` body;
-/// see the module doc-comment for the algorithm.
-fn solveAlternating(
-    allocator: std.mem.Allocator,
-    scratch_alloc: std.mem.Allocator,
-    prep: Prep,
-    opts: SolveOptions,
-) !Outcome {
-    var b = prep.b0;
-    const Xw = prep.Xw;
-    const work_to_orig = prep.work_to_orig;
-    const nw = Xw.len;
-
-    // 3) Working buffers — all backed by the arena, freed once at the
-    //    end of `solve`.
-    var wb = try WorkBuffers.init(scratch_alloc, nw);
-
-    var damp = DampState{};
-    var outer_count: u32 = 0;
-    var converged = false;
-    var newton_polish_failures: u32 = 0;
-
-    // Eigen-data from the last gap call — feeds the converged/partial
-    // outcome's Q/sigma at finalization without a redundant eig2 + lift.
-    var last_gap = GapResult{ .gap = tol.GAP_UNCERTIFIED, .cert_n = 0, .v1 = Vec3.zero, .v2 = Vec3.zero, .sigma = .{ 0, 0 } };
-    // Axis at which last_gap was computed. The outer loop steps b AFTER
-    // certifying, so on DNC the final b is one step past the last
-    // certificate — returning (b_cert, last_gap) keeps the outcome's
-    // Q/sigma/gap a consistent snapshot of one iterate.
-    var b_cert = b;
-
-    // Orthonormal tangent basis at the current b. Rebuilt after each
-    // accepted step in the outer loop (trivial: one project-and-normalize
-    // plus one cross-and-normalize; see `Vec3.orthoBasis`).
-    var Q: Mat3x2 = b.orthoBasis();
-
-    // Seed P_buf/Ps/s_scale so the loop invariant holds on entry to the
-    // first cycle. `halfspaceCheck` guarantees b·xᵢ > 0 strictly (not
-    // necessarily ≥ algo.FEAS_MARGIN), so bypass the feasibility check here.
-    _ = projectGnomonic(Xw, b, Q, wb.P_buf, -std.math.inf(f64));
-    var s_scale: f64 = rescaleP(wb.P_buf, wb.Ps);
-
-    // FW weight init (sparse seed vs uniform, chosen by size — see initWeights).
-    initWeights(wb.Ps, wb.w);
-
-    // 4) Hybrid outer loop. Each outer iteration runs algo.FW_PER_NEWTON cycles
-    //    of (FW + b-update); only the last cycle also runs Newton polish +
-    //    gap check. Extra cheap cycles buy more b-motion per Newton call.
-    //    At algo.FW_PER_NEWTON = 1 this is the original one-FW-per-Newton
-    //    schedule; larger values amortise Newton's cost across more b-motion.
-    //
-    //    Loop invariant: on entry to each cycle, P_buf/Ps/s_scale correspond
-    //    to the current (b, Q). The accepted b-update at cycle end also
-    //    produces the next cycle's projection in one sweep.
-    var outer: u32 = 0;
-    outer_loop: while (outer < opts.max_outer) : (outer += 1) {
-        outer_count += 1;
-        var cycle: u32 = 0;
-        while (cycle < algo.FW_PER_NEWTON) : (cycle += 1) {
-            const is_full = (cycle == algo.FW_PER_NEWTON - 1);
-
-            mveeFw(wb.Ps, 1, 0.0, wb.Ql, wb.w);
-
-            if (is_full) {
-                if (!newtonPolish(wb.Ql, wb.w, algo.ACTIVE_THRESH, algo.POLISH_MAX_ITER, tol.NEWTON_INNER, &wb.newton_scratch)) {
-                    newton_polish_failures += 1;
-                }
-            }
-
-            const m = computeMoments(wb.Ps, wb.w, s_scale);
-
-            if (is_full) {
-                const A_perp = try recoverAPerp(wb.P_buf, m.M);
-                last_gap = try dualityGapConstructed(wb.w, b, Xw, A_perp, Q, &wb.gap_scratch, wb.cert_active, wb.cert_lambdas);
-                b_cert = b;
-                // Convergence + broken-certificate guard (see
-                // gapConverged for the load-bearing ordering).
-                if (try gapConverged(last_gap.gap, opts.gap_tol)) {
-                    converged = true;
-                    break :outer_loop;
-                }
-            }
-
-            const axis = quasiNewtonAxisDirection(outer, m.M, m.center);
-            damp.tick(axis.c_norm);
-            const step = acceptBUpdate(Xw, b, Q, axis.u, damp.alpha, wb.P_buf, wb.Ps);
-            b = step.b;
-            Q = step.Q;
-            s_scale = step.s_scale;
-        }
-    }
-
-    // 5) Build final cert (translate work indices back to original X indices)
-    //    and bundle the outcome. Shared with the trust path.
-    return buildOutcome(
-        allocator,
-        converged,
-        b_cert,
-        last_gap,
-        .{ .alternating = .{
-            .outer_iters = outer_count,
-            .newton_polish_failures = newton_polish_failures,
-        } },
-        wb.cert_active,
-        wb.cert_lambdas,
-        work_to_orig,
-    );
-}
-
 /// Classify a freshly computed certificate gap. Returns true when the
 /// solve is converged at `gap_tol`. ORDER MATTERS and is shared by
-/// every certification site in both solver paths: a converged-at-noise
+/// every certification site: a converged-at-noise
 /// gap can be slightly negative (seen on H3 r15 cells, gap ~ −5e-9
 /// from κ·ε noise) and must be ACCEPTED before the hard NegGap guard
 /// fires; anything meaningfully negative beyond `tol.NEG_GAP` is a
@@ -1121,8 +948,8 @@ pub fn gapConverged(gap: f64, gap_tol: f64) SolveError!bool {
     return false;
 }
 
-/// Shared finalization for the alternating and trust paths: translate the
-/// work-set certificate back to caller indices, bundle the full
+/// Bundle the final outcome: translate the work-set certificate back to
+/// caller indices, bundle the full
 /// eigendecomposition (Q's columns are (b, v1, v2) with eigenvalues
 /// (SIGMA_0, sigma[0], sigma[1]); v2 flipped if needed so det Q = +1),
 /// and wrap as Converged / DidNotConverge.
@@ -1180,7 +1007,8 @@ pub fn buildOutcome(
 ///
 /// Preprocessing (validation, Farkas feasibility, hull reduction,
 /// coplanarity rejection) is shared; `opts.method` selects the solver
-/// path that runs on the preprocessed working set (see `api.Method`).
+/// that runs on the preprocessed working set (see `api.Method`; today
+/// only `.trust`).
 pub fn solve(
     allocator: std.mem.Allocator,
     X: []const [3]f64,
@@ -1205,7 +1033,6 @@ pub fn solve(
     };
 
     switch (opts.method.resolved()) {
-        .alternating => return solveAlternating(allocator, scratch_alloc, prep, opts),
         .trust => return trust.solveTrust(allocator, scratch_alloc, prep, opts),
     }
 }

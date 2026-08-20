@@ -46,7 +46,9 @@ cells) — which solve in ~1–2 outer iterations and a few µs. Protect them:
   changed and flag it for human confirmation, don't silently bump an expectation.
 - Many finest-resolution S2/A5 cells hit an f64 gap floor above the strict 1e-6
   tolerance and honestly DNC there — not a bug. WHICH cells sit above vs below
-  the floor is path-dependent at noise level (`.trust` vs `.alternating`).
+  the floor is decided at FP-noise level, so it can shift with any change to
+  the iteration (it did when the alternating path was retired) — a shift
+  there is not by itself a regression.
 - **Discard the first launch of a freshly built binary.** It can run several
   times slower than steady state, and `bench.zig`'s in-process warm-up does not
   cover it — the penalty survives min-over-reps. Comparing a first launch
@@ -64,7 +66,7 @@ methodology is documented in `bench/core.zig` and `bench/ab.zig`.
 - `docs/trust-solver.md` — the trust solver (the `SolveOptions.method`
   default since the trust path landed): writeup, measurements, validation ledger.
 - `docs/away-step-fw.md` — staged proposal: away-step FW for the inner MVEE
-  solver (stage 1: reduced-oracle only; stage 2: alternating-path adoption).
+  solver (stage 1: reduced-oracle only; stage 2 is moot since #30).
 - `docs/algo-roadmap.md` — ranked candidates for future speed/convergence/
   stability work (range-space polish, elimination, cert-floor probe), plus
   the measured dead ends not to retry.

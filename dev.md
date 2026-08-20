@@ -143,8 +143,16 @@ kcov invocation:
   `--exclude-region` start/stop markers for blocks; add that flag back
   with its first user if one ever appears.)
 
-Before marking a line, exhaust these — each has an in-tree example:
+Before marking a line, exhaust these — each has an in-tree example. The
+first is a question, not a technique, and it comes first:
 
+- **Ask whether the code should exist.** An uncovered line is evidence
+  that nothing reaches it; before working out how to reach it, check
+  whether anything *should*. Removing the alternating path (PR #30) left the
+  quasi-Newton preconditioner in `quasiNewtonAxisDirection` uncovered:
+  the trust path's opening rounds never iterate far enough to engage it,
+  so it was dead with the shipped constants. It was deleted, along with
+  its two gating constants — not tested, not excluded.
 - **Construct an input.** The dogleg branches, re-cert convergence,
   TR step rejection, away-step stall, and degenerate-seed fallback
   all looked "unhittable" until tests constructed inputs.
@@ -339,7 +347,7 @@ nothing is written to disk.
 
 ## Examples
 
-Five single-file programs under `examples/`, each wired into
+Four single-file programs under `examples/`, each wired into
 `build.zig` via `addExample`:
 
 | Step | Source | Role |
@@ -348,9 +356,8 @@ Five single-file programs under `examples/`, each wired into
 | `ex-status` | `examples/status.zig` | Full `Outcome` switch with per-variant inspection. |
 | `ex-cases` | `examples/cases.zig` | Runs a bundled case by name (`-- hex`) or iterates the whole manifest (`-- --all`). |
 | `ex-bench` | `examples/bench.zig` | Per-case timing across a hand-picked subset. Forced to `.ReleaseFast` in `build.zig` regardless of the top-level optimize flag — Debug timings are noise. The `csar`/`cases` modules still inherit the project-wide optimize flag, which looks like it would bench a Debug solver but doesn't: the root module's mode governs codegen for the whole compilation (checked — byte-identical binary either way). |
-| `ex-compare` | `examples/compare.zig` | Alternating vs trust solver paths over the manifest and a random wide-cap grid (see `docs/trust-solver.md`). Also forced `.ReleaseFast`. |
 
 `addExample` accepts an optional optimize override (`null` inherits
-the project-wide flag); `ex-bench` and `ex-compare` use it. Examples
+the project-wide flag); only `ex-bench` uses it today. Examples
 also receive pass-through args after `--`; only `ex-cases` reads
 them today.

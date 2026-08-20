@@ -106,7 +106,7 @@ pub const InputError = error{
 /// These are the knobs a typical caller might legitimately want to
 /// twist (perf-vs-accuracy trade-offs, behavior toggles). Deeper
 /// tuning constants — Frank-Wolfe inner cycles, damping curve,
-/// backtracking, preconditioner gates — are kept internal in `algo`
+/// backtracking — are kept internal in `algo`
 /// because they interact subtly with each other.
 pub const SolveOptions = struct {
     /// Convergence threshold on the duality gap. Must be finite and
@@ -120,8 +120,9 @@ pub const SolveOptions = struct {
     /// at the default — correctly, since f64 cannot certify a tighter
     /// bound (the optimal cone axis is a sub-ulp rotation away). WHICH
     /// cells sit above vs below the floor at a tolerance near it is
-    /// path-dependent at noise level (the status is noisier than the
-    /// answer there; aspect ratios agree across paths to ~1e-7).
+    /// decided at noise level, so it can shift with any change to the
+    /// iteration (the status is noisier than the answer there; aspect
+    /// ratios agree to ~1e-7 regardless).
     /// Raising `max_outer` does NOT help at the floor; pass a looser
     /// `gap_tol` (e.g. 1e-3) for such inputs — the aspect ratio is
     /// input-precision-limited and accurate regardless of the gap.
@@ -144,15 +145,11 @@ pub const SolveOptions = struct {
     /// path.
     coplanarity_tol: f64 = 1e-12,
 
-    /// Iteration cap before returning `Outcome.did_not_converge`.
-    /// What one tick costs depends on `method`: on `.alternating`, an
-    /// outer iteration is `algo.FW_PER_NEWTON` cheap FW cycles + one
-    /// Newton polish + one gap check; on `.trust` (the default via
-    /// `.auto`), the budget counts opening rounds, trust-region
-    /// iterations (each a full-precision inner-oracle evaluation —
-    /// substantially more work per tick), and re-certification
-    /// attempts. The trust path can also stop BELOW the cap when its
-    /// merit function is stationary — see `DidNotConverge`.
+    /// Iteration cap before returning `Outcome.did_not_converge`. The
+    /// budget counts opening rounds, trust-region iterations (each a
+    /// full-precision inner-oracle evaluation) and re-certification
+    /// attempts. The solver can also stop BELOW the cap when its merit
+    /// function is stationary — see `DidNotConverge`.
     max_outer: u32 = 100,
 
     /// Solver path selection.
@@ -165,31 +162,18 @@ pub const SolveOptions = struct {
     ///            need version-stable solver behavior.
     ///   .trust — trust-region descent on the reduced convex
     ///            objective h(b) = min_A(−log det A) over the
-    ///            sphere, using the alternating path's inner MVEE
-    ///            machinery as the oracle and the same certification
-    ///            (see src/trust.zig and docs/trust-solver.md).
-    ///            Converges on every input family constructed to date,
-    ///            including the wide-angle/elongated inputs .alternating
-    ///            structurally cannot (dense caps past ~82°, regions
-    ///            like France at the default iteration budget), at DGGS
-    ///            success-speed parity.
-    ///   .alternating — the original solver: alternates single
-    ///            Frank–Wolfe weight steps with damped axis steps.
-    ///            Kept for continuity (bit-stable with pre-0.6.0
-    ///            defaults) and for large dense near-circular inputs,
-    ///            where it can still be ~2× faster; limit-cycles on
-    ///            dense inputs spanning ≳ 81° from the optimal axis.
-    ///
-    /// Which cells certify at a tolerance near the f64 gap floor
-    /// (finest-resolution S2/A5) differs between paths at noise level;
-    /// aspect ratios agree to ~1e-7 relative wherever both certify.
+    ///            sphere, with an inner MVEE oracle and a constructed
+    ///            dual certificate (see src/trust.zig and
+    ///            docs/trust-solver.md). Converges on every input
+    ///            family constructed to date, including wide-angle /
+    ///            elongated inputs (dense caps past ~82°, regions like
+    ///            France at the default iteration budget).
     method: Method = .auto,
 };
 
 /// Solver path selector for `SolveOptions.method` (see that field's
 /// doc-comment for the semantics of each variant).
 pub const Method = enum {
-    alternating,
     trust,
     auto,
 
@@ -200,62 +184,47 @@ pub const Method = enum {
     pub const recommended: Method = .trust;
 
     /// The concrete methods `.auto` can resolve to — `resolved()`'s
-    /// return type, so dispatch switches are exhaustive by
-    /// construction (no unreachable arm to defend).
-    pub const Resolved = enum { alternating, trust };
+    /// return type, which `solve` switches on exhaustively. A second
+    /// solver is one arm here and one in `solve`.
+    pub const Resolved = enum { trust };
 
     /// Resolve `.auto` to its concrete method; concrete methods map to
-    /// themselves. `solve`'s dispatch switches on this. The comptime
-    /// conversion makes pointing `recommended` back at `.auto` a
-    /// compile error rather than a cycle.
+    /// themselves. The comptime conversion makes pointing `recommended`
+    /// back at `.auto` a compile error rather than a cycle.
     pub fn resolved(self: Method) Resolved {
         return switch (self) {
             .auto => comptime @field(Resolved, @tagName(recommended)),
-            .alternating => .alternating,
             .trust => .trust,
         };
     }
 };
 
-/// Per-algorithm diagnostics, tagged by the solver path that produced
-/// the outcome. The mathematical contract — Q, sigma, gap, cert — is
-/// shared and method-independent; everything in here is diagnostic and
-/// algorithm-specific, so each path gets its own well-typed struct
-/// instead of overloading shared counters. The tag records the
-/// concrete path that ran; under `method = .auto` that is
-/// `Method.recommended`.
+/// Solver diagnostics, tagged by the solver that ran. The mathematical
+/// contract — Q, sigma, gap, cert — is method-independent; everything
+/// in here is algorithm-specific, so each solver carries its own typed
+/// counters. Today the only tag is `.trust` (what `.auto` resolves to);
+/// the union is the seam for a second solver.
 pub const Diagnostics = union(enum) {
-    alternating: AlternatingDiagnostics,
     trust: TrustDiagnostics,
 
-    /// Total solver iterations regardless of path — a rough effort
-    /// number for logs and tables. The per-path fields are the
-    /// meaningful quantities; do not compare totals across paths.
+    /// Sum of the per-phase counters — a rough effort number for logs
+    /// and tables. The typed per-phase fields are the meaningful
+    /// quantities.
     pub fn totalIters(self: Diagnostics) u32 {
         return switch (self) {
-            .alternating => |d| d.outer_iters,
             .trust => |d| d.open_iters + d.tr_iters + d.recert_attempts,
         };
     }
 };
 
-/// Diagnostics for the alternating path.
-pub const AlternatingDiagnostics = struct {
-    /// Outer (axis) iterations executed.
-    outer_iters: u32,
-    /// Outer iterations where Newton polish bailed and the raw FW
-    /// weights were used for that cycle's certificate.
-    newton_polish_failures: u32,
-};
-
 /// Diagnostics for the trust path (see docs/trust-solver.md for the
 /// phase vocabulary).
 pub const TrustDiagnostics = struct {
-    /// The eager iteration-0 certificate (the alternating path's
-    /// opening cadence at the initial axis) ended the solve.
+    /// The eager iteration-0 certificate (the opening cadence at the
+    /// initial axis) ended the solve.
     eager_certified: bool,
-    /// Alternating-cadence opening iterations run after the eager
-    /// certificate (0..config.trust.OPEN_ROUNDS): cheap certified
+    /// Opening iterations (axis step / MVEE alternation) run after the
+    /// eager certificate (0..config.trust.OPEN_ROUNDS): cheap certified
     /// axis-motion rounds before any trust-region work. A solve that
     /// converges here has tr_iters == 0 and recert_attempts == 0.
     open_iters: u32,
@@ -407,8 +376,7 @@ pub const Outcome = union(enum) {
     /// (bounded by `Infeasible.residual`; see that doc).
     infeasible: Infeasible,
     /// The gap did not close, either because the iteration budget
-    /// (`max_outer`) ran out or — on the trust path — because the
-    /// solver reached a stationary point whose certificate stays
+    /// (`max_outer`) ran out or because the solver reached a stationary point whose certificate stays
     /// above `gap_tol` (the f64 gap floor; retrying with a larger
     /// `max_outer` changes nothing there — loosen `gap_tol` instead,
     /// see its doc). Last certified iterate is available for

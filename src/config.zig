@@ -14,9 +14,9 @@ pub const SIGMA_0: f64 = 1.0 / @sqrt(3.0);
 /// can break convergence. Adjust here if you're working on the algorithm
 /// itself; user-facing tuning is in `SolveOptions`.
 pub const algo = struct {
-    /// Number of (project + FW + b-update) cycles per outer iteration.
-    /// Only the final cycle of each outer iteration runs Newton polish
-    /// + gap check. FW_PER_NEWTON = 1 is the original behaviour.
+    /// FW steps per opening round (and in the eager certificate)
+    /// between Newton polishes: only the final cycle of a round runs
+    /// Newton polish + gap check.
     pub const FW_PER_NEWTON: u32 = 2;
 
     /// Damping curve for the b-update: shrink alpha when |c| grew,
@@ -62,8 +62,7 @@ pub const algo = struct {
     /// switching noise is below what any practical gap_tol resolves.
     pub const ACTIVE_THRESH: f64 = 1e-12;
 
-    /// Newton-polish iteration budget, shared by every polish call
-    /// site on both solver paths.
+    /// Newton-polish iteration budget, shared by every polish call site.
     pub const POLISH_MAX_ITER: u32 = 20;
 
     /// Feasibility-cone margin for the backtracking b-update. Each
@@ -72,17 +71,6 @@ pub const algo = struct {
     pub const FEAS_MARGIN: f64 = 1e-8;
     pub const MAX_BACKTRACKS: u32 = 30;
 
-    /// Quasi-Newton b-update gate: only precondition the axis step by
-    /// M⁻¹ when cond(M) exceeds this. For near-isotropic M (hex, DGGS
-    /// cells, rotations near coordinate axes) the preconditioner adds
-    /// sub-ULP direction noise that interacts badly with damping after
-    /// Newton polish; the plain gradient step is used instead.
-    pub const PRECOND_COND_MIN: f64 = 1.2;
-
-    /// Skip the quasi-Newton machinery for the first `AXIS_WARMUP`
-    /// outer iterations. Easy cases (hex, most DGGS cells) converge
-    /// in ≤ this, so they pay zero preconditioner overhead.
-    pub const AXIS_WARMUP: u32 = 2;
 
     /// Sparse Frank-Wolfe weight initialization, gated on input size.
     ///
@@ -121,20 +109,19 @@ pub const algo = struct {
 
 };
 
-/// Tuning for the trust solver path (`src/trust.zig`, the
-/// `SolveOptions.method` default): trust-region descent on the reduced
-/// convex objective h(b) over the sphere, with the alternating path's inner
-/// MVEE machinery as the oracle. Values tuned and validated across the
+/// Tuning for the trust solver (`src/trust.zig`, what `SolveOptions.method`
+/// defaults to): trust-region descent on the reduced convex objective h(b)
+/// over the sphere, with `csar.zig`'s chart MVEE primitives as the
+/// oracle. Values tuned and validated across the
 /// DGGS surveys, states/countries, and the wide-cap grid — see
 /// docs/trust-solver.md for the tuning history and measurements.
 pub const trust = struct {
-    /// Alternating-cadence opening rounds after the eager iteration-0
-    /// certificate, before any trust-region work. Each round is one
-    /// alternating-path outer iteration (FW_PER_NEWTON cheap FW cycles
-    /// with axis motion, Newton polish + certificate on the last),
-    /// warm-started from the eager phase's weights. Motivation:
-    /// mid-size DGGS cells (H3 r9 class, common A5 cells) certify in
-    /// 1–2 alternating iterations, while the full trust apparatus
+    /// Opening rounds after the eager iteration-0 certificate, before
+    /// any trust-region work. Each round: FW_PER_NEWTON cheap FW cycles
+    /// with a damped axis step along the centroid, Newton polish +
+    /// certificate on the last, warm-started from the eager phase's
+    /// weights. Motivation: mid-size DGGS cells (H3 r9 class, common A5
+    /// cells) certify in 1–2 of these, while the full trust apparatus
     /// (full-precision oracle, TR step, RECERT) costs 3–6× wall time
     /// on them. The rounds are a bounded prefix, so hard inputs lose
     /// at most OPEN_ROUNDS cheap iterations (~2 µs each at n = 200)
@@ -244,8 +231,8 @@ pub const trust = struct {
     /// a certified gap ≤ tol. Near the f64 gap floor the constructed
     /// certificate is sensitive to the incidental weight state at
     /// noise amplitude (measured on A5 res-30: the first cert's
-    /// M-Cholesky fails for the alternating path too — it succeeds on its
-    /// second outer iteration purely by re-sampling w). Each attempt
+    /// M-Cholesky fails; after one axis micro-step it succeeds, purely
+    /// by re-sampling w). Each attempt
     /// re-runs the oracle at the fixed near-optimal axis (FW steps at
     /// noise level + a fresh polish perturb w) and re-certifies.
     /// Bounded so genuinely floored cells stop instead of burning the
@@ -265,9 +252,9 @@ pub const tol = struct {
     /// points): relative Tikhonov mass on the 6×6 G² block of the
     /// bordered range-space KKT system. Same recipe and value as
     /// `trust.HESS_REG`, which regularizes the same rank-≤ 6 Schur-
-    /// square structure — kept as a separate constant so that retuning
-    /// the trust path's knobs can never silently reshape the shared
-    /// polish that BOTH solver paths run. Benign: the projected RHS V·g
+    /// square structure — kept as a separate constant because the two
+    /// regularize different systems (polish KKT vs. TR model Hessian)
+    /// and must stay tunable independently. Benign: the projected RHS V·g
     /// lies in range(G) by construction, so there is no null component
     /// to amplify, and the perturbation is a ~1e-10 relative
     /// linear-contraction term in the Newton recursion — no floor above
@@ -309,12 +296,11 @@ pub const tol = struct {
     /// caller disables the tunable check (`coplanarity_tol <= 0`).
     /// Exactly rank-deficient input has NO meaningful enclosing-cone
     /// answer (one tangent eigenvalue -> 0, AR -> inf), and letting it
-    /// through only buys a max_outer burn (alternating) or an internal
-    /// SolveError mislabeled as a library bug (trust) — per-path
-    /// garbage for the same input. Several orders below the 1e-12
+    /// through only buys an internal SolveError mislabeled as a library
+    /// bug. Several orders below the 1e-12
     /// default so the opt-out keeps its meaning ("handle NEAR-coplanar
     /// yourself") while f64-exact degeneracy is always rejected as the
-    /// typed InputError.CoplanarInput on every path.
+    /// typed InputError.CoplanarInput.
     pub const COPLANAR_FLOOR: f64 = 1e-24;
     /// Sentinel gap meaning "no certificate could be constructed"
     /// (zero active points, or the dual moment's Cholesky failed).

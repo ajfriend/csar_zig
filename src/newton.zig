@@ -2,7 +2,7 @@
 //!
 //! Pieces:
 //! - `NewtonScratch`: per-call scratch (allocated on the solve arena);
-//!   exposed because `WorkBuffers` in `csar.zig` aggregates it.
+//!   exposed because `trust.zig`'s `Buffers` aggregates it.
 //! - `newtonPolish`: the inner iteration. Mutates the weight vector
 //!   `w` in place; inactive entries reset to 0 on exit.
 //!
