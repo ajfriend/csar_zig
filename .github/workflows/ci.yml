@@ -20,10 +20,31 @@ jobs:
         run: zig build
       - name: Test (including slow stress tests)
         run: zig build test -Dslow=true
-      - name: Coverage gate + exclusion ledger
+      - uses: extractions/setup-just@v3
+      - name: Cache kcov
+        id: kcov-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/kcov
+          key: kcov-v43-${{ runner.os }}-${{ runner.arch }}
+      - name: Build kcov
+        # kcov is not in ubuntu-latest's apt repos and publishes no
+        # binaries; build v43 (matching the local version) from source.
+        if: steps.kcov-cache.outputs.cache-hit != 'true'
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq kcov just jq
+          sudo apt-get install -y -qq binutils-dev libdw-dev libelf-dev libcurl4-openssl-dev cmake
+          git clone --depth 1 --branch v43 https://github.com/SimonKagstrom/kcov /tmp/kcov-src
+          cmake -S /tmp/kcov-src -B /tmp/kcov-build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$HOME/kcov"
+          cmake --build /tmp/kcov-build -j"$(nproc)"
+          cmake --install /tmp/kcov-build
+      - name: Coverage gate + exclusion ledger
+        run: |
+          # runtime libs for the (possibly cache-restored) kcov binary
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libdw1t64 || sudo apt-get install -y -qq libdw1
+          export PATH="$HOME/kcov/bin:$PATH"
+          kcov --version
           just test-slow 2>&1 | tee gate.log
           { echo '### Coverage'; echo '```'; sed -n '/^csar coverage:/,$p' gate.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - name: Post exclusion ledger on PR

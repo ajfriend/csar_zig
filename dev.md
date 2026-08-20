@@ -7,8 +7,9 @@
 - **[just](https://github.com/casey/just)** — task runner.
   `brew install just`.
 - **[kcov](https://github.com/SimonKagstrom/kcov)** — line-coverage tool
-  used by `just test-slow`. `brew install kcov` on macOS,
-  `apt-get install kcov` on Debian/Ubuntu.
+  used by `just test-slow`. `brew install kcov` on macOS; on Linux it's
+  no longer in the Ubuntu repos — build v43 from source (see the
+  "Build kcov" step in `.github/workflows/ci.yml` for the recipe).
 - **[jq](https://stedolan.github.io/jq/)** — used by `just test-slow` to
   check the coverage threshold. `brew install jq` / `apt-get install jq`.
 
