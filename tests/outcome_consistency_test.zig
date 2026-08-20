@@ -18,7 +18,7 @@ test "budget-limited trust DNC returns a self-consistent certified snapshot" {
     // gap. The outcome must now be the last certified iterate:
     // Q orthonormal to roundoff.
     const allocator = std.testing.allocator;
-    const pts = (cases.byName("wide_cap89") orelse unreachable).points;
+    const pts = helpers.casePoints("wide_cap89");
     var o = try csar.solve(allocator, pts, .{ .method = .trust, .max_outer = 4, .gap_tol = 1e-9 });
     defer o.deinit();
     // Status may be either (converged if the budget suffices on some
@@ -57,7 +57,7 @@ test "alternating DNC snapshot is also self-consistent" {
     // damped axis step rather than several TR steps — smaller, but the
     // same class). Wide caps DNC structurally under .alternating.
     const allocator = std.testing.allocator;
-    const pts = (cases.byName("wide_cap82") orelse unreachable).points;
+    const pts = helpers.casePoints("wide_cap82");
     var o = try csar.solve(allocator, pts, .{ .method = .alternating });
     defer o.deinit();
     try std.testing.expect(std.meta.activeTag(o) == .did_not_converge);

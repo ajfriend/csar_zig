@@ -110,12 +110,10 @@ test "updateRadius: every ρ band of the tuned radius policy" {
 
     // Very successful (ρ ≥ ETA_GOOD) with a radius-limited step: GROW,
     // capped at DELTA_MAX. A short interior step does not grow.
-    try std.testing.expectEqual(1.0 * tc.GROW, trust.updateRadius(1.0, tc.ETA_GOOD, 1.0).delta);
-    try std.testing.expectEqual(tc.DELTA_MAX, trust.updateRadius(3.0, 0.99, 3.0).delta);
-    try std.testing.expectEqual(1.0, trust.updateRadius(1.0, 0.99, 0.5).delta);
+    try std.testing.expectEqual(@min(1.0 * tc.GROW, tc.DELTA_MAX), trust.updateRadius(1.0, tc.ETA_GOOD, 1.0).delta);
+    try std.testing.expectEqual(tc.DELTA_MAX, trust.updateRadius(tc.DELTA_MAX, tc.ETA_GOOD, tc.DELTA_MAX).delta);
+    try std.testing.expectEqual(1.0, trust.updateRadius(1.0, tc.ETA_GOOD, 0.9 * tc.GROW_MIN_STEP_FRAC).delta);
 }
-
-const ellipseBoundary = helpers.ellipseBoundary;
 
 test "trust: extreme-anisotropy and arc inputs traverse rejected steps and clipped doglegs" {
     // Wide, strongly anisotropic caps and open arcs start the trust
@@ -146,7 +144,7 @@ test "trust: extreme-anisotropy and arc inputs traverse rejected steps and clipp
     var total_tr_iters: u32 = 0;
     for (shapes) |s| {
         const pts_v = buf[0..24];
-        ellipseBoundary(center, s.ha, s.ha / s.ratio, 0.1, s.arc, pts_v);
+        helpers.ellipseBoundary(center, s.ha, s.ha / s.ratio, 0.1, s.arc, pts_v);
         const pts: [][3]f64 = @ptrCast(pts_v);
         var o = try csar.solve(allocator, pts, .{});
         defer o.deinit();
@@ -175,7 +173,7 @@ test "trust: tight gap_tol converges through the re-certification phase" {
     const allocator = std.testing.allocator;
     const center = (Vec3{ .m = .{ 0.3, -0.2, 1.0 } }).normalize();
     var buf: [12]Vec3 = undefined;
-    ellipseBoundary(center, 0.5, 0.1, 0.3, 2.0 * std.math.pi, buf[0..12]);
+    helpers.ellipseBoundary(center, 0.5, 0.1, 0.3, 2.0 * std.math.pi, buf[0..12]);
     const pts: [][3]f64 = @ptrCast(buf[0..12]);
     var o = try csar.solve(allocator, pts, .{ .gap_tol = 1e-8 });
     defer o.deinit();

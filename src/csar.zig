@@ -1059,7 +1059,7 @@ fn solveAlternating(
             mveeFw(wb.Ps, 1, 0.0, wb.Ql, wb.w);
 
             if (is_full) {
-                if (!newtonPolish(wb.Ql, wb.w, algo.ACTIVE_THRESH, 20, tol.NEWTON_INNER, &wb.newton_scratch)) {
+                if (!newtonPolish(wb.Ql, wb.w, algo.ACTIVE_THRESH, algo.POLISH_MAX_ITER, tol.NEWTON_INNER, &wb.newton_scratch)) {
                     newton_polish_failures += 1;
                 }
             }

@@ -40,11 +40,16 @@ pub fn ellipseBoundary(center: Vec3, half_a: f64, half_b: f64, phase: f64, arc: 
     }
 }
 
+/// Points of a bundled manifest case; the fixture must exist or the
+/// suite is broken.
+pub fn casePoints(name: []const u8) []const [3]f64 {
+    return (cases.byName(name) orelse unreachable).points;
+}
+
 /// The parts of a resolvable (converged / DNC) outcome that tolerant
 /// tests read without caring which way a platform-sensitive solve
-/// landed. Both arms are exercised deterministically on every platform
-/// by the coverage test below, so tolerant call sites carry no
-/// platform-dependent coverage holes.
+/// landed. Both arms are pinned by the coverage test below (see
+/// dev.md "Coverage exclusions", the deterministic-sibling technique).
 pub const ResolvedView = struct { converged: bool, Q: csar.Mat3, diag: csar.Diagnostics };
 
 pub fn resolvedView(o: *const csar.Outcome) ResolvedView {
@@ -65,13 +70,12 @@ pub fn expectOrthonormalQ(Qm: csar.Mat3) !void {
     try std.testing.expect(@abs(c0.dot(c0) - 1.0) < 1e-10);
 }
 
-/// A solve that DNCs deterministically on every platform: wide_cap89
-/// clamped to a single outer iteration. The wide-cap eager certificate
-/// fails by construction (see docs/wide-cap-dnc-report.md), so one
-/// iteration cannot certify. A shift here is a regression signal, not
-/// a number to bump. Caller owns the outcome.
+/// A solve that DNCs deterministically on every platform (wide_cap89
+/// clamped to one outer iteration; its eager certificate fails by
+/// construction — docs/wide-cap-dnc-report.md). A shift here is a
+/// regression signal, not a number to bump. Caller owns the outcome.
 pub fn solveClampedWideCapDnc(allocator: std.mem.Allocator) !csar.Outcome {
-    const pts = (cases.byName("wide_cap89") orelse unreachable).points;
+    const pts = casePoints("wide_cap89");
     return csar.solve(allocator, pts, .{ .method = .trust, .max_outer = 1 });
 }
 
@@ -79,7 +83,7 @@ test "resolvedView: both arms, deterministic on all platforms; snapshot Q orthon
     const allocator = std.testing.allocator;
 
     // Converged arm: the easy bundled hexagon.
-    const hex_pts = (cases.byName("hex") orelse unreachable).points;
+    const hex_pts = casePoints("hex");
     var conv = try csar.solve(allocator, hex_pts, .{ .method = .trust });
     defer conv.deinit();
     const cv = resolvedView(&conv);

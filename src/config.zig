@@ -62,6 +62,10 @@ pub const algo = struct {
     /// switching noise is below what any practical gap_tol resolves.
     pub const ACTIVE_THRESH: f64 = 1e-12;
 
+    /// Newton-polish iteration budget, shared by every polish call
+    /// site on both solver paths.
+    pub const POLISH_MAX_ITER: u32 = 20;
+
     /// Feasibility-cone margin for the backtracking b-update. Each
     /// outer step requires `min_i(b_new · xᵢ) ≥ FEAS_MARGIN`; α is
     /// halved up to MAX_BACKTRACKS times until the new b satisfies it.

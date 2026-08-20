@@ -18,15 +18,12 @@ problem). Core: `src/csar.zig` (`solve`, the outer loop, `mveeFw` inner MVEE),
 
 ## Build & test
 
-- `just ci` — everything CI checks that can run on this machine (compile check
-  + full gate + self-hosted-backend suite where supported). **Run before
-  pushing a PR.**
-- `just test` — fast unit suite (sub-second inner loop).
-- `just test-slow` — full suite + the **enforced 100% line-coverage gate**
-  (kcov) + the exclusion ledger. This — not bare `zig build test` — is the
-  pre-commit / CI check. Coverage exclusions are governed by dev.md "Coverage
-  exclusions": read it before marking anything excluded; the ledger is posted
-  on every PR and growth is reviewed.
+- **Run `just ci` before pushing a PR** — everything CI checks that can run on
+  this machine. `just test` is the fast inner loop; `just test-slow` is the
+  gate (enforced 100% line coverage + exclusion ledger) — not bare
+  `zig build test`. Per-command detail: dev.md's table.
+- Coverage exclusions are governed by dev.md "Coverage exclusions" — read it
+  before marking anything excluded; the ledger is posted on every PR.
 - The suite must pass under BOTH zig backends (LLVM and self-hosted); CI runs
   both. See dev.md "Two backends".
 - `zig build ex-bench` — per-case timing (ReleaseFast, 100 reps).

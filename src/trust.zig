@@ -208,7 +208,7 @@ pub fn evalH(
         if (chk.h >= h_prev - tc.INNER_STALL_REL * (1.0 + @abs(chk.h))) break;
         h_prev = chk.h;
     }
-    const polished = newtonPolish(wb.Ql, wb.w, algo.ACTIVE_THRESH, 20, tol.NEWTON_INNER, &wb.newton_scratch);
+    const polished = newtonPolish(wb.Ql, wb.w, algo.ACTIVE_THRESH, algo.POLISH_MAX_ITER, tol.NEWTON_INNER, &wb.newton_scratch);
 
     const ds = designState(wb.Ql, wb.w, s_scale) orelse return null;
     const L = ds.L;
@@ -517,7 +517,7 @@ pub fn solveTrust(
         var s_scale = core.rescaleP(wb.P_buf, wb.Ps);
         core.initWeights(wb.Ps, wb.w);
         core.mveeFw(wb.Ps, algo.FW_PER_NEWTON, 0.0, wb.Ql, wb.w);
-        if (!newtonPolish(wb.Ql, wb.w, algo.ACTIVE_THRESH, 20, tol.NEWTON_INNER, &wb.newton_scratch)) polish_failures += 1;
+        if (!newtonPolish(wb.Ql, wb.w, algo.ACTIVE_THRESH, algo.POLISH_MAX_ITER, tol.NEWTON_INNER, &wb.newton_scratch)) polish_failures += 1;
         var m = core.computeMoments(wb.Ps, wb.w, s_scale);
         last_gap = try certifyAt(m.M, Q, b, Xw, &wb);
         b_cert = b;
@@ -548,7 +548,7 @@ pub fn solveTrust(
             core.mveeFw(wb.Ps, 1, 0.0, wb.Ql, wb.w);
             const is_full = (cycle % algo.FW_PER_NEWTON == algo.FW_PER_NEWTON - 1);
             if (is_full) {
-                if (!newtonPolish(wb.Ql, wb.w, algo.ACTIVE_THRESH, 20, tol.NEWTON_INNER, &wb.newton_scratch)) polish_failures += 1;
+                if (!newtonPolish(wb.Ql, wb.w, algo.ACTIVE_THRESH, algo.POLISH_MAX_ITER, tol.NEWTON_INNER, &wb.newton_scratch)) polish_failures += 1;
             }
             m = core.computeMoments(wb.Ps, wb.w, s_scale);
             if (is_full) {
@@ -586,11 +586,8 @@ pub fn solveTrust(
     while (!converged and open_iters + tr_iters < opts.max_outer) {
         tr_iters += 1;
 
-        // The model Hessian is PSD-in-exact-arithmetic near inner
-        // optimality but can go indefinite from roundoff or far-field
-        // states; fall back to the derived isotropic value (≈ its own
-        // circular-optimum limit) so the dogleg's prediction is
-        // positive whenever g ≠ 0.
+        // The model Hessian can go indefinite from roundoff or
+        // far-field states (see ISO_B / doglegStepRobust).
         var B = cur.B;
         if (!(B.det() > 0) or !(B.m[0] > 0)) B = ISO_B; // negated form: NaN falls back too
 
@@ -610,7 +607,6 @@ pub fn solveTrust(
         const rho: f64 = if (trial) |t| (cur.h - t.h) / step.pred else -1.0;
         const rd = updateRadius(delta, rho, step.u.norm());
         if (!rd.accepted) {
-            // Reject: restore the warm-start weights and shrink.
             @memcpy(wb.w, wb.w_bak);
             delta = rd.delta;
             if (rd.hit_floor) break;
@@ -665,7 +661,7 @@ pub fn solveTrust(
         while (recert_attempts < tc.RECERT_MAX and open_iters + tr_iters + recert_attempts < opts.max_outer) {
             recert_attempts += 1;
             core.mveeFw(wb.Ps, 1, 0.0, wb.Ql, wb.w);
-            if (!newtonPolish(wb.Ql, wb.w, algo.ACTIVE_THRESH, 20, tol.NEWTON_INNER, &wb.newton_scratch)) polish_failures += 1;
+            if (!newtonPolish(wb.Ql, wb.w, algo.ACTIVE_THRESH, algo.POLISH_MAX_ITER, tol.NEWTON_INNER, &wb.newton_scratch)) polish_failures += 1;
             const m = core.computeMoments(wb.Ps, wb.w, s_scale);
             last_gap = try certifyAt(m.M, Q, b, Xw, &wb);
             b_cert = b;

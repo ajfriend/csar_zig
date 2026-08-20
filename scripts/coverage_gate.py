@@ -28,13 +28,14 @@ import json
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 TEST_BINARY = 'zig-out/bin/csar-test'
 LOG = Path('zig-out/test-slow.log')
 GATED_DIR = Path('coverage')
-RAW_DIR = Path('coverage_raw')
 SUMMARY = GATED_DIR / 'summary.txt'
+SUMMARY_MD = GATED_DIR / 'summary.md'  # fenced form; CI puts it in the step summary + PR comment
 INCLUDE_PATTERN = 'src/,tests/'
 # Exclusion rules (see dev.md "Coverage exclusions"): `=> unreachable`
 # switch arms can never execute in a passing run; `kcov-excl` markers
@@ -52,15 +53,18 @@ def run_kcov(args, out_dir, mode='w'):
         ).returncode
 
 
-def coverage_json(out_dir):
+def data_dir(out_dir):
     dirs = [p for p in out_dir.glob('csar-test.*') if p.is_dir()]
     if len(dirs) != 1:
         sys.exit(f'expected exactly 1 {out_dir}/csar-test.*/ dir, got {len(dirs)}')
-    return json.loads((dirs[0] / 'coverage.json').read_text())
+    return dirs[0]
 
 
-for d in (GATED_DIR, RAW_DIR):
-    shutil.rmtree(d, ignore_errors=True)
+def coverage_json(out_dir):
+    return json.loads((data_dir(out_dir) / 'coverage.json').read_text())
+
+
+shutil.rmtree(GATED_DIR, ignore_errors=True)
 
 # Gated pass: runs the suite under kcov with the exclusion rules.
 if run_kcov([f'--exclude-line={EXCLUDE_LINE}'], GATED_DIR) != 0:
@@ -68,12 +72,18 @@ if run_kcov([f'--exclude-line={EXCLUDE_LINE}'], GATED_DIR) != 0:
     sys.exit(1)
 print(LOG.read_text().splitlines()[-1])  # e.g. "All 53 tests passed."
 
-# Raw pass: reclassify the same collected data without the rules.
-shutil.copytree(GATED_DIR, RAW_DIR)
-run_kcov(['--report-only'], RAW_DIR, mode='a')
-
 gated = coverage_json(GATED_DIR)
-raw = coverage_json(RAW_DIR)
+
+# Raw pass: reclassify the same collected data without the rules, in a
+# throwaway copy (only the per-binary data dir; kcov regenerates the
+# rest, and the raw hit data is lossy and never consulted anyway).
+with tempfile.TemporaryDirectory() as tmp:
+    raw_dir = Path(tmp) / 'raw'
+    raw_dir.mkdir()
+    src = data_dir(GATED_DIR)
+    shutil.copytree(src, raw_dir / src.name)
+    run_kcov(['--report-only'], raw_dir, mode='a')
+    raw = coverage_json(raw_dir)
 
 root = str(Path.cwd()) + '/'
 gated_totals = {f['file']: int(f['total_lines']) for f in gated['files']}
@@ -83,11 +93,14 @@ excluded = sorted(
     if int(f['total_lines']) > gated_totals.get(f['file'], 0)
 )
 
-lines = [f'csar coverage: {gated["percent_covered"]}%']
-lines.append(f'coverage exclusions: {sum(d for _, d in excluded)} lines excluded from the gate')
-lines.extend(f'  {name}: {d}' for name, d in excluded)
-SUMMARY.write_text('\n'.join(lines) + '\n')
-print('\n'.join(lines))
+text = '\n'.join([
+    f'csar coverage: {gated["percent_covered"]}%',
+    f'coverage exclusions: {sum(d for _, d in excluded)} lines excluded from the gate',
+    *(f'  {name}: {d}' for name, d in excluded),
+]) + '\n'
+SUMMARY.write_text(text)
+SUMMARY_MD.write_text(f'```\n{text}```\n')
+print(text, end='')
 
 if float(gated['percent_covered']) < GATE_PERCENT:
     sys.exit(1)

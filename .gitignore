@@ -5,4 +5,3 @@ scripts/states/data/
 scripts/countries/data/
 .claude/
 .DS_Store
-coverage_raw/

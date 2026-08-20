@@ -17,6 +17,7 @@ const std = @import("std");
 const csar = @import("../src/root.zig");
 const cases = @import("cases");
 const helpers = @import("helpers.zig");
+const csar_core = @import("../src/csar.zig");
 
 const GAP_TOL: f64 = 1e-6;
 /// The certified gap bounds primal suboptimality, but AR is a ratio of
@@ -26,12 +27,6 @@ const AR_REF_REL_TOL: f64 = 1e-3;
 /// Both solvers converge to the same optimum; both carry ~gap-sized
 /// slack in the AR.
 const AR_AGREE_REL_TOL: f64 = 1e-4;
-
-/// Points of a wide-cap manifest case (tests/cases/zon/wide_cap*.zon —
-/// the single home of the fixture data).
-fn wideCap(name: []const u8) []const [3]f64 {
-    return (cases.byName(name) orelse unreachable).points;
-}
 
 test "trust: wide-cap iteration ceilings (CANARY-style) + Clarabel cross-check" {
     // Trust-region iteration guard on the wide-angle frontier
@@ -54,7 +49,7 @@ test "trust: wide-cap iteration ceilings (CANARY-style) + Clarabel cross-check" 
         .{ .name = "wide_cap89", .ceiling = 25, .clarabel_ar = 1.542028 },
     };
     for (fixtures) |f| {
-        const pts = wideCap(f.name);
+        const pts = helpers.casePoints(f.name);
         var o = try csar.solve(allocator, pts, .{ .method = .trust });
         defer o.deinit();
         try std.testing.expect(std.meta.activeTag(o) == .converged);
@@ -99,7 +94,7 @@ test "alternating: wide-cap fixtures still DNC (the gap the trust default closes
     // doc-comment's caveat (see docs/wide-cap-dnc-report.md).
     const allocator = std.testing.allocator;
     for ([_][]const u8{ "wide_cap82", "wide_cap85", "wide_cap89" }) |name| {
-        var outcome = try csar.solve(allocator, wideCap(name), .{ .method = .alternating });
+        var outcome = try csar.solve(allocator, helpers.casePoints(name), .{ .method = .alternating });
         defer outcome.deinit();
         try std.testing.expect(std.meta.activeTag(outcome) == .did_not_converge);
     }
@@ -152,7 +147,6 @@ test "mveeFwAway: converges the design and keeps weights in the simplex" {
     // "Stage 1 findings"): hazard-free by construction but slower than
     // pairwise as the trust oracle. This pins its correctness so the
     // recorded findings stay reproducible.
-    const csar_core = @import("../src/csar.zig");
     // Slightly irregular quad in the chart: optimal design weights are
     // non-uniform, support is all 4 points.
     const P = [_][2]f64{ .{ 1.0, 0.1 }, .{ -0.9, 0.2 }, .{ 0.15, 1.1 }, .{ -0.1, -1.0 } };
@@ -187,7 +181,6 @@ test "mveeFwAway: kappa-limited input exits via the stall guard, invariants inta
     // (inner_tol = 0 makes the convergence break unreachable) and the
     // weights must still be a valid design. Guards the stall exit the
     // convergent-input test never reaches.
-    const csar_core = @import("../src/csar.zig");
     var P: [8][2]f64 = undefined;
     var Ql: [8]csar.Vec3 = undefined;
     var w: [8]f64 = undefined;
@@ -215,7 +208,6 @@ test "initWeights: fully degenerate input falls back to uniform weights" {
     // n and the coordinates are powers of two so the centroid sum and
     // scale are binary-exact and the point-to-centroid distances are
     // exactly zero).
-    const csar_core = @import("../src/csar.zig");
     const n = 32;
     var P: [n][2]f64 = undefined;
     var w: [n]f64 = undefined;
@@ -226,7 +218,7 @@ test "initWeights: fully degenerate input falls back to uniform weights" {
 
 test "trust: certificate sanity on a wide-cap solve" {
     const allocator = std.testing.allocator;
-    const pts = wideCap("wide_cap85");
+    const pts = helpers.casePoints("wide_cap85");
     var outcome = try csar.solve(allocator, pts, .{ .method = .trust });
     defer outcome.deinit();
     const c = outcome.converged;

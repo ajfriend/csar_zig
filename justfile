@@ -34,7 +34,7 @@ bench:
 
 # Remove build artifacts and coverage output (survey data: `just surveys::clean`).
 clean:
-    rm -rf zig-out .zig-cache coverage coverage_raw
+    rm -rf zig-out .zig-cache coverage
 
 # States/countries survey pipelines: `just --list surveys`.
 mod surveys

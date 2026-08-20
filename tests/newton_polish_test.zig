@@ -39,7 +39,7 @@ const PolishResult = struct {
 
 fn runPolish(a: std.mem.Allocator, Ql: []const Vec3, w: []f64) !PolishResult {
     var scratch = try newton.NewtonScratch.init(a, Ql.len);
-    const ok = newton.newtonPolish(Ql, w, algo.ACTIVE_THRESH, 20, tol.NEWTON_INNER, &scratch);
+    const ok = newton.newtonPolish(Ql, w, algo.ACTIVE_THRESH, algo.POLISH_MAX_ITER, tol.NEWTON_INNER, &scratch);
 
     var S = Mat3.zero;
     for (Ql, 0..) |qi, i| S.addSymRank1(w[i], qi);
@@ -203,21 +203,14 @@ test "buildKktH: dense and range variants match brute force, bit-exactly symmetr
     };
     var H: [9]f64 = undefined;
 
-    newton.buildKktH(&q, &Y, false, &H);
-    for (0..3) |i| {
-        for (i..3) |j| {
-            const dij = q[i].dot(Y[j]);
-            try std.testing.expectEqual(dij * dij, H[i * 3 + j]);
-            try std.testing.expectEqual(H[i * 3 + j], H[j * 3 + i]);
-        }
-    }
-
-    newton.buildKktH(&q, &Y, true, &H);
-    for (0..3) |i| {
-        for (i..3) |j| {
-            const dij = Y[i].dot(Y[j]);
-            try std.testing.expectEqual(dij * dij, H[i * 3 + j]);
-            try std.testing.expectEqual(H[i * 3 + j], H[j * 3 + i]);
+    for ([_]bool{ false, true }) |use_range| {
+        newton.buildKktH(&q, &Y, use_range, &H);
+        for (0..3) |i| {
+            for (i..3) |j| {
+                const dij = if (use_range) Y[i].dot(Y[j]) else q[i].dot(Y[j]);
+                try std.testing.expectEqual(dij * dij, H[i * 3 + j]);
+                try std.testing.expectEqual(H[i * 3 + j], H[j * 3 + i]);
+            }
         }
     }
 }
