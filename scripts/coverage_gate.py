@@ -177,23 +177,33 @@ excluded = {f: ls for f, ls in excluded.items() if ls}
 # marker on a line that would have been covered is NOT detectable here:
 # kcov excludes it before measuring, and the raw pass's hit data is lossy.
 problems = []
-marked = {}
 for file in sorted(set(raw) | set(gated)):
+    rel = file.removeprefix(ROOT)
     src = Path(file).read_text().splitlines()
-    explained, in_region = set(), False
+    exc, in_gate = set(excluded.get(file, [])), set(gated.get(file, {}))
+    explained = set()
+    region_start = None
     for n, text in enumerate(src, 1):
         if 'kcov-excl-start' in text:
-            in_region = True
-        if in_region or 'kcov-excl' in text or '=> unreachable' in text:
+            region_start = n
+        elif 'kcov-excl-end' in text:
+            span = set(range(region_start, n + 1))
+            explained |= span
+            if not span & exc:
+                problems.append(f'{rel}:{region_start}-{n}: kcov-excl region excluded nothing')
+            if span & in_gate:
+                problems.append(f'{rel}:{region_start}-{n}: kcov-excl region has lines still in the gate: {sorted(span & in_gate)}')
+            region_start = None
+        elif region_start is None and 'kcov-excl' in text:
             explained.add(n)
-        if 'kcov-excl-end' in text:
-            in_region = False
-    marked[file] = explained
-    for n in excluded.get(file, []):
-        if n not in explained:
-            problems.append(f'{file.removeprefix(ROOT)}:{n} excluded by kcov but carries no marker')
-    if explained and not excluded.get(file) and any(n in raw.get(file, {}) for n in explained):
-        problems.append(f'{file.removeprefix(ROOT)}: has exclusion markers but kcov excluded nothing')
+            if n not in exc:
+                problems.append(f'{rel}:{n}: kcov-excl marker excluded nothing' + (' (the line is still in the gate)' if n in in_gate else ''))
+        elif '=> unreachable' in text:
+            explained.add(n)
+            if n in in_gate:
+                problems.append(f'{rel}:{n}: `=> unreachable` arm is still in the gate')
+    for n in sorted(exc - explained):
+        problems.append(f'{rel}:{n}: excluded by kcov but carries no marker')
 
 covered = sum(1 for fl in gated.values() for h in fl.values() if h > 0)
 total = sum(len(fl) for fl in gated.values())
