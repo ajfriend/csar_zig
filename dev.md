@@ -266,6 +266,13 @@ from one probe solve (reported in the `batch` column) so every timed interval
 dwarfs the clock. That is why `hex` and `near_collinear` report equally tight
 ratios despite spanning three orders of magnitude.
 
+One limitation is worth knowing before reading any ratio: both versions live
+in one binary at a layout fixed at link time, so cache-set and alignment luck
+can favour one side systematically, and that bias survives more reps, more
+launches, and a rebuild. Today's `--aa` cannot detect it (identical pins dedupe
+to one module, so it compares one copy with itself). Treat a difference near
+the noise floor — measured at ~0.3% on the smallest case here — as unproven.
+
 **The benchmarking methodology is documented in `bench/ab.zig`'s header**,
 next to the constants it governs — the instrument (clock resolution and read
 cost), the design (no process isolation, warm-up, batching, paired

@@ -70,6 +70,14 @@
 //! it is min-of-batch-means: jitter is averaged within a batch rather than
 //! rejected by the min, which is the price of measuring a sub-us case at all.
 //!
+//! That argument holds only while the noise is sparse and memoryless — a
+//! contaminating process that is *always* present (a busy machine, a thermal
+//! cap) contaminates the minimum too, and the min will quietly report the
+//! contaminated cost rather than flagging it. Criterion and JMH take the other
+//! branch here, reporting means with confidence intervals; the min is chosen
+//! because this harness compares two co-located versions rather than reporting
+//! an absolute cost, and `--aa` is the check that the assumption held.
+//!
 //! N_REPS is a floor for that min to settle against, not a sample size. There
 //! is deliberately no outlier rejection, no variance estimate, and no
 //! significance test — the report is read by a human against the `--aa` floor,
@@ -81,6 +89,30 @@
 //! must yield 1.000; whatever it misses by is that run's noise floor, and no
 //! A/B difference smaller than that means anything. It is the only check that
 //! catches bias in the harness rather than in the solver, so read it first.
+//! Measured on aarch64-macos: ~0.3% on the smallest case, ~0.1% elsewhere,
+//! stable across launches.
+//!
+//! ### Known residual bias: code layout
+//!
+//! The two versions occupy different addresses in one binary, and their
+//! relative layout is fixed at link time. Cache-set and alignment luck can
+//! therefore favour one side systematically — and unlike everything above,
+//! that bias is invisible to more reps, more launches, and even a rebuild,
+//! since the build is deterministic. As the Stabilizer paper puts it, a single
+//! binary is one sample from the space of layouts *regardless of the number of
+//! runs*; layout effects have been measured large enough elsewhere to swamp
+//! the difference between -O2 and -O3.
+//!
+//! `--aa` cannot currently see it either: identical pins dedupe to one module,
+//! so A/A compares one copy against itself and shares layout by construction.
+//! Measuring it needs two distinct copies of the *same* commit — two pins that
+//! hash differently — which is tracked separately. Until then, treat an A/B
+//! difference near the noise floor as unproven, and prefer a change that shows
+//! up across several cases over one that moves a single case slightly.
+//!
+//! This matters less here than in the literature's examples: the solver is
+//! small, hot, and branch-light, so it is likely far less layout-sensitive
+//! than the SPEC-scale programs those results come from. Likely, not measured.
 
 const std = @import("std");
 const cur = @import("cur");
