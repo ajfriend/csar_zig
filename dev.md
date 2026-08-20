@@ -33,7 +33,7 @@
 | `just check` | Compile the library and every executable, running nothing (CI's Build step). |
 | `just bench` | Run the benchmark suite (release-built `ex-bench`) — single-version timing. |
 | `just ab` | A/B the working tree against the pinned baseline, both in one binary. `just ab --aa` calibrates. See "A/B benchmarking" below. |
-| `just clean` | Remove `zig-out/`, `.zig-cache/`, `coverage/`. |
+| `just clean` | Remove `zig-out/`, `.zig-cache/`, `coverage/`, and the bench package's caches and unpacked baseline. |
 | `just surveys::…` | The states/countries survey pipelines (research/example tooling), grouped in the `surveys` module (`surveys.just`) — `just --list surveys`. |
 
 ### Two test tiers
@@ -95,10 +95,12 @@ Both contain the same aggregate percentages today (one binary, one
 run). If you're debugging a gate failure, the JSON is in the
 hash-suffixed sibling, not the merged dir.
 
-The gate enforces **100% line coverage** across production code
-(`src/*.zig`), the tests themselves (`tests/*.zig`, including the case
-manifest `tests/cases/cases.zig`), and the benchmarking policy
-(`bench/core.zig`, reached because `tests/bench_core_test.zig` imports it).
+The gate enforces **100% line coverage** over `src/`, `tests/` and `bench/`
+(`INCLUDE_PATTERN` in `scripts/coverage_gate.py`) — production code, the tests
+themselves including the case manifest, and the benchmarking policy. In
+practice `bench/core.zig` is the only `bench/` file in scope, because kcov
+instruments one binary and that is the only one `tests/bench_core_test.zig`
+pulls in; widening the pattern alone reaches nothing new (#25).
 Test code isn't exempt — dead test helpers are dead code too. The
 gate runs under `just test-slow`, not `just test` — slow-tier tests
 (currently cap_test) exercise lines that the fast tier doesn't reach.
@@ -252,10 +254,9 @@ binary picks it up automatically.
 `bench/` is a separate zig package that depends on **both** the working tree
 (`.path = ".."`) and a hash-pinned release, and compiles them into one
 binary. `just ab` measures them side by side: a deterministic diff over every
-fixture — outcome, iteration count and full-precision aspect ratio are
-compared exactly; the certified gap is printed for context but not compared,
-since it moves with iterate order without indicating a behavioural change —
-plus a per-side outcome tally, then interleaved timing over a handful of cases.
+fixture (status, iterations and aspect ratio; the certified gap is printed but
+deliberately not compared — see `differs` in `bench/core.zig`), a per-side
+outcome tally, then interleaved timing over a handful of cases.
 
 One binary rather than two processes is the point: a freshly built binary's
 first launch runs 2–5× slow and that survives warm-up and min-over-reps, so a
@@ -267,10 +268,11 @@ the binary. Read those before changing any of it.
 
 One limitation to know before reading any ratio: both versions live in one
 binary at a layout fixed at link time, so cache-set and alignment luck can
-favour one side systematically, and that bias survives more reps, more
-launches, and a rebuild. `--aa` cannot detect it (identical pins dedupe to one
-module). Treat a difference near the noise floor — ~0.3% on the smallest case
-here — as unproven.
+favour one side systematically — and unlike everything else, that bias survives
+more reps, more launches, and a rebuild. `--aa` cannot detect it either. The
+argument, the citation and the measured noise floor are in `bench/ab.zig`,
+"Known residual bias: code layout"; the practical rule is to treat a difference
+near the noise floor as unproven.
 
 - `just ab` — current vs the pinned baseline.
 - `just ab --aa` — current vs current. The ratio should read 1.000; whatever it
@@ -279,12 +281,12 @@ here — as unproven.
   ~2.0, the second must produce deterministic diffs. Without them, a tool that
   always printed "no change" would pass every other check.
 
-The baseline pin lives in `bench/build.zig.zon`. Resolving it fetches a 172 KB
-tarball the first time on a machine, which zig then caches permanently — the
-same deal as the toolchain, so it isn't worth machinery to avoid. It is a
-separate package so the library's manifest never carries a benchmark dependency —
-consumers can't inherit it, and `.paths` keeps `bench/` out of the published
-tarball. Reports are for pasting into a PR; nothing is written to disk.
+The baseline pin lives in `bench/build.zig.zon`; resolving it fetches once per
+machine and is then cached (why that's fine, rather than lazy: `bench/build.zig`).
+It is a separate package so the library's manifest never carries a benchmark
+dependency — consumers can't inherit it, and `.paths` ships only `bench/core.zig`
+(which `tests/` imports), not the harness. Reports are for pasting into a PR;
+nothing is written to disk.
 
 ## Examples
 

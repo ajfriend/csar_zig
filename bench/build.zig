@@ -20,10 +20,14 @@ pub fn build(b: *std.Build) void {
     const options = b.addOptions();
     options.addOption([]const u8, "baseline", BASELINE_REF);
 
-    // Resolved eagerly. A lazy pin plus a gate would keep `just check` off the
-    // network, but that costs a manifest flag, a build option and a justfile
-    // flag to save one 172 KB fetch that zig then caches forever — and it makes
-    // a missing baseline surface as "no step named 'ab'" instead of a fetch.
+    // Resolved eagerly, so every step here fetches the baseline the first time
+    // on a machine: 172 KB, then cached in zig's global cache.
+    //
+    // A lazy pin would skip it for `check`, but the invariant that would buy —
+    // "`just ci` never touches the network" — was never true anyway: a first
+    // run already fetches zig, kcov and uv's interpreter. What matters is no
+    // fetch on *every* run, and the cache gives that. Laziness also makes a
+    // missing baseline surface as "no step named 'ab'" rather than as a fetch.
     const base = b.dependency("csar_base", .{ .target = target, .optimize = optimize });
     const mod = abModule(b, target, optimize, cur, base.module("csar"), options);
     const exe = b.addExecutable(.{ .name = "csar-ab", .root_module = mod });
@@ -40,7 +44,7 @@ pub fn build(b: *std.Build) void {
     // is `Side`'s job (#23), and `just ab` is what proves it.
     const check_mod = abModule(b, target, optimize, cur, cur.module("csar"), options);
     const check_exe = b.addExecutable(.{ .name = "csar-ab-check", .root_module = check_mod });
-    b.step("check", "Compile the harness without running or fetching the baseline")
+    b.step("check", "Compile the harness without running it")
         .dependOn(&check_exe.step);
 }
 

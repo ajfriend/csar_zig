@@ -10,6 +10,10 @@
         "changelog.md",
         "src",
         "tests",
+        // `tests/bench_core_test.zig` imports it, so shipping `tests` without
+        // it would ship a file that cannot compile. One dependency-free policy
+        // module, not the harness: `bench/build.zig.zon` stays out.
+        "bench/core.zig",
         "test_root.zig",
         "examples",
         "readme.md",

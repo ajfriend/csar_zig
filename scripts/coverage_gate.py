@@ -74,7 +74,7 @@ shutil.rmtree(GATED_DIR, ignore_errors=True)
 if run_kcov([f'--exclude-line={EXCLUDE_LINE}'], GATED_DIR) != 0:
     print(LOG.read_text(), end='')
     sys.exit(1)
-print(LOG.read_text().splitlines()[-1])  # e.g. "All 53 tests passed."
+print(LOG.read_text().splitlines()[-1])  # e.g. "All N tests passed."
 
 gated = coverage_json(GATED_DIR)
 

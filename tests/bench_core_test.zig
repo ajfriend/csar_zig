@@ -84,11 +84,7 @@ test "Tally counts each outcome, and anything unrecognised as an error" {
     // An @errorName from a failed solve — the reason `status` is a string.
     t.add(.{ .status = "NegativeDualityGap" });
 
-    var buf: [128]u8 = undefined;
-    try std.testing.expectEqualStrings(
-        "2 converged / 1 DNC / 1 infeasible / 1 errored",
-        try std.fmt.bufPrint(&buf, "{f}", .{t}),
-    );
+    try std.testing.expectFmt("2 converged / 1 DNC / 1 infeasible / 1 errored", "{f}", .{t});
 }
 
 /// A scripted stand-in for "run `count` solves and report the elapsed µs".
@@ -120,6 +116,9 @@ test "pairedRun: identical sides report 1.0 exactly" {
     const t = run(&a, &b, 10, 1);
     try std.testing.expectEqual(@as(f64, 1.0), t.ratio());
     try std.testing.expectEqual(@as(f64, 3.0), t.cur_us);
+    // Passed through, not derived: the report prints it, and nothing else
+    // would catch it picking up `cur_mult` on the way.
+    try std.testing.expectEqual(@as(u32, 10), t.batch);
 }
 
 test "pairedRun: batching divides out, so per-solve time is batch-independent" {
@@ -160,25 +159,39 @@ test "pairedRun reduces with the min, so a slow rep cannot inflate the result" {
     try std.testing.expectEqual(@as(f64, 1.0), t.ratio());
 }
 
-test "formatTiming renders the documented column shape" {
+test "writeTiming renders the documented column shape" {
     var buf: [256]u8 = undefined;
-    const row = try bc.formatTiming(&buf, "hex", .{ .cur_us = 0.836, .base_us = 0.834, .batch = 115 });
+    var w = std.Io.Writer.fixed(&buf);
+    try bc.writeTiming(&w, "hex", .{ .cur_us = 0.836, .base_us = 0.834, .batch = 115 });
+    const row = w.buffered();
     try std.testing.expectEqualStrings(
-        "  hex                       0.836      0.834    1.002     115",
+        "  hex                       0.836      0.834    1.002     115\n",
         row,
     );
     // Header and rows are generated from the same widths; this catches it if
     // that ever stops being true.
-    try std.testing.expectEqual(bc.timing_header.len, row.len);
+    try std.testing.expectEqual(bc.timing_header.len, row.len - 1);
 }
 
-test "formatDiff shows both sides at full precision, with gap for context" {
-    var buf: [256]u8 = undefined;
+test "writeDiff shows both sides at full precision, with gap for context" {
+    var buf: [512]u8 = undefined;
+    var w = std.Io.Writer.fixed(&buf);
     const a: bc.Metrics = .{ .status = "did_not_converge", .iters = 34, .ar = 1.05467581817604850, .gap = 3.2e-7 };
     const b: bc.Metrics = .{ .status = "converged", .iters = 0, .ar = 1.05467581817586240, .gap = 1.1e-9 };
-    const row = try bc.formatDiff(&buf, "h3_r12_midLat", a, b);
+    try bc.writeDiff(&w, "h3_r12_midLat", a, b);
     try std.testing.expectEqualStrings(
-        "  h3_r12_midLat          cur=did_not_converge/34/1.05467581817604850/3.20e-7  base=converged/0/1.05467581817586240/1.10e-9",
-        row,
+        "  h3_r12_midLat          cur=did_not_converge/34/1.05467581817604850/3.20e-7  base=converged/0/1.05467581817586240/1.10e-9\n",
+        w.buffered(),
     );
+}
+
+test "writeDiff survives an aspect ratio that expands to hundreds of digits" {
+    // `{d:.17}` is fixed-point, so floatMax renders 309 integer digits — twice.
+    // No fixed row buffer sits between the formatter and the writer, so this is
+    // an ordinary long line rather than a cliff that aborts the whole report.
+    var buf: [2048]u8 = undefined;
+    var w = std.Io.Writer.fixed(&buf);
+    const huge: bc.Metrics = .{ .status = "did_not_converge", .iters = 1, .ar = std.math.floatMax(f64) };
+    try bc.writeDiff(&w, "pathological", huge, huge);
+    try std.testing.expect(w.buffered().len > 650);
 }

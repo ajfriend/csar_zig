@@ -130,8 +130,9 @@ pub fn pairedRun(
     const divisor: f64 = @floatFromInt(batch);
     for (0..scratch_cur.len) |r| {
         // Order within a rep is fixed (current, then baseline) rather than
-        // alternating. `--aa` is what would expose a bias from that; measured
-        // at ~0.3% on the smallest case, ~0.1% elsewhere.
+        // alternating. `--aa` is what would expose a bias from that — see
+        // ab.zig, "The check", which owns that measurement and names the host
+        // it was taken on.
         scratch_cur[r] = cur.measure(batch * cur_mult) / divisor;
         scratch_base[r] = base.measure(batch) / divisor;
     }
@@ -146,10 +147,28 @@ pub fn pairedRun(
 // Comparison and rendering
 // ---------------------------------------------------------------------------
 
+/// The solver outcomes, as `Metrics.status` spells them. Declared once so
+/// `isOutcome` and `Tally.add` cannot disagree about what counts as an error.
+///
+/// A transcription of the library's `Outcome` tag names, not the enum itself:
+/// this module stays solver-free so the tests can drive it without one. The
+/// transcription is checked where the two vocabularies meet — `ab.zig`'s
+/// `metrics` builds every status with `@tagName`, over a switch that is
+/// exhaustive on the real union.
+pub const OutcomeTag = enum { converged, infeasible, did_not_converge };
+
+pub fn isOutcome(status: []const u8) bool {
+    return std.meta.stringToEnum(OutcomeTag, status) != null;
+}
+
 /// One side's result for one case. `status` carries an `@errorName` when
 /// `solve` failed, which is why it is a string rather than the outcome enum:
 /// an error on one side only is a difference worth reporting, not a reason to
 /// abort (see `ab.zig`).
+///
+/// `ar` is not necessarily finite: an uncertified DNC iterate can divide two
+/// singular values that are both zero. `differs` and `formatDiff` both handle
+/// that; nothing else here reads it.
 pub const Metrics = struct {
     status: []const u8,
     iters: u32 = 0,
@@ -159,12 +178,12 @@ pub const Metrics = struct {
 
 /// Running count of outcomes on one side.
 ///
-/// Aggregate, not per-case: a report that says 27 cases differ makes you read
-/// 27 rows to learn which *direction* things moved. This says it in one line.
+/// Aggregate, not per-case: a report that says N cases differ makes you read N
+/// rows to learn which *direction* things moved. This says it in one line.
 ///
 /// Whole-corpus, not per-family: a per-family convergence rate is #19's, and
-/// needs a finer corpus than five families of four cells before a percentage
-/// means anything.
+/// the DGGS families here are four cells each — too few for a percentage to
+/// mean anything.
 pub const Tally = struct {
     converged: u32 = 0,
     did_not_converge: u32 = 0,
@@ -172,8 +191,10 @@ pub const Tally = struct {
     errored: u32 = 0,
 
     pub fn add(self: *Tally, m: Metrics) void {
-        // Exhaustive, so a new outcome variant becomes a compile error here
-        // rather than a silent bump of `errored`.
+        // Anything `OutcomeTag` does not name is an @errorName from a failed
+        // solve. A new solver outcome would land here silently — the compile
+        // error that catches it fires at the seam, in `ab.zig`'s `metrics`,
+        // whose switch is exhaustive over the real union (see `OutcomeTag`).
         const tag = std.meta.stringToEnum(OutcomeTag, m.status) orelse {
             self.errored += 1;
             return;
@@ -196,7 +217,7 @@ pub const Tally = struct {
 /// The deterministic-diff predicate: the tool's contract, consumed by #5, #6
 /// and #9 as "an empty deterministic diff".
 ///
-/// AR is compared **exactly**, not within a tolerance. The commit gate already
+/// AR is compared **bit-for-bit**, not within a tolerance. The commit gate already
 /// checks AR within 1e-6 (`tests/cases/cases_test.zig`); comparing exactly here
 /// is what makes the A/B cover the gap that leaves — a change that shifts a
 /// result in the 12th digit is invisible to the suite and visible here.
@@ -207,20 +228,14 @@ pub const Tally = struct {
 pub fn differs(a: Metrics, b: Metrics) bool {
     if (!std.mem.eql(u8, a.status, b.status)) return true;
     if (a.iters != b.iters) return true;
-    // Bit comparison, not `!=`: exact is the point (see above), but `nan != nan`
-    // would flag a case as differing from itself — visibly identical rows, and
-    // it would fire under `--aa`, breaking the one check that validates the
-    // harness. An uncertified DNC iterate can produce a NaN ratio.
+    // Bit comparison, not `!=`: exactness is the point (see above), but
+    // `nan != nan` would flag a case as differing from itself — visibly
+    // identical rows, and it would fire under `--aa`, breaking the one check
+    // that validates the harness. An uncertified DNC iterate can produce a NaN
+    // ratio. (Bitwise also separates +0 from -0, and one NaN payload from
+    // another; neither is reachable for a ratio of singular values.)
     if (@as(u64, @bitCast(a.ar)) != @as(u64, @bitCast(b.ar))) return true;
     return false;
-}
-
-/// The solver outcomes, as `Metrics.status` spells them. Declared once so
-/// `isOutcome` and `Tally.add` cannot disagree about what counts as an error.
-pub const OutcomeTag = enum { converged, infeasible, did_not_converge };
-
-pub fn isOutcome(status: []const u8) bool {
-    return std.meta.stringToEnum(OutcomeTag, status) != null;
 }
 
 /// Column widths for the timing table, defined once: `timing_header` and
@@ -249,18 +264,25 @@ pub const timing_header = std.fmt.comptimePrint(
 
 /// One timing row. Rendered here rather than at the call site so the output
 /// shape is a testable string rather than something checked by eye.
-pub fn formatTiming(buf: []u8, name: []const u8, t: Timing) ![]const u8 {
-    return std.fmt.bufPrint(buf, row_fmt, .{ name, t.cur_us, t.base_us, t.ratio(), t.batch });
+///
+/// Straight to the writer, with no row-sized buffer in between: `{d:.17}` in
+/// `writeDiff` is fixed-point, so a large aspect ratio expands its whole
+/// integer part (309 digits at floatMax). Any fixed row buffer is a cliff, and
+/// one row overflowing would abort the report rather than print one bad line.
+pub fn writeTiming(w: *std.Io.Writer, name: []const u8, t: Timing) std.Io.Writer.Error!void {
+    try w.print(row_fmt ++ "\n", .{ name, t.cur_us, t.base_us, t.ratio(), t.batch });
 }
 
 /// One deterministic-diff row, printed only for cases that differ. `gap` rides
 /// along as context: it never triggers a row (see `differs`), but when one
 /// fires — a case flipping to did_not_converge, say — how far the certificate
 /// moved is the first thing worth seeing.
-pub fn formatDiff(buf: []u8, name: []const u8, a: Metrics, b: Metrics) ![]const u8 {
-    return std.fmt.bufPrint(
-        buf,
-        "  {s:<22} cur={s}/{d}/{d:.17}/{e:.2}  base={s}/{d}/{d:.17}/{e:.2}",
+///
+/// Fixed-point rather than scientific so the two aspect ratios line up digit
+/// for digit: reading *where* they diverge is the point of the row.
+pub fn writeDiff(w: *std.Io.Writer, name: []const u8, a: Metrics, b: Metrics) std.Io.Writer.Error!void {
+    try w.print(
+        "  {s:<22} cur={s}/{d}/{d:.17}/{e:.2}  base={s}/{d}/{d:.17}/{e:.2}\n",
         .{ name, a.status, a.iters, a.ar, a.gap, b.status, b.iters, b.ar, b.gap },
     );
 }

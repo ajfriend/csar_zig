@@ -102,7 +102,7 @@ const Opts = struct {
 
 /// One side of the comparison: a library version bound to an allocator, a
 /// clock, and the options it solves under. This is the whole "mechanics" half
-/// — everything it feeds into lives in `benchcore`.
+/// — everything it feeds into lives in `core.zig`.
 fn Side(comptime lib: type) type {
     return struct {
         const Self = @This();
@@ -134,16 +134,21 @@ fn Side(comptime lib: type) type {
                 return .{ .status = @errorName(e) };
             };
             defer o.deinit();
+            // @tagName, not a literal: this switch is exhaustive over the real
+            // union, so a new outcome variant is a compile error HERE, and the
+            // status it produces then matches `bc.OutcomeTag` by construction
+            // rather than by two people spelling it the same way.
+            const status = @tagName(o);
             return switch (o) {
                 .converged => |c| .{
-                    .status = "converged",
+                    .status = status,
                     .iters = c.diag.totalIters(),
                     .ar = c.aspectRatio(),
                     .gap = c.gap,
                 },
-                .infeasible => .{ .status = "infeasible" },
+                .infeasible => .{ .status = status },
                 .did_not_converge => |p| .{
-                    .status = "did_not_converge",
+                    .status = status,
                     .iters = p.diag.totalIters(),
                     .ar = p.sigma[2] / p.sigma[1],
                     .gap = p.gap,
@@ -195,14 +200,11 @@ fn report(comptime BaseLib: type, init: std.process.Init, opts: Opts) !void {
     var buf: [8192]u8 = undefined;
     var w = std.Io.File.stdout().writer(io, &buf);
     const out = &w.interface;
-    // Emit whatever formatted successfully even if a later row fails: losing
-    // an entire diff to one unprintable number is the wrong failure for a tool
-    // whose contract is "an empty deterministic diff".
+    // Best-effort on the error path: if the run dies partway, emit the rows
+    // that were already formatted rather than nothing. The happy path flushes
+    // explicitly at the end, so a real write failure still propagates —
+    // "truncated, exit 0" would be worse than the failure this softens.
     defer out.flush() catch {};
-    // Sized for the worst case `{d:.17}` can produce: fixed-point, so a huge
-    // aspect ratio expands its whole integer part (~327 bytes at floatMax),
-    // twice per diff row.
-    var line: [1024]u8 = undefined;
 
     const cur_tol: f64 = if (opts.inject_tol) INJECT_GAP_TOL else GAP_TOL;
     const cur_mult: u32 = if (opts.inject_2x) 2 else 1;
@@ -222,8 +224,8 @@ fn report(comptime BaseLib: type, init: std.process.Init, opts: Opts) !void {
     try out.print("  zig       : {s}\n", .{builtin.zig_version_string});
     try out.print("  baseline  : {s}\n", .{if (opts.aa) "(A/A: the working tree)" else build_options.baseline});
     try out.print("  reps      : {d} (+{d} warm-up), interleaved\n", .{ bc.N_REPS, bc.N_WARMUP });
-    try out.print("  note      : compare ratios, not µs — absolute times vary up to ~2.5x\n", .{});
-    try out.print("              between launches as the CPU ramps; the ratio does not.\n", .{});
+    try out.print("  note      : compare ratios, not µs — absolute times vary 2-5x between\n" ++
+        "              launches (see ab.zig, \"No process isolation\"); ratios do not.\n", .{});
     if (opts.inject_2x) try out.print("  injected  : 2x on the current side\n", .{});
     if (opts.inject_tol) try out.print("  injected  : gap_tol={e} on the current side\n", .{INJECT_GAP_TOL});
     try out.print("\n", .{});
@@ -240,7 +242,7 @@ fn report(comptime BaseLib: type, init: std.process.Init, opts: Opts) !void {
         tally_base.add(b);
         if (!bc.differs(a, b)) continue;
         n_diff += 1;
-        try out.print("{s}\n", .{try bc.formatDiff(&line, entry.name, a, b)});
+        try bc.writeDiff(out, entry.name, a, b);
     }
     if (n_diff == 0) {
         try out.print("  none\n", .{});
@@ -278,6 +280,10 @@ fn report(comptime BaseLib: type, init: std.process.Init, opts: Opts) !void {
         const batch = bc.batchFor(side_base.measure(1));
 
         const t = bc.pairedRun(&side_cur, &side_base, batch, cur_mult, &samples_cur, &samples_base);
-        try out.print("{s}\n", .{try bc.formatTiming(&line, case.name, t)});
+        try bc.writeTiming(out, case.name, t);
     }
+
+    // Not redundant with the `defer` above: this is the one that reports a
+    // write failure instead of swallowing it.
+    try out.flush();
 }
