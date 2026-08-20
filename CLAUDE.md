@@ -40,8 +40,8 @@ cells) — which solve in ~1–2 outer iterations and a few µs. Protect them:
   wall-times and is dominated by the large synthetic cases (np400, ha_*), so a
   real small-cell regression hides in it. µs-scale wall-time on a 6-point cell is
   mostly noise anyway. Read the **per-case rows** (small vs large separately).
-- The small-cell fixtures in `tests/cases/zon/` (the `h3_*` / `hex` cases,
-  driven through `tests/cases/cases_test.zig`) are the deterministic guard —
+- The small-cell fixtures in `cases/zon/` (the `h3_*` / `hex` cases,
+  driven through `tests/cases_test.zig`) are the deterministic guard —
   a shift in their per-case outcome is a **regression signal**: understand what
   changed and flag it for human confirmation, don't silently bump an expectation.
 - Many finest-resolution S2/A5 cells hit an f64 gap floor above the strict 1e-6

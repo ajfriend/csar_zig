@@ -53,10 +53,9 @@ defaults) if you need version-stable behavior.
 - `src/csar.zig` — solver core: preprocessing, the alternating path, dispatch (std-only)
 - `src/trust.zig` — the trust-region solver path (what `.auto` resolves to)
 - `src/linalg.zig`, `src/halfspace.zig`, `src/newton.zig`, `src/config.zig` — internal modules
-- `tests/*_test.zig` — top-level tests (run via `zig build test`)
-- `tests/cases/cases.zig` — comptime manifest over the .zon files; exposed as the `cases` build module
-- `tests/cases/cases_test.zig` — tests driven by the case manifest
-- `tests/cases/zon/*.zon` — fixture point sets + expected outcomes (data only)
+- `tests/*_test.zig` — tests (run via `zig build test`); `cases_test.zig` is the one driven by the corpus
+- `cases/cases.zig` — comptime manifest over the .zon files; exposed as the `cases` build module
+- `cases/zon/*.zon` — fixture point sets + expected outcomes (data only)
 - `test_root.zig` — test-target root at repo level
 - `examples/basic.zig`, `examples/status.zig`, `examples/cases.zig` — end-user usage demos
 - `examples/bench.zig` — per-case timing (release-built; run via `zig build ex-bench`)

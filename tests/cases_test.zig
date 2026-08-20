@@ -1,14 +1,11 @@
-//! Tests driven by the bundled case manifest in `cases.zig`.
-//!
-//! This file lives in `tests/cases/` next to the `cases.zig` module
-//! it exercises, but it is NOT compiled as part of the cases module.
-//! It's a stand-alone test file reached by the test target's root
+//! Tests driven by the bundled case manifest (`cases/cases.zig`, imported as
+//! the `cases` build module). Reached by the test target's root
 //! (`test_root.zig` → `tests/all.zig` → here).
 
 const std = @import("std");
-const csar = @import("../../src/root.zig");
+const csar = @import("../src/root.zig");
 const cases = @import("cases");
-const helpers = @import("../helpers.zig");
+const helpers = @import("helpers.zig");
 const Vec3 = csar.Vec3;
 
 /// Labeled approx-equal check on aspect ratios. On failure prints

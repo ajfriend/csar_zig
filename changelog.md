@@ -5,10 +5,12 @@ commit that carries the full detail.
 
 ## [Unreleased]
 
+- The published package now contains only what compiling `csar` needs; tests,
+  fixtures and examples no longer ship. The fixture corpus moved to `cases/`.
+  Details in [#28](https://github.com/ajfriend/csar_zig/pull/28).
 - New `just ab`: A/B the working tree against the pinned baseline release in
   one binary — a deterministic diff over every fixture plus interleaved timing.
-  The published tarball now also carries `bench/core.zig`, which `tests/`
-  imports. Details in [#21](https://github.com/ajfriend/csar_zig/pull/21).
+  Details in [#21](https://github.com/ajfriend/csar_zig/pull/21).
 
 ## [0.2.0]
 

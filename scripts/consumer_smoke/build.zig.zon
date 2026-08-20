@@ -1,0 +1,10 @@
+// `run.sh` fills in the dependency with `zig fetch --save`, in a scratch copy —
+// this file stays dependency-free.
+.{
+    .name = .consumer_smoke,
+    .version = "0.0.0",
+    .fingerprint = 0x822bb40d7f6fe5a4,
+    .minimum_zig_version = "0.16.0",
+    .dependencies = .{},
+    .paths = .{""},
+}

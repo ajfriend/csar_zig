@@ -10,12 +10,12 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    // Case fixtures (tests/cases/*.zon) + their compile-time manifest.
-    // The module lives inside tests/cases/ so the manifest can `@import`
-    // the sibling .zon files directly without crossing module-path
-    // boundaries.
+    // The fixture corpus (cases/zon/*.zon) + its comptime manifest, which sits
+    // beside the .zon files so it can `@import` them without crossing
+    // module-path boundaries. Exported for path dependents (bench/); not in
+    // `.paths`, so not available to tarball consumers (dev.md "Packaging").
     const cases_mod = b.addModule("cases", .{
-        .root_source_file = b.path("tests/cases/cases.zig"),
+        .root_source_file = b.path("cases/cases.zig"),
         .target = target,
         .optimize = optimize,
     });

@@ -180,7 +180,7 @@ DGGS-floor measurement harness did NOT migrate from the skar-era repos.
 `tests/dggs_dnc_test.zig`, `zig build ex-compare`, the probe programs, and
 skar_py's `scripts/dggs/survey.py` (10k-cell h3/s2/a5 sweeps) exist only in
 skar_zig / skar_py history. What this repo has: `tests/methods_test.zig`
-(wide-cap fixtures + Clarabel references), `tests/cases/`, `just bench`,
+(wide-cap fixtures + Clarabel references), `cases/`, `just bench`,
 and the states/countries pipelines under `scripts/`. Items whose validation
 says "floor-marginal S2/A5 populations" need the survey harness ported to
 csar_py first (source: skar_py `scripts/dggs/survey.py`; it is a thin loop

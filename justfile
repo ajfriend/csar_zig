@@ -27,8 +27,13 @@ check:
 ab *ARGS:
     zig build --build-file bench/build.zig ab -- {{ARGS}}
 
+# Build scripts/consumer_smoke against this tree as a consumer receives it
+# (packed through `.paths`) — the only check of the shipped package.
+consumer-smoke:
+    sh scripts/consumer_smoke/run.sh
+
 # Everything CI checks that can run on this machine — use before pushing a PR.
-ci: check test-slow _ci-selfhosted
+ci: check consumer-smoke test-slow _ci-selfhosted
 
 [linux]
 _ci-selfhosted: test-selfhosted

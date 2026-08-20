@@ -4,18 +4,13 @@
     .fingerprint = 0x9c8d1b0e21364c6e,
     .minimum_zig_version = "0.16.0",
     .dependencies = .{},
+    // Only what compiling the `csar` module needs; `just consumer-smoke`
+    // proves the tree builds through this list. See dev.md "Packaging".
     .paths = .{
         "build.zig",
         "build.zig.zon",
         "changelog.md",
         "src",
-        "tests",
-        // `tests/bench_core_test.zig` imports it, so shipping `tests` without
-        // it would ship a file that cannot compile. One dependency-free policy
-        // module, not the harness: `bench/build.zig.zon` stays out.
-        "bench/core.zig",
-        "test_root.zig",
-        "examples",
         "readme.md",
         "LICENSE",
     },
