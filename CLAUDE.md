@@ -18,12 +18,18 @@ problem). Core: `src/csar.zig` (`solve`, the outer loop, `mveeFw` inner MVEE),
 
 ## Build & test
 
-- `zig build test` — fast unit suite (sub-second).
-- `zig build test -Dslow=true` — full suite incl. randomized stress tests; this
-  is the CI gate (`.github/workflows/ci.yml`). Run it before committing.
+- **Run `just ci` before pushing a PR** — everything CI checks that can run on
+  this machine. `just test` is the fast inner loop; `just test-slow` is the
+  gate (enforced 100% line coverage + exclusion ledger) — not bare
+  `zig build test`. Per-command detail: dev.md's table.
+- Coverage exclusions are governed by dev.md "Coverage exclusions" — read it
+  before marking anything excluded; the ledger is posted on every PR.
+- The suite must pass under BOTH zig backends (LLVM and self-hosted); CI runs
+  both. See dev.md "Two backends".
 - `zig build ex-bench` — per-case timing (ReleaseFast, 100 reps).
 - `zig build states-aspect` / `countries-aspect` — standalone survey execs over
   `scripts/*/data/*.json` (per-cell aspect ratios + outcome counts).
+- Full workflow detail (toolchain setup, commands, coverage machinery): dev.md.
 
 ## Performance & regression monitoring (read before "optimizing" the solver)
 
@@ -42,8 +48,9 @@ cells) — which solve in ~1–2 outer iterations and a few µs. Protect them:
   tolerance and honestly DNC there — not a bug. WHICH cells sit above vs below
   the floor is path-dependent at noise level (`.trust` vs `.alternating`).
 
-When changing the solver, the full check is: `zig build test -Dslow=true` green
-+ `ex-bench` per-case (small cells not slower).
+When changing the solver, the full check is: `just ci` green (suite + coverage
+gate + both backends where supported) + `ex-bench` per-case (small cells not
+slower).
 
 ## Background / history
 

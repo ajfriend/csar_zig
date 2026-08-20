@@ -199,10 +199,21 @@ pub const Method = enum {
     /// alias-identity test in tests/methods_test.zig, which pins it).
     pub const recommended: Method = .trust;
 
+    /// The concrete methods `.auto` can resolve to — `resolved()`'s
+    /// return type, so dispatch switches are exhaustive by
+    /// construction (no unreachable arm to defend).
+    pub const Resolved = enum { alternating, trust };
+
     /// Resolve `.auto` to its concrete method; concrete methods map to
-    /// themselves. `solve`'s dispatch switches on this.
-    pub fn resolved(self: Method) Method {
-        return if (self == .auto) recommended else self;
+    /// themselves. `solve`'s dispatch switches on this. The comptime
+    /// conversion makes pointing `recommended` back at `.auto` a
+    /// compile error rather than a cycle.
+    pub fn resolved(self: Method) Resolved {
+        return switch (self) {
+            .auto => comptime @field(Resolved, @tagName(recommended)),
+            .alternating => .alternating,
+            .trust => .trust,
+        };
     }
 };
 

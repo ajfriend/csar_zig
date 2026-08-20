@@ -16,6 +16,8 @@
 const std = @import("std");
 const csar = @import("../src/root.zig");
 const cases = @import("cases");
+const helpers = @import("helpers.zig");
+const csar_core = @import("../src/csar.zig");
 
 const GAP_TOL: f64 = 1e-6;
 /// The certified gap bounds primal suboptimality, but AR is a ratio of
@@ -25,12 +27,6 @@ const AR_REF_REL_TOL: f64 = 1e-3;
 /// Both solvers converge to the same optimum; both carry ~gap-sized
 /// slack in the AR.
 const AR_AGREE_REL_TOL: f64 = 1e-4;
-
-/// Points of a wide-cap manifest case (tests/cases/zon/wide_cap*.zon —
-/// the single home of the fixture data).
-fn wideCap(name: []const u8) []const [3]f64 {
-    return (cases.byName(name) orelse unreachable).points;
-}
 
 test "trust: wide-cap iteration ceilings (CANARY-style) + Clarabel cross-check" {
     // Trust-region iteration guard on the wide-angle frontier
@@ -53,7 +49,7 @@ test "trust: wide-cap iteration ceilings (CANARY-style) + Clarabel cross-check" 
         .{ .name = "wide_cap89", .ceiling = 25, .clarabel_ar = 1.542028 },
     };
     for (fixtures) |f| {
-        const pts = wideCap(f.name);
+        const pts = helpers.casePoints(f.name);
         var o = try csar.solve(allocator, pts, .{ .method = .trust });
         defer o.deinit();
         try std.testing.expect(std.meta.activeTag(o) == .converged);
@@ -87,10 +83,7 @@ test "trust: agrees with alternating on bundled cases incl. extreme-kappa cells"
         try std.testing.expect(std.meta.activeTag(red_out) == .converged);
         const ar_f = fast_out.converged.aspectRatio();
         const ar_r = red_out.converged.aspectRatio();
-        if (@abs(ar_f - ar_r) > AR_AGREE_REL_TOL * ar_f) {
-            std.debug.print("trust/alternating AR mismatch case={s}: alternating={d:.10} trust={d:.10}\n", .{ name, ar_f, ar_r });
-            return error.TrustAlternatingArMismatch;
-        }
+        try expectArAgreement(name, ar_f, ar_r);
         try std.testing.expect(@abs(red_out.converged.gap) <= GAP_TOL);
     }
 }
@@ -101,7 +94,7 @@ test "alternating: wide-cap fixtures still DNC (the gap the trust default closes
     // doc-comment's caveat (see docs/wide-cap-dnc-report.md).
     const allocator = std.testing.allocator;
     for ([_][]const u8{ "wide_cap82", "wide_cap85", "wide_cap89" }) |name| {
-        var outcome = try csar.solve(allocator, wideCap(name), .{ .method = .alternating });
+        var outcome = try csar.solve(allocator, helpers.casePoints(name), .{ .method = .alternating });
         defer outcome.deinit();
         try std.testing.expect(std.meta.activeTag(outcome) == .did_not_converge);
     }
@@ -112,7 +105,7 @@ test "auto: resolves to Method.recommended (pure alias, identical outcomes)" {
     // `Method.recommended` is the single source of truth for the
     // resolution, and this test is where a re-point gets recorded.
     try std.testing.expectEqual(csar.Method.trust, csar.Method.recommended);
-    try std.testing.expectEqual(csar.Method.trust, csar.Method.auto.resolved());
+    try std.testing.expectEqual(csar.Method.Resolved.trust, csar.Method.auto.resolved());
 
     // Behavioral half: same dispatch target ⇒ identical outcomes,
     // including the diag tag (the expectEqual on `.diag.trust` panics
@@ -133,13 +126,27 @@ test "auto: resolves to Method.recommended (pure alias, identical outcomes)" {
     }
 }
 
+/// AR agreement check with case-name context on failure. The failure
+/// path is real code, covered by the quiet expectError self-test below.
+fn expectArAgreement(name: []const u8, ar_alternating: f64, ar_trust: f64) !void {
+    if (@abs(ar_alternating - ar_trust) > AR_AGREE_REL_TOL * ar_alternating) {
+        helpers.diagPrint("trust/alternating AR mismatch case={s}: alternating={d:.10} trust={d:.10}\n", .{ name, ar_alternating, ar_trust });
+        return error.TrustAlternatingArMismatch;
+    }
+}
+
+test "expectArAgreement: the mismatch diagnostic fires (quiet self-test)" {
+    helpers.quiet_diagnostics = true;
+    defer helpers.quiet_diagnostics = false;
+    try std.testing.expectError(error.TrustAlternatingArMismatch, expectArAgreement("diagnostic-selftest", 1.0, 2.0));
+}
+
 test "mveeFwAway: converges the design and keeps weights in the simplex" {
     // Bit-rot guard for the away-step FW solver, kept in-tree for the
     // record after the stage-1 experiment (docs/away-step-fw.md
     // "Stage 1 findings"): hazard-free by construction but slower than
     // pairwise as the trust oracle. This pins its correctness so the
     // recorded findings stay reproducible.
-    const csar_core = @import("../src/csar.zig");
     // Slightly irregular quad in the chart: optimal design weights are
     // non-uniform, support is all 4 points.
     const P = [_][2]f64{ .{ 1.0, 0.1 }, .{ -0.9, 0.2 }, .{ 0.15, 1.1 }, .{ -0.1, -1.0 } };
@@ -167,9 +174,51 @@ test "mveeFwAway: converges the design and keeps weights in the simplex" {
     }
 }
 
+test "mveeFwAway: kappa-limited input exits via the stall guard, invariants intact" {
+    // Near-collinear chart points: the lifted design is ill-conditioned,
+    // so the away-step gap hits an f64 floor well above zero and stops
+    // improving geometrically — the noise-floor stall exit must fire
+    // (inner_tol = 0 makes the convergence break unreachable) and the
+    // weights must still be a valid design. Guards the stall exit the
+    // convergent-input test never reaches.
+    var P: [8][2]f64 = undefined;
+    var Ql: [8]csar.Vec3 = undefined;
+    var w: [8]f64 = undefined;
+    for (&P, 0..) |*p, i| {
+        const x = -1.0 + 2.0 * @as(f64, @floatFromInt(i)) / 7.0;
+        // ~1e-9 transverse spread: comfortably above degeneracy, far
+        // below conditioning that would let the gap reach the tol.
+        p.* = .{ x, 1e-9 * (1.0 + 0.3 * x + x * x) };
+        w[i] = 1.0 / 8.0;
+    }
+    csar_core.mveeFwAway(&P, 100_000, 0.0, &Ql, &w);
+
+    var sum: f64 = 0;
+    for (w) |wi| {
+        try std.testing.expect(wi >= 0);
+        sum += wi;
+    }
+    try std.testing.expectApproxEqAbs(@as(f64, 1.0), sum, 1e-12);
+}
+
+test "initWeights: fully degenerate input falls back to uniform weights" {
+    // All points coincident: the farthest-point seed's d0 scan finds
+    // nothing above tol.TINY and must fall back to uniform weights
+    // (n > SEED_SPARSE_MIN_POINTS so the sparse-seed path is taken;
+    // n and the coordinates are powers of two so the centroid sum and
+    // scale are binary-exact and the point-to-centroid distances are
+    // exactly zero).
+    const n = 32;
+    var P: [n][2]f64 = undefined;
+    var w: [n]f64 = undefined;
+    for (&P) |*p| p.* = .{ 0.5, -0.25 };
+    csar_core.initWeights(&P, &w);
+    for (w) |wi| try std.testing.expectApproxEqAbs(1.0 / @as(f64, n), wi, 1e-15);
+}
+
 test "trust: certificate sanity on a wide-cap solve" {
     const allocator = std.testing.allocator;
-    const pts = wideCap("wide_cap85");
+    const pts = helpers.casePoints("wide_cap85");
     var outcome = try csar.solve(allocator, pts, .{ .method = .trust });
     defer outcome.deinit();
     const c = outcome.converged;

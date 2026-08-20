@@ -15,22 +15,13 @@ const std = @import("std");
 const csar = @import("../src/root.zig");
 const test_options = @import("test_options");
 const Vec3 = csar.Vec3;
+const helpers = @import("helpers.zig");
 
 /// Fill `out` with N equispaced points on the boundary of a
 /// spherical cap of half-angle `half_angle` centered at the unit
 /// vector `center`, rotated by `phase` around the cap axis.
 fn capBoundary(center: Vec3, half_angle: f64, phase: f64, out: []Vec3) void {
-    const Q = center.orthoBasis(); // Mat3x2 tangent basis at center
-    const cos_a = @cos(half_angle);
-    const sin_a = @sin(half_angle);
-    const n_f = @as(f64, @floatFromInt(out.len));
-    for (out, 0..) |*p, i| {
-        const theta = phase + 2.0 * std.math.pi * @as(f64, @floatFromInt(i)) / n_f;
-        // tangent component: sin_a * (cos θ · e1 + sin θ · e2)
-        const tan = Vec3.lincomb(sin_a * @cos(theta), Q.e1, sin_a * @sin(theta), Q.e2);
-        // full point = cos_a * center + tan, normalized for FP cleanup
-        p.* = Vec3.lincomb(cos_a, center, 1.0, tan).normalize();
-    }
+    helpers.ellipseBoundary(center, half_angle, half_angle, phase, 2.0 * std.math.pi, out);
 }
 
 test "random spherical caps: AR == 1 across center / size / N / phase" {

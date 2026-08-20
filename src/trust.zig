@@ -208,7 +208,7 @@ pub fn evalH(
         if (chk.h >= h_prev - tc.INNER_STALL_REL * (1.0 + @abs(chk.h))) break;
         h_prev = chk.h;
     }
-    const polished = newtonPolish(wb.Ql, wb.w, algo.ACTIVE_THRESH, 20, tol.NEWTON_INNER, &wb.newton_scratch);
+    const polished = newtonPolish(wb.Ql, wb.w, algo.ACTIVE_THRESH, algo.POLISH_MAX_ITER, tol.NEWTON_INNER, &wb.newton_scratch);
 
     const ds = designState(wb.Ql, wb.w, s_scale) orelse return null;
     const L = ds.L;
@@ -393,7 +393,57 @@ pub fn evalH(
 /// otherwise). Returns the step u and the predicted decrease.
 const TrStep = struct { u: Vec2, pred: f64 };
 
-fn doglegStep(B: Mat2, g: Vec2, delta: f64) TrStep {
+/// The derived isotropic model Hessian (≈ its own circular-optimum
+/// limit) — the fallback whenever the per-evaluation Hessian is
+/// unusable.
+const ISO_B = Mat2{ .m = .{ tc.B0, 0, 0, tc.B0 } };
+
+pub const RadiusUpdate = struct { accepted: bool, delta: f64, hit_floor: bool };
+
+/// The trust-region acceptance test and radius policy after a trial
+/// evaluation, in one testable place (constants and their provenance:
+/// config.trust).
+///
+/// - Reject (ρ < ETA — via !(ρ ≥ ETA), so a NaN ratio from a poisoned
+///   state rejects too): shrink by SHRINK, relative to the step
+///   actually attempted so interior Newton steps shrink meaningfully
+///   too. The caller also restores the warm-start weights.
+/// - Accepted but poor (ρ < RHO_POOR): the quadratic model
+///   over-promised (higher-order terms dominate over this radius) —
+///   shrink gently by SHRINK_POOR so the model regains fidelity
+///   instead of creeping at ρ ≈ 0.15 or oscillating across the
+///   fidelity boundary.
+/// - Very successful (ρ ≥ ETA_GOOD) with a radius-limited step
+///   (≥ GROW_MIN_STEP_FRAC of the radius): grow.
+/// - `hit_floor` means the shrunk radius fell below DELTA_MIN — the
+///   caller exits the loop.
+pub fn updateRadius(delta: f64, rho: f64, step_norm: f64) RadiusUpdate {
+    if (!(rho >= tc.ETA)) {
+        const d = @min(delta, step_norm) * tc.SHRINK;
+        return .{ .accepted = false, .delta = d, .hit_floor = d < tc.DELTA_MIN };
+    }
+    if (rho < tc.RHO_POOR) {
+        const d = @min(delta, step_norm) * tc.SHRINK_POOR;
+        return .{ .accepted = true, .delta = d, .hit_floor = d < tc.DELTA_MIN };
+    }
+    if (rho >= tc.ETA_GOOD and step_norm >= tc.GROW_MIN_STEP_FRAC * delta) {
+        return .{ .accepted = true, .delta = @min(delta * tc.GROW, tc.DELTA_MAX), .hit_floor = false };
+    }
+    return .{ .accepted = true, .delta = delta, .hit_floor = false };
+}
+
+/// `doglegStep` with the isotropic-Hessian retry: if the model
+/// Hessian yields a nonpositive predicted decrease (possible only
+/// through FP-noise cancellation — the caller's det/m₀₀ guard makes B
+/// SPD by Sylvester — or a degenerate g), retry once with the derived
+/// isotropic fallback so the prediction is positive whenever g ≠ 0.
+pub fn doglegStepRobust(B: Mat2, g: Vec2, delta: f64) TrStep {
+    const step = doglegStep(B, g, delta);
+    if (step.pred > 0) return step;
+    return doglegStep(ISO_B, g, delta);
+}
+
+pub fn doglegStep(B: Mat2, g: Vec2, delta: f64) TrStep {
     const model = struct {
         fn pred(B_: Mat2, g_: Vec2, u: Vec2) f64 {
             return -(g_.dot(u) + 0.5 * u.dot(B_.apply(u)));
@@ -467,9 +517,7 @@ pub fn solveTrust(
         var s_scale = core.rescaleP(wb.P_buf, wb.Ps);
         core.initWeights(wb.Ps, wb.w);
         core.mveeFw(wb.Ps, algo.FW_PER_NEWTON, 0.0, wb.Ql, wb.w);
-        if (!newtonPolish(wb.Ql, wb.w, algo.ACTIVE_THRESH, 20, tol.NEWTON_INNER, &wb.newton_scratch)) {
-            polish_failures += 1;
-        }
+        if (!newtonPolish(wb.Ql, wb.w, algo.ACTIVE_THRESH, algo.POLISH_MAX_ITER, tol.NEWTON_INNER, &wb.newton_scratch)) polish_failures += 1;
         var m = core.computeMoments(wb.Ps, wb.w, s_scale);
         last_gap = try certifyAt(m.M, Q, b, Xw, &wb);
         b_cert = b;
@@ -500,9 +548,7 @@ pub fn solveTrust(
             core.mveeFw(wb.Ps, 1, 0.0, wb.Ql, wb.w);
             const is_full = (cycle % algo.FW_PER_NEWTON == algo.FW_PER_NEWTON - 1);
             if (is_full) {
-                if (!newtonPolish(wb.Ql, wb.w, algo.ACTIVE_THRESH, 20, tol.NEWTON_INNER, &wb.newton_scratch)) {
-                    polish_failures += 1;
-                }
+                if (!newtonPolish(wb.Ql, wb.w, algo.ACTIVE_THRESH, algo.POLISH_MAX_ITER, tol.NEWTON_INNER, &wb.newton_scratch)) polish_failures += 1;
             }
             m = core.computeMoments(wb.Ps, wb.w, s_scale);
             if (is_full) {
@@ -540,19 +586,12 @@ pub fn solveTrust(
     while (!converged and open_iters + tr_iters < opts.max_outer) {
         tr_iters += 1;
 
-        // The model Hessian is PSD-in-exact-arithmetic near inner
-        // optimality but can go indefinite from roundoff or far-field
-        // states; fall back to the derived isotropic value (≈ its own
-        // circular-optimum limit) so the dogleg's prediction is
-        // positive whenever g ≠ 0.
+        // The model Hessian can go indefinite from roundoff or
+        // far-field states (see ISO_B / doglegStepRobust).
         var B = cur.B;
-        if (!(B.det() > 0) or !(B.m[0] > 0)) B = .{ .m = .{ tc.B0, 0, 0, tc.B0 } }; // negated form: NaN falls back too
+        if (!(B.det() > 0) or !(B.m[0] > 0)) B = ISO_B; // negated form: NaN falls back too
 
-        var step = doglegStep(B, cur.g, delta);
-        if (step.pred <= 0) {
-            B = .{ .m = .{ tc.B0, 0, 0, tc.B0 } };
-            step = doglegStep(B, cur.g, delta);
-        }
+        const step = doglegStepRobust(B, cur.g, delta);
         if (step.pred <= 0 or !(step.u.norm() > 0)) break; // stationary: g ≈ 0
         // Below merit resolution the ratio test can never verify a
         // step — hand off to the re-cert phase instead of rejecting
@@ -566,15 +605,11 @@ pub fn solveTrust(
         const trial = evalH(b_trial, Xw, &wb, algo.FEAS_MARGIN);
 
         const rho: f64 = if (trial) |t| (cur.h - t.h) / step.pred else -1.0;
-        // !(rho >= ETA), not rho < ETA: a NaN ratio (h from a poisoned
-        // state) must REJECT the trial, not accept it.
-        if (!(rho >= tc.ETA)) {
-            // Reject: restore the warm-start weights, shrink the radius
-            // (relative to the step actually attempted, so interior
-            // Newton steps shrink meaningfully too).
+        const rd = updateRadius(delta, rho, step.u.norm());
+        if (!rd.accepted) {
             @memcpy(wb.w, wb.w_bak);
-            delta = @min(delta, step.u.norm()) * tc.SHRINK;
-            if (delta < tc.DELTA_MIN) break;
+            delta = rd.delta;
+            if (rd.hit_floor) break;
             continue;
         }
 
@@ -598,16 +633,8 @@ pub fn solveTrust(
             }
         }
 
-        if (rho < tc.RHO_POOR) {
-            // Accepted, but the quadratic model over-promised (higher
-            // order terms dominate over this radius) — shrink gently so
-            // the model regains fidelity instead of creeping at
-            // ρ ≈ 0.15 or oscillating across the fidelity boundary.
-            delta = @min(delta, step.u.norm()) * tc.SHRINK_POOR;
-            if (delta < tc.DELTA_MIN) break;
-        } else if (rho >= tc.ETA_GOOD and step.u.norm() >= 0.8 * delta) {
-            delta = @min(delta * tc.GROW, tc.DELTA_MAX);
-        }
+        delta = rd.delta;
+        if (rd.hit_floor) break;
     }
 
     // Re-certification phase: the trust region found h stationary but
@@ -634,9 +661,7 @@ pub fn solveTrust(
         while (recert_attempts < tc.RECERT_MAX and open_iters + tr_iters + recert_attempts < opts.max_outer) {
             recert_attempts += 1;
             core.mveeFw(wb.Ps, 1, 0.0, wb.Ql, wb.w);
-            if (!newtonPolish(wb.Ql, wb.w, algo.ACTIVE_THRESH, 20, tol.NEWTON_INNER, &wb.newton_scratch)) {
-                polish_failures += 1;
-            }
+            if (!newtonPolish(wb.Ql, wb.w, algo.ACTIVE_THRESH, algo.POLISH_MAX_ITER, tol.NEWTON_INNER, &wb.newton_scratch)) polish_failures += 1;
             const m = core.computeMoments(wb.Ps, wb.w, s_scale);
             last_gap = try certifyAt(m.M, Q, b, Xw, &wb);
             b_cert = b;

@@ -1,82 +1,40 @@
 _:
     just --list
 
-# Fast test loop. Skips long-running randomized stress tests
-# (e.g. cap_test). No coverage gate. Sub-second; use this while
-# iterating. Run `just test-slow` before committing.
+# Fast test loop — skips the -Dslow stress tests and the coverage gate.
 test:
-    zig build install-test
-    ./zig-out/bin/csar-test
+    zig build test --summary all
 
-# Full test suite + 100% line coverage gate. Builds with -Dslow=true
-# so the randomized stress tests run, then measures coverage under
-# kcov. Slower (~10s) — the pre-commit / CI check.
+# Full suite + 100% line-coverage gate + exclusion ledger (policy: dev.md "Coverage exclusions").
 test-slow:
     zig build install-test -Dslow=true
-    rm -rf coverage
-    kcov --include-pattern=src/,tests/ coverage zig-out/bin/csar-test
-    @n=$(ls -1d coverage/csar-test.*/ 2>/dev/null | wc -l | tr -d ' '); \
-        if [ "$n" != "1" ]; then echo "expected exactly 1 coverage/csar-test.*/ dir, got $n"; exit 1; fi
-    @jq -r '"csar coverage: \(.percent_covered)%"' coverage/csar-test.*/coverage.json
-    @jq -e '(.percent_covered | tonumber) >= 100' coverage/csar-test.*/coverage.json > /dev/null
+    uv run scripts/coverage_gate.py
 
-# Build the library (optimized).
-build:
-    zig build -Doptimize=ReleaseFast
+# Full suite under zig's self-hosted backend (see dev.md "Two backends").
+test-selfhosted:
+    zig build test -Dslow=true -Dllvm=false
 
-# Run `just test-slow` and print where the HTML coverage report landed.
-coverage: test-slow
-    @echo "open coverage/csar-test/index.html"
+# Compile-check the library (CI's Build step).
+check:
+    zig build
 
-# Run the minimal usage example (examples/basic.zig).
-ex-basic:
-    zig build ex-basic
+# Everything CI checks that can run on this machine — use before pushing a PR.
+ci: check test-slow _ci-selfhosted
 
-# Run the full status-handling example (examples/status.zig).
-ex-status:
-    zig build ex-status
+[linux]
+_ci-selfhosted: test-selfhosted
 
-# Run the per-case timing bench (examples/bench.zig, forced ReleaseFast by build.zig).
+[macos]
+_ci-selfhosted:
+    @echo "note: skipping the self-hosted backend suite — unsupported on aarch64-macos; CI covers it (dev.md 'Two backends')"
+
+# Per-case timing (always ReleaseFast, via build.zig).
 bench:
     zig build ex-bench
 
-# Fetch + cache the US-states GeoJSON and write scripts/states/data/states.json.
-# Output is gitignored; the GeoJSON is cached after the first run.
-states-gen:
-    uv run scripts/states/gen_states.py
-
-# Run csar over every US state; writes scripts/states/data/states_aspect.json.
-# Depends on `just states-gen` having run first.
-states-aspect:
-    zig build states-aspect
-
-# Plot one PNG per state (boundary + enclosing-cone ellipse) into the data dir.
-# Depends on `just states-aspect` having written states_aspect.json.
-states-plot:
-    uv run scripts/states/states_plot.py
-
-# Full states example in one command: fetch -> solve -> plot.
-states-all: states-gen states-aspect states-plot
-
-# Fetch + cache the Natural Earth countries GeoJSON, rank by area, and write
-# scripts/countries/data/countries.json (all countries). Output is gitignored.
-countries-gen:
-    uv run scripts/countries/gen_countries.py
-
-# Run csar over every country; writes scripts/countries/data/countries_aspect.json.
-# Countries that exceed a hemisphere are reported and skipped (not a failure).
-# Depends on `just countries-gen` having run first.
-countries-aspect:
-    zig build countries-aspect
-
-# Plot one PNG per converged country (boundary + enclosing-cone ellipse).
-# Depends on `just countries-aspect` having written countries_aspect.json.
-countries-plot:
-    uv run scripts/countries/countries_plot.py
-
-# Full countries example in one command: fetch -> solve -> plot.
-countries-all: countries-gen countries-aspect countries-plot
-
-# Remove build artifacts, coverage output, and generated example data.
+# Remove build artifacts and coverage output (survey data: `just surveys::clean`).
 clean:
-    rm -rf zig-out .zig-cache coverage scripts/states/data scripts/countries/data
+    rm -rf zig-out .zig-cache coverage
+
+# States/countries survey pipelines: `just --list surveys`.
+mod surveys

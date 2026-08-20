@@ -7,6 +7,7 @@
 const std = @import("std");
 const csar = @import("../src/root.zig");
 const cases = @import("cases");
+const helpers = @import("helpers.zig");
 
 test "budget-limited trust DNC returns a self-consistent certified snapshot" {
     // Finding 2: with a small max_outer on a hard input, the trust
@@ -17,23 +18,12 @@ test "budget-limited trust DNC returns a self-consistent certified snapshot" {
     // gap. The outcome must now be the last certified iterate:
     // Q orthonormal to roundoff.
     const allocator = std.testing.allocator;
-    const pts = (cases.byName("wide_cap89") orelse unreachable).points;
+    const pts = helpers.casePoints("wide_cap89");
     var o = try csar.solve(allocator, pts, .{ .method = .trust, .max_outer = 4, .gap_tol = 1e-9 });
     defer o.deinit();
     // Status may be either (converged if the budget suffices on some
     // platform); the invariant under test is snapshot consistency.
-    const Qm = switch (o) {
-        .converged => |c| c.Q,
-        .did_not_converge => |p| p.Q,
-        .infeasible => unreachable,
-    };
-    const c0 = Qm.col(0);
-    const c1 = Qm.col(1);
-    const c2 = Qm.col(2);
-    try std.testing.expect(@abs(c0.dot(c1)) < 1e-10);
-    try std.testing.expect(@abs(c0.dot(c2)) < 1e-10);
-    try std.testing.expect(@abs(c1.dot(c2)) < 1e-10);
-    try std.testing.expect(@abs(c0.dot(c0) - 1.0) < 1e-10);
+    try helpers.expectOrthonormalQ(helpers.resolvedView(&o).Q);
 }
 
 test "the no-certificate sentinel never certifies, and absurd gap_tol is rejected" {
@@ -67,11 +57,9 @@ test "alternating DNC snapshot is also self-consistent" {
     // damped axis step rather than several TR steps — smaller, but the
     // same class). Wide caps DNC structurally under .alternating.
     const allocator = std.testing.allocator;
-    const pts = (cases.byName("wide_cap82") orelse unreachable).points;
+    const pts = helpers.casePoints("wide_cap82");
     var o = try csar.solve(allocator, pts, .{ .method = .alternating });
     defer o.deinit();
     try std.testing.expect(std.meta.activeTag(o) == .did_not_converge);
-    const Qm = o.did_not_converge.Q;
-    try std.testing.expect(@abs(Qm.col(0).dot(Qm.col(1))) < 1e-10);
-    try std.testing.expect(@abs(Qm.col(0).dot(Qm.col(2))) < 1e-10);
+    try helpers.expectOrthonormalQ(helpers.resolvedView(&o).Q);
 }

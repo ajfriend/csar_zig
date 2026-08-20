@@ -50,7 +50,12 @@ pub fn build(b: *std.Build) void {
     });
     test_mod.addImport("cases", cases_mod);
     test_mod.addOptions("test_options", test_options);
-    const tests = b.addTest(.{ .name = "csar-test", .root_module = test_mod });
+    // Backend selection for the test binary. Default LLVM because the
+    // kcov coverage gate reads only LLVM-emitted DWARF; `-Dllvm=false`
+    // selects the self-hosted backend. Policy and per-target support:
+    // dev.md "Two backends".
+    const use_llvm = b.option(bool, "llvm", "Use the LLVM backend for the test binary (default true; kcov requires it)") orelse true;
+    const tests = b.addTest(.{ .name = "csar-test", .root_module = test_mod, .use_llvm = use_llvm });
     const run_tests = b.addRunArtifact(tests);
     run_tests.setCwd(b.path(""));
     const test_step = b.step("test", "Run csar tests");

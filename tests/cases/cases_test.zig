@@ -8,6 +8,7 @@
 const std = @import("std");
 const csar = @import("../../src/root.zig");
 const cases = @import("cases");
+const helpers = @import("../helpers.zig");
 const Vec3 = csar.Vec3;
 
 /// Labeled approx-equal check on aspect ratios. On failure prints
@@ -18,7 +19,7 @@ const Vec3 = csar.Vec3;
 /// so kcov covers the print path.
 fn checkArEq(label: []const u8, expected: f64, actual: f64, tol: f64) !void {
     if (@abs(expected - actual) > tol) {
-        std.debug.print(
+        helpers.diagPrint(
             "AR mismatch case={s}: expected={d:.17} actual={d:.17} delta={e:.3}\n",
             .{ label, expected, actual, @abs(expected - actual) },
         );
@@ -27,9 +28,11 @@ fn checkArEq(label: []const u8, expected: f64, actual: f64, tol: f64) !void {
 }
 
 test "checkArEq prints case label on failure" {
+    helpers.quiet_diagnostics = true;
+    defer helpers.quiet_diagnostics = false;
     try std.testing.expectError(
         error.AspectRatioMismatch,
-        checkArEq("test_label", 1.0, 1.1, 1e-6),
+        checkArEq("diagnostic-selftest", 1.0, 1.1, 1e-6),
     );
 }
 
