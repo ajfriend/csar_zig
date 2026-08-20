@@ -124,9 +124,6 @@ kcov invocation:
   covered). Before adding such an arm, consider whether a narrower
   type removes it instead — `Method.resolved()` returning
   `Method.Resolved` is the in-tree example.
-- `--exclude-line=///`: doc-comment lines are never executable; zig
-  0.16's DWARF sometimes attributes an instruction to one, which kcov
-  would otherwise count as uncovered code.
 - `--exclude-line=kcov-excl`: a trailing `// kcov-excl: <reason>`
   marks a single line. Every marker must carry its reason in-source —
   grep `kcov-excl` for the ledger. **There are currently zero markers
