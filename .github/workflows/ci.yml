@@ -57,6 +57,17 @@ jobs:
           kcov --version
           just test-slow
           { echo '### Coverage'; cat coverage/summary.md; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload the gate's log
+        # Every kcov invocation and the per-binary line totals behind the
+        # ledger — what you need when the ledger disagrees with a local run.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-gate-log
+          path: |
+            zig-out/test-slow.log
+            coverage/summary.txt
+          if-no-files-found: ignore
       - name: Post exclusion ledger on PR
         if: github.event_name == 'pull_request'
         env:

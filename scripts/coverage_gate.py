@@ -92,6 +92,28 @@ def merged_json(out_dir):
     return json.loads((out_dir / 'kcov-merged' / 'coverage.json').read_text())
 
 
+def per_binary_totals(out_dir):
+    """{file: total_lines}, unioned over every per-binary report (max per
+    file). Read from each binary's own `<name>.<hash>/coverage.json`, not
+    from `kcov-merged/`: how a report-only pass regenerates the merged
+    report differs between kcov builds (reading it, CI's ubuntu kcov
+    43+dfsg-2 produced a 1-line ledger where macOS's kcov 43 produced the
+    same 7 lines this derivation gives), and the ledger must not depend
+    on it. Also logs the per-binary totals of every file with an exclusion
+    rule, for the next time the ledger disagrees between machines."""
+    totals = {}
+    with open(LOG, 'a') as log:
+        for d in sorted(out_dir.iterdir()):
+            if not d.is_dir() or d.name == 'kcov-merged' or '.' not in d.name:
+                continue
+            for f in json.loads((d / 'coverage.json').read_text())['files']:
+                n = int(f['total_lines'])
+                if n > totals.get(f['file'], 0):
+                    totals[f['file']] = n
+                log.write(f'{out_dir.name}/{d.name}: {f["file"]} total_lines={n}\n')
+    return totals
+
+
 shutil.rmtree(GATED_DIR, ignore_errors=True)
 LOG.unlink(missing_ok=True)
 
@@ -124,14 +146,14 @@ with tempfile.TemporaryDirectory() as tmp:
             shutil.copytree(d, raw_dir / d.name)
     for binary in BINARIES:
         kcov(['--report-only'], raw_dir, binary, [], 'a')
-    raw = merged_json(raw_dir)
+    raw_totals = per_binary_totals(raw_dir)
 
 root = str(Path.cwd()) + '/'
-gated_totals = {f['file']: int(f['total_lines']) for f in gated['files']}
+gated_totals = per_binary_totals(GATED_DIR)
 excluded = sorted(
-    (f['file'].removeprefix(root), int(f['total_lines']) - gated_totals.get(f['file'], 0))
-    for f in raw['files']
-    if int(f['total_lines']) > gated_totals.get(f['file'], 0)
+    (file.removeprefix(root), n - gated_totals.get(file, 0))
+    for file, n in raw_totals.items()
+    if n > gated_totals.get(file, 0)
 )
 
 text = '\n'.join([
