@@ -69,8 +69,8 @@ pass under both backends**; CI runs both on every push. The test
 binary defaults to LLVM (`-Dllvm=false` selects self-hosted) because
 the kcov gate can only read LLVM-emitted DWARF, so coverage is
 measured on the LLVM binary alone. Backend support is per-target:
-the 0.15.2 self-hosted backend crashes compiling the suite on
-aarch64-macos, so run `just test-selfhosted` where it's supported
+the self-hosted backend crashes compiling the suite on
+aarch64-macos (0.15.2 and 0.16.0), so run `just test-selfhosted` where it is supported
 (x86_64-linux; CI covers it).
 
 ## Coverage
