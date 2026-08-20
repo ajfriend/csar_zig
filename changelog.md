@@ -3,6 +3,13 @@
 Notable changes to csar. Terse by design — each entry points to the PR or
 commit that carries the full detail.
 
+## [0.2.0]
+
+- Minimum zig raised to **0.16.0** (breaking for source builders); toolchain
+  now pinned via a committed `mise.toml`. No algorithmic changes — this tag is
+  the first A/B-harness baseline. Details in
+  [#12](https://github.com/ajfriend/csar_zig/pull/12).
+
 ## [0.1.0]
 
 - Initial release of `csar`: a standalone, std-only Zig package that solves the
