@@ -4,20 +4,20 @@ _:
 kcov_include := "src/,tests/"
 kcov_exclude := "=> unreachable,kcov-excl"
 
-# Fast test loop. Skips long-running randomized stress tests
-# (e.g. cap_test). No coverage gate. Sub-second; use this while
-# iterating. Run `just test-slow` before committing.
+# Skips the long-running randomized stress tests (e.g. cap_test) and
+# the coverage gate; use while iterating, and run `just test-slow`
+# (or `just ci`) before committing.
+# Fast test loop (sub-second inner loop, no coverage gate).
 test:
     zig build install-test
     ./zig-out/bin/csar-test
 
-# Full test suite + 100% line coverage gate under kcov. -Dslow=true
-# runs the randomized stress tests too; ~10s — the pre-commit / CI
-# check. Exclusion policy and the ledger's meaning: dev.md "Coverage
+# Exclusion policy and the ledger's meaning: dev.md "Coverage
 # exclusions". The report-only second pass derives the exclusion
 # ledger from the same collected data (its line classification only;
 # report-only hit data is lossy and never consulted). The summary
 # block lands in coverage/summary.txt for CI to post on PRs.
+# Full suite + 100% line-coverage gate + exclusion ledger (~10s; the pre-commit / CI check).
 test-slow:
     zig build install-test -Dslow=true
     rm -rf coverage coverage_raw
@@ -32,9 +32,9 @@ test-slow:
     @cat coverage/summary.txt
     @jq -e '(.percent_covered | tonumber) >= 100' coverage/csar-test.*/coverage.json > /dev/null
 
-# Full suite under zig's self-hosted backend. Policy and per-target
-# support (it crashes compiling this suite on aarch64-macos; CI runs
-# it on x86_64-linux): dev.md "Two backends".
+# Per-target support (it crashes compiling this suite on
+# aarch64-macos; CI runs it on x86_64-linux): dev.md "Two backends".
+# Full suite under zig's self-hosted backend (-Dllvm=false).
 test-selfhosted:
     zig build test -Dslow=true -Dllvm=false
 
@@ -42,10 +42,10 @@ test-selfhosted:
 check:
     zig build
 
-# Everything CI checks that can run on this machine — use before
-# pushing a PR. The self-hosted backend suite runs where the backend
-# supports the target (x86_64-linux); elsewhere it is skipped with a
-# note and CI covers it.
+# The self-hosted backend suite runs where the backend supports the
+# target (x86_64-linux); elsewhere it is skipped with a note and CI
+# covers it.
+# Everything CI checks that can run on this machine — use before pushing a PR.
 ci: check test-slow _ci-selfhosted
 
 [linux]
@@ -75,37 +75,37 @@ ex-status:
 bench:
     zig build ex-bench
 
-# Fetch + cache the US-states GeoJSON and write scripts/states/data/states.json.
 # Output is gitignored; the GeoJSON is cached after the first run.
+# Fetch + cache the US-states GeoJSON and write scripts/states/data/states.json.
 states-gen:
     uv run scripts/states/gen_states.py
 
-# Run csar over every US state; writes scripts/states/data/states_aspect.json.
 # Depends on `just states-gen` having run first.
+# Run csar over every US state; writes scripts/states/data/states_aspect.json.
 states-aspect:
     zig build states-aspect
 
-# Plot one PNG per state (boundary + enclosing-cone ellipse) into the data dir.
 # Depends on `just states-aspect` having written states_aspect.json.
+# Plot one PNG per state (boundary + enclosing-cone ellipse) into the data dir.
 states-plot:
     uv run scripts/states/states_plot.py
 
 # Full states example in one command: fetch -> solve -> plot.
 states-all: states-gen states-aspect states-plot
 
-# Fetch + cache the Natural Earth countries GeoJSON, rank by area, and write
-# scripts/countries/data/countries.json (all countries). Output is gitignored.
+# rank by area; output is gitignored.
+# Fetch + cache the Natural Earth countries GeoJSON and write scripts/countries/data/countries.json.
 countries-gen:
     uv run scripts/countries/gen_countries.py
 
+# Countries that exceed a hemisphere are reported and skipped (not a
+# failure). Depends on `just countries-gen` having run first.
 # Run csar over every country; writes scripts/countries/data/countries_aspect.json.
-# Countries that exceed a hemisphere are reported and skipped (not a failure).
-# Depends on `just countries-gen` having run first.
 countries-aspect:
     zig build countries-aspect
 
-# Plot one PNG per converged country (boundary + enclosing-cone ellipse).
 # Depends on `just countries-aspect` having written countries_aspect.json.
+# Plot one PNG per converged country (boundary + enclosing-cone ellipse).
 countries-plot:
     uv run scripts/countries/countries_plot.py
 

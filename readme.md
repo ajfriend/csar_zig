@@ -77,7 +77,9 @@ zig build test         # fast unit suite (no coverage)
 
 Equivalent `just` targets are in `justfile`. The full suite +
 100% line-coverage gate under kcov is `just test-slow` (the
-pre-commit / CI check); see `dev.md` for the full workflow.
+pre-commit / CI check), and `just ci` runs everything CI checks
+that can run on your machine — use it before pushing a PR. See
+`dev.md` for the full workflow.
 
 ## History
 
