@@ -393,6 +393,44 @@ pub fn evalH(
 /// otherwise). Returns the step u and the predicted decrease.
 const TrStep = struct { u: Vec2, pred: f64 };
 
+/// Acceptance test for a trial step's actual/predicted decrease ratio.
+/// Written as !(ρ ≥ ETA), not ρ < ETA: a NaN ratio (h from a poisoned
+/// state) must REJECT the trial, not accept it.
+pub fn accepts(rho: f64) bool {
+    return rho >= tc.ETA;
+}
+
+pub const RadiusUpdate = struct { delta: f64, hit_floor: bool };
+
+/// The trust-region radius policy after a trial evaluation, in one
+/// testable place (constants and their provenance: config.trust).
+///
+/// - Reject (ρ < ETA, NaN included): shrink by SHRINK, relative to the
+///   step actually attempted so interior Newton steps shrink
+///   meaningfully too. The caller also restores the warm-start weights.
+/// - Accepted but poor (ρ < RHO_POOR): the quadratic model
+///   over-promised (higher-order terms dominate over this radius) —
+///   shrink gently by SHRINK_POOR so the model regains fidelity
+///   instead of creeping at ρ ≈ 0.15 or oscillating across the
+///   fidelity boundary.
+/// - Very successful (ρ ≥ ETA_GOOD) with a radius-limited step: grow.
+/// - `hit_floor` means the shrunk radius fell below DELTA_MIN — the
+///   caller exits the loop.
+pub fn updateRadius(delta: f64, rho: f64, step_norm: f64) RadiusUpdate {
+    if (!accepts(rho)) {
+        const d = @min(delta, step_norm) * tc.SHRINK;
+        return .{ .delta = d, .hit_floor = d < tc.DELTA_MIN };
+    }
+    if (rho < tc.RHO_POOR) {
+        const d = @min(delta, step_norm) * tc.SHRINK_POOR;
+        return .{ .delta = d, .hit_floor = d < tc.DELTA_MIN };
+    }
+    if (rho >= tc.ETA_GOOD and step_norm >= 0.8 * delta) {
+        return .{ .delta = @min(delta * tc.GROW, tc.DELTA_MAX), .hit_floor = false };
+    }
+    return .{ .delta = delta, .hit_floor = false };
+}
+
 pub fn doglegStep(B: Mat2, g: Vec2, delta: f64) TrStep {
     const model = struct {
         fn pred(B_: Mat2, g_: Vec2, u: Vec2) f64 {
@@ -566,15 +604,12 @@ pub fn solveTrust(
         const trial = evalH(b_trial, Xw, &wb, algo.FEAS_MARGIN);
 
         const rho: f64 = if (trial) |t| (cur.h - t.h) / step.pred else -1.0;
-        // !(rho >= ETA), not rho < ETA: a NaN ratio (h from a poisoned
-        // state) must REJECT the trial, not accept it.
-        if (!(rho >= tc.ETA)) {
-            // Reject: restore the warm-start weights, shrink the radius
-            // (relative to the step actually attempted, so interior
-            // Newton steps shrink meaningfully too).
+        if (!accepts(rho)) {
+            // Reject: restore the warm-start weights and shrink.
             @memcpy(wb.w, wb.w_bak);
-            delta = @min(delta, step.u.norm()) * tc.SHRINK;
-            if (delta < tc.DELTA_MIN) break;
+            const rd = updateRadius(delta, rho, step.u.norm());
+            delta = rd.delta;
+            if (rd.hit_floor) break;
             continue;
         }
 
@@ -598,16 +633,9 @@ pub fn solveTrust(
             }
         }
 
-        if (rho < tc.RHO_POOR) {
-            // Accepted, but the quadratic model over-promised (higher
-            // order terms dominate over this radius) — shrink gently so
-            // the model regains fidelity instead of creeping at
-            // ρ ≈ 0.15 or oscillating across the fidelity boundary.
-            delta = @min(delta, step.u.norm()) * tc.SHRINK_POOR; // kcov-excl: poor-ρ band [ETA, RHO_POOR) — historically real (cap89, pre-tuning); no post-tuning input reaches it (dev.md "Coverage exclusions")
-            if (delta < tc.DELTA_MIN) break; // kcov-excl: see line above
-        } else if (rho >= tc.ETA_GOOD and step.u.norm() >= 0.8 * delta) {
-            delta = @min(delta * tc.GROW, tc.DELTA_MAX);
-        }
+        const rd = updateRadius(delta, rho, step.u.norm());
+        delta = rd.delta;
+        if (rd.hit_floor) break;
     }
 
     // Re-certification phase: the trust region found h stationary but

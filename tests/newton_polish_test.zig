@@ -184,3 +184,40 @@ test "range-space polish: jittered annulus keeps invariants and reaches primal o
     // the primal-optimality signal (Σwᵢgᵢ ≡ 3, so g_max ≥ 3 always).
     try std.testing.expect(r.g_max - 3.0 <= 1e-6);
 }
+
+test "buildKktH: dense and range variants match brute force, bit-exactly symmetric" {
+    // The two variants share one loop parameterized by `use_range`
+    // (see buildKktH's doc comment): dense ⇒ (qᵢ·yⱼ)², range ⇒ (yᵢ·yⱼ)².
+    // The range variant is the safety net behind a range-solve pivot
+    // failure, unreachable through newtonPolish on any constructible
+    // input — this direct test is its coverage.
+    const q = [_]Vec3{
+        .{ .m = .{ 1.0, 0.2, 1.0 } },
+        .{ .m = .{ -0.7, 0.9, 1.0 } },
+        .{ .m = .{ 0.3, -1.1, 1.0 } },
+    };
+    const Y = [_]Vec3{
+        .{ .m = .{ 0.5, -0.4, 0.8 } },
+        .{ .m = .{ -0.2, 0.6, -0.1 } },
+        .{ .m = .{ 0.9, 0.1, 0.3 } },
+    };
+    var H: [9]f64 = undefined;
+
+    newton.buildKktH(&q, &Y, false, &H);
+    for (0..3) |i| {
+        for (i..3) |j| {
+            const dij = q[i].dot(Y[j]);
+            try std.testing.expectEqual(dij * dij, H[i * 3 + j]);
+            try std.testing.expectEqual(H[i * 3 + j], H[j * 3 + i]);
+        }
+    }
+
+    newton.buildKktH(&q, &Y, true, &H);
+    for (0..3) |i| {
+        for (i..3) |j| {
+            const dij = Y[i].dot(Y[j]);
+            try std.testing.expectEqual(dij * dij, H[i * 3 + j]);
+            try std.testing.expectEqual(H[i * 3 + j], H[j * 3 + i]);
+        }
+    }
+}

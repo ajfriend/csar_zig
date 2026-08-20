@@ -12,9 +12,11 @@ test:
 # so the randomized stress tests run, then measures coverage under
 # kcov. Slower (~10s) — the pre-commit / CI check.
 # Exclusions keep the 100% gate exact, not lax (any NEWLY uncovered
-# line still fails): `unreachable` lines can never execute in a passing
-# run by definition, and `kcov-excl` markers carry a per-site reason —
-# the ledger lives in dev.md "Coverage exclusions".
+# line still fails): `=> unreachable` switch arms can never execute in
+# a passing run by definition (deliberately narrow — `orelse
+# unreachable` lines DO execute and stay counted), and `kcov-excl`
+# markers carry a per-site reason — the ledger lives in dev.md
+# "Coverage exclusions".
 # The exclusion ledger rides along for free: the gate run collects and
 # reports as before (with the exclusion flags); a second, report-only
 # kcov pass on a copy of the collected data reclassifies WITHOUT the
@@ -25,7 +27,7 @@ test:
 test-slow:
     zig build install-test -Dslow=true
     rm -rf coverage coverage_raw
-    kcov --include-pattern=src/,tests/ --exclude-line=unreachable,kcov-excl --exclude-region=kcov-excl-start:kcov-excl-stop coverage zig-out/bin/csar-test
+    kcov --include-pattern=src/,tests/ --exclude-line='=> unreachable,kcov-excl' --exclude-region=kcov-excl-start:kcov-excl-stop coverage zig-out/bin/csar-test
     cp -r coverage coverage_raw
     kcov --report-only --include-pattern=src/,tests/ coverage_raw zig-out/bin/csar-test
     @n=$(ls -1d coverage/csar-test.*/ 2>/dev/null | wc -l | tr -d ' '); \

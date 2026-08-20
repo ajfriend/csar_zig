@@ -1207,7 +1207,6 @@ pub fn solve(
     switch (opts.method.resolved()) {
         .alternating => return solveAlternating(allocator, scratch_alloc, prep, opts),
         .trust => return trust.solveTrust(allocator, scratch_alloc, prep, opts),
-        .auto => unreachable, // resolved() maps .auto to Method.recommended
     }
 }
 

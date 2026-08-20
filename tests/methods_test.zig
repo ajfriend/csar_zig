@@ -112,7 +112,7 @@ test "auto: resolves to Method.recommended (pure alias, identical outcomes)" {
     // `Method.recommended` is the single source of truth for the
     // resolution, and this test is where a re-point gets recorded.
     try std.testing.expectEqual(csar.Method.trust, csar.Method.recommended);
-    try std.testing.expectEqual(csar.Method.trust, csar.Method.auto.resolved());
+    try std.testing.expectEqual(csar.Method.Resolved.trust, csar.Method.auto.resolved());
 
     // Behavioral half: same dispatch target ⇒ identical outcomes,
     // including the diag tag (the expectEqual on `.diag.trust` panics

@@ -74,6 +74,22 @@ pub const RANGE_SPACE_MIN_K: usize = 8;
 
 /// Bordered KKT [H, 1; 1', 0] [Δw; -ν] = [g; 0] via LU on the (k+1)×(k+1)
 /// symmetric indefinite system.
+/// Dense KKT Hessian for `solveBorderedKkt`: symmetric H_ij = (qᵢᵀW⁻¹qⱼ)²,
+/// built from what `Y` holds on each path (see the Y/g computation in
+/// `newtonPolish`): range path (forward solves, Y = L⁻¹q) ⇒ (yᵢ·yⱼ)²;
+/// dense path (full solves, Y = W⁻¹q) ⇒ the original (qᵢ·yⱼ)² form,
+/// bit-identical to prior behavior. `k` is `Y.len`; writes H[0..k²].
+pub fn buildKktH(q: []const Vec3, Y: []const Vec3, use_range: bool, H: []f64) void {
+    const k = Y.len;
+    for (0..k) |i| {
+        for (i..k) |j| {
+            const dij = if (use_range) Y[i].dot(Y[j]) else q[i].dot(Y[j]);
+            H[i * k + j] = dij * dij;
+            H[j * k + i] = H[i * k + j];
+        }
+    }
+}
+
 fn solveBorderedKkt(H: []const f64, k: usize, g: []const f64, delta_w: []f64, s: *NewtonScratch) bool {
     const n = k + 1;
     const K = s.KKT;
@@ -247,32 +263,8 @@ pub fn newtonPolish(Ql: []const Vec3, w: []f64, active_thresh: f64, max_iter: u3
         if (!solved) {
             // Dense bordered KKT — the k ≤ 7 primary path, and the
             // safety net for a range-solve pivot failure (provably
-            // shouldn't happen; see tol.NEWTON_RANGE_PIVOT_MIN). H is
-            // symmetric: H_ij = (qᵢᵀW⁻¹qⱼ)², built from what Y holds
-            // on each path (see the Y/g computation above): forward
-            // solves ⇒ (yᵢ·yⱼ)²; full solves ⇒ the original qᵢ·yⱼ
-            // form, bit-identical to prior behavior.
-            if (use_range) {
-                // kcov-excl-start: range-solve pivot-failure safety net —
-                // provably unreachable (see tol.NEWTON_RANGE_PIVOT_MIN and
-                // dev.md "Coverage exclusions").
-                for (0..k) |i| {
-                    for (i..k) |j| {
-                        const dij = Y[i].dot(Y[j]);
-                        H[i * k + j] = dij * dij;
-                        H[j * k + i] = H[i * k + j];
-                    }
-                }
-                // kcov-excl-stop
-            } else {
-                for (0..k) |i| {
-                    for (i..k) |j| {
-                        const dij = q[i].dot(Y[j]);
-                        H[i * k + j] = dij * dij;
-                        H[j * k + i] = H[i * k + j];
-                    }
-                }
-            }
+            // shouldn't happen; see tol.NEWTON_RANGE_PIVOT_MIN).
+            buildKktH(q[0..k], Y[0..k], use_range, H);
             if (!solveBorderedKkt(H, k, g, delta_w, s)) return false;
         }
 

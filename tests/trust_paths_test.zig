@@ -13,6 +13,7 @@ const linalg = @import("../src/linalg.zig");
 const Vec2 = linalg.Vec2;
 const Mat2 = linalg.Mat2;
 const Vec3 = csar.Vec3;
+const tc = @import("../src/config.zig").trust;
 
 fn pred(B: Mat2, g: Vec2, u: Vec2) f64 {
     return -(g.dot(u) + 0.5 * u.dot(B.apply(u)));
@@ -59,6 +60,39 @@ test "doglegStep: radius between Cauchy and Newton points interpolates the segme
     // decrease at the same radius (dogleg optimality along the path).
     const u_grad = g.scale(-delta / g.norm());
     try std.testing.expect(step.pred >= pred(B, g, u_grad) - 1e-12);
+}
+
+test "updateRadius: every ρ band of the tuned radius policy" {
+    const nan = std.math.nan(f64);
+
+    // Reject band (ρ < ETA), NaN included: shrink relative to the step
+    // actually attempted, by SHRINK.
+    try std.testing.expect(!trust.accepts(0.0));
+    try std.testing.expect(!trust.accepts(nan));
+    const rej = trust.updateRadius(1.0, 0.0, 0.5);
+    try std.testing.expectEqual(@min(1.0, 0.5) * tc.SHRINK, rej.delta);
+    try std.testing.expect(!rej.hit_floor);
+    try std.testing.expectEqual(rej.delta, trust.updateRadius(1.0, nan, 0.5).delta);
+
+    // Accepted-but-poor band (ETA ≤ ρ < RHO_POOR): gentle SHRINK_POOR.
+    const rho_poor = (tc.ETA + tc.RHO_POOR) / 2.0;
+    try std.testing.expect(trust.accepts(rho_poor));
+    const poor = trust.updateRadius(1.0, rho_poor, 1.0);
+    try std.testing.expectEqual(tc.SHRINK_POOR, poor.delta);
+    try std.testing.expect(!poor.hit_floor);
+
+    // Shrink through the DELTA_MIN floor exits the loop (both bands).
+    try std.testing.expect(trust.updateRadius(tc.DELTA_MIN, 0.0, tc.DELTA_MIN).hit_floor);
+    try std.testing.expect(trust.updateRadius(tc.DELTA_MIN, rho_poor, tc.DELTA_MIN).hit_floor);
+
+    // Middle band (RHO_POOR ≤ ρ < ETA_GOOD): radius held.
+    try std.testing.expectEqual(1.0, trust.updateRadius(1.0, (tc.RHO_POOR + tc.ETA_GOOD) / 2.0, 1.0).delta);
+
+    // Very successful (ρ ≥ ETA_GOOD) with a radius-limited step: GROW,
+    // capped at DELTA_MAX. A short interior step does not grow.
+    try std.testing.expectEqual(1.0 * tc.GROW, trust.updateRadius(1.0, tc.ETA_GOOD, 1.0).delta);
+    try std.testing.expectEqual(tc.DELTA_MAX, trust.updateRadius(3.0, 0.99, 3.0).delta);
+    try std.testing.expectEqual(1.0, trust.updateRadius(1.0, 0.99, 0.5).delta);
 }
 
 /// N points on the boundary of an anisotropic "elliptical cap": tangent
