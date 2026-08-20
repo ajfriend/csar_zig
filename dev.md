@@ -27,6 +27,7 @@
 | `just coverage` | Same as `just test-slow`, then prints the path to the HTML report. |
 | `just bench` | Run the benchmark suite (release-built `ex-bench`). |
 | `just clean` | Remove `zig-out/`, `.zig-cache/`, `coverage/`. |
+| `just surveys::…` | The states/countries survey pipelines (research/example tooling), grouped in the `surveys` module (`surveys.just`) — `just --list surveys`. |
 
 ### Two test tiers
 
