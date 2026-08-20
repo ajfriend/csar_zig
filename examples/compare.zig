@@ -37,6 +37,7 @@ const RunStats = struct {
 /// Run `method` on `pts` `runs` times; report the last outcome + timing.
 fn measure(
     allocator: std.mem.Allocator,
+    io: std.Io,
     pts: []const [3]f64,
     method: csar.Method,
     runs: u32,
@@ -49,10 +50,10 @@ fn measure(
     var last: ?csar.Outcome = null;
     defer if (last) |*lo| lo.deinit();
     for (0..runs) |r| {
-        const t0 = std.time.nanoTimestamp();
+        const t0 = std.Io.Timestamp.now(io, .awake);
         const o = try csar.solve(allocator, pts, .{ .method = method });
-        const t1 = std.time.nanoTimestamp();
-        times_buf[r] = @as(f64, @floatFromInt(t1 - t0)) / 1000.0;
+        const t1 = std.Io.Timestamp.now(io, .awake);
+        times_buf[r] = @as(f64, @floatFromInt(t0.durationTo(t1).nanoseconds)) / 1000.0;
         if (last) |*lo| lo.deinit();
         last = o;
     }
@@ -107,9 +108,15 @@ fn capPoints(allocator: std.mem.Allocator, rng: std.Random, n: usize, cap_deg: f
     return pts;
 }
 
-pub fn main() !void {
-    const allocator = std.heap.smp_allocator;
-    const stdout = std.fs.File.stdout().deprecatedWriter();
+pub fn main(init: std.process.Init) !void {
+    // init.gpa resolves to std.heap.smp_allocator in release builds
+    // (this example is forced ReleaseFast) — see the allocator note in
+    // csar.zig.
+    const allocator = init.gpa;
+    const io = init.io;
+    var stdout_buffer: [4096]u8 = undefined;
+    var stdout_writer = std.Io.File.stdout().writer(io, &stdout_buffer);
+    const stdout = &stdout_writer.interface;
 
     var times: [N_RUNS]f64 = undefined;
 
@@ -124,8 +131,8 @@ pub fn main() !void {
     var trust_slowdown_sum: f64 = 0;
     for (cases.all) |entry| {
         const pts = entry.case.points;
-        const f = try measure(allocator, pts, .alternating, N_RUNS, &times);
-        const r = try measure(allocator, pts, .trust, N_RUNS, &times);
+        const f = try measure(allocator, io, pts, .alternating, N_RUNS, &times);
+        const r = try measure(allocator, io, pts, .trust, N_RUNS, &times);
         var ar_rel: f64 = 0;
         if (std.mem.eql(u8, f.status, "ok") and std.mem.eql(u8, r.status, "ok")) {
             ar_rel = @abs(r.ar - f.ar) / f.ar;
@@ -170,7 +177,7 @@ pub fn main() !void {
                 const pts = try capPoints(allocator, rng, n, wdeg);
                 defer allocator.free(pts);
                 for (methods, 0..) |method, mi| {
-                    const st = try measure(allocator, pts, method, GRID_RUNS, &grid_times);
+                    const st = try measure(allocator, io, pts, method, GRID_RUNS, &grid_times);
                     if (!std.mem.eql(u8, st.status, "ok")) dnc[mi] += 1;
                     med[mi] += st.t_median_us;
                 }
@@ -184,4 +191,5 @@ pub fn main() !void {
         }
     }
     try stdout.print("\n(med_us for a DNC-heavy alternating cell is the cost of burning max_outer.)\n", .{});
+    try stdout.flush();
 }

@@ -25,7 +25,7 @@
 | `just test` | Fast test loop — skips long-running randomized stress tests, no coverage gate. Sub-second; the inner-loop iteration command. |
 | `just test-slow` | Full suite + 100% line coverage gate under `kcov`. Builds with `-Dslow=true` so randomized stress tests run. ~10s; the pre-commit / CI check. |
 | `just test-selfhosted` | Full suite under zig's self-hosted backend (`-Dllvm=false`). See "Two backends" below. |
-| `just check` | Compile-check the library (CI's Build step). |
+| `just check` | Compile the library and every executable, running nothing (CI's Build step). |
 | `just bench` | Run the benchmark suite (release-built `ex-bench`). |
 | `just clean` | Remove `zig-out/`, `.zig-cache/`, `coverage/`. |
 | `just surveys::…` | The states/countries survey pipelines (research/example tooling), grouped in the `surveys` module (`surveys.just`) — `just --list surveys`. |

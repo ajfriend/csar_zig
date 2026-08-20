@@ -55,10 +55,10 @@ const StateResult = struct {
     outer_iters: u32,
 };
 
-pub fn main() !void {
-    var gpa: std.heap.GeneralPurposeAllocator(.{}) = .{};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    // init.gpa: leak-checked DebugAllocator in Debug, smp_allocator in
+    // release builds.
+    const allocator = init.gpa;
 
     // One arena holds the output-side allocations (the per-state result list
     // with its duped name strings). The parsed input owns its own arena and
@@ -68,21 +68,20 @@ pub fn main() !void {
     const out_alloc = out_arena.allocator();
 
     var counts: Counts = .{};
-    const results = try processStates(allocator, out_alloc, &counts);
+    const results = try processStates(init.io, allocator, out_alloc, &counts);
 
-    try writeOutput(results);
+    try writeOutput(init.io, results);
     printSummary(results);
     checkConvergence(counts);
 }
 
 fn processStates(
+    io: std.Io,
     gpa: std.mem.Allocator,
     out_alloc: std.mem.Allocator,
     counts: *Counts,
 ) ![]StateResult {
-    var file = try std.fs.cwd().openFile(INPUT_PATH, .{});
-    defer file.close();
-    const bytes = try file.readToEndAlloc(gpa, 1 << 30);
+    const bytes = try std.Io.Dir.cwd().readFileAlloc(io, INPUT_PATH, gpa, .limited(1 << 30));
     defer gpa.free(bytes);
 
     var parsed = try std.json.parseFromSlice(InputJson, gpa, bytes, .{
@@ -95,7 +94,7 @@ fn processStates(
 
     var results = try std.ArrayListUnmanaged(StateResult).initCapacity(out_alloc, input.states.len);
 
-    const t0 = std.time.milliTimestamp();
+    const t0 = std.Io.Timestamp.now(io, .awake);
     for (input.states) |state| {
         const outcome_or_err = csar.solve(gpa, state.vertices, .{ .gap_tol = STATES_GAP_TOL });
         var outcome = outcome_or_err catch |err| switch (err) {
@@ -123,7 +122,7 @@ fn processStates(
             },
         }
     }
-    const dt_ms = std.time.milliTimestamp() - t0;
+    const dt_ms = t0.durationTo(std.Io.Timestamp.now(io, .awake)).toMilliseconds();
     std.debug.print("  done in {d}ms\n", .{dt_ms});
 
     return results.items;
@@ -153,14 +152,14 @@ fn captureResult(
     };
 }
 
-fn writeOutput(results: []StateResult) !void {
+fn writeOutput(io: std.Io, results: []StateResult) !void {
     const Wrapped = struct { states: []StateResult };
     const payload: Wrapped = .{ .states = results };
 
-    var file = try std.fs.cwd().createFile(OUTPUT_PATH, .{ .truncate = true });
-    defer file.close();
+    var file = try std.Io.Dir.cwd().createFile(io, OUTPUT_PATH, .{ .truncate = true });
+    defer file.close(io);
     var write_buf: [4096]u8 = undefined;
-    var writer = file.writer(&write_buf);
+    var writer = file.writer(io, &write_buf);
     try std.json.Stringify.value(payload, .{}, &writer.interface);
     try writer.interface.flush();
 }
