@@ -106,7 +106,7 @@ pub const InputError = error{
 /// These are the knobs a typical caller might legitimately want to
 /// twist (perf-vs-accuracy trade-offs, behavior toggles). Deeper
 /// tuning constants — Frank-Wolfe inner cycles, damping curve,
-/// backtracking, preconditioner gates — are kept internal in `algo`
+/// backtracking — are kept internal in `algo`
 /// because they interact subtly with each other.
 pub const SolveOptions = struct {
     /// Convergence threshold on the duality gap. Must be finite and
@@ -120,8 +120,9 @@ pub const SolveOptions = struct {
     /// at the default — correctly, since f64 cannot certify a tighter
     /// bound (the optimal cone axis is a sub-ulp rotation away). WHICH
     /// cells sit above vs below the floor at a tolerance near it is
-    /// path-dependent at noise level (the status is noisier than the
-    /// answer there; aspect ratios agree across paths to ~1e-7).
+    /// decided at noise level, so it can shift with any change to the
+    /// iteration (the status is noisier than the answer there; aspect
+    /// ratios agree to ~1e-7 regardless).
     /// Raising `max_outer` does NOT help at the floor; pass a looser
     /// `gap_tol` (e.g. 1e-3) for such inputs — the aspect ratio is
     /// input-precision-limited and accurate regardless of the gap.
@@ -167,9 +168,6 @@ pub const SolveOptions = struct {
     ///            family constructed to date, including wide-angle /
     ///            elongated inputs (dense caps past ~82°, regions like
     ///            France at the default iteration budget).
-    ///
-    /// The original alternating solver (`.alternating`) was removed in
-    /// 0.3.0; see docs/trust-solver.md for the comparison that retired it.
     method: Method = .auto,
 };
 
@@ -186,14 +184,13 @@ pub const Method = enum {
     pub const recommended: Method = .trust;
 
     /// The concrete methods `.auto` can resolve to — `resolved()`'s
-    /// return type, so dispatch switches are exhaustive by
-    /// construction (no unreachable arm to defend).
+    /// return type, which `solve` switches on exhaustively. A second
+    /// solver is one arm here and one in `solve`.
     pub const Resolved = enum { trust };
 
     /// Resolve `.auto` to its concrete method; concrete methods map to
-    /// themselves. `solve`'s dispatch switches on this. The comptime
-    /// conversion makes pointing `recommended` back at `.auto` a
-    /// compile error rather than a cycle.
+    /// themselves. The comptime conversion makes pointing `recommended`
+    /// back at `.auto` a compile error rather than a cycle.
     pub fn resolved(self: Method) Resolved {
         return switch (self) {
             .auto => comptime @field(Resolved, @tagName(recommended)),
@@ -202,19 +199,17 @@ pub const Method = enum {
     }
 };
 
-/// Per-algorithm diagnostics, tagged by the solver path that produced
-/// the outcome. The mathematical contract — Q, sigma, gap, cert — is
-/// shared and method-independent; everything in here is diagnostic and
-/// algorithm-specific, so each path gets its own well-typed struct
-/// instead of overloading shared counters. The tag records the
-/// concrete path that ran; under `method = .auto` that is
-/// `Method.recommended`.
+/// Solver diagnostics, tagged by the solver that ran. The mathematical
+/// contract — Q, sigma, gap, cert — is method-independent; everything
+/// in here is algorithm-specific, so each solver carries its own typed
+/// counters. Today the only tag is `.trust` (what `.auto` resolves to);
+/// the union is the seam for a second solver.
 pub const Diagnostics = union(enum) {
     trust: TrustDiagnostics,
 
-    /// Total solver iterations regardless of path — a rough effort
-    /// number for logs and tables. The per-path fields are the
-    /// meaningful quantities; do not compare totals across paths.
+    /// Sum of the per-phase counters — a rough effort number for logs
+    /// and tables. The typed per-phase fields are the meaningful
+    /// quantities.
     pub fn totalIters(self: Diagnostics) u32 {
         return switch (self) {
             .trust => |d| d.open_iters + d.tr_iters + d.recert_attempts,
@@ -381,8 +376,7 @@ pub const Outcome = union(enum) {
     /// (bounded by `Infeasible.residual`; see that doc).
     infeasible: Infeasible,
     /// The gap did not close, either because the iteration budget
-    /// (`max_outer`) ran out or — on the trust path — because the
-    /// solver reached a stationary point whose certificate stays
+    /// (`max_outer`) ran out or because the solver reached a stationary point whose certificate stays
     /// above `gap_tol` (the f64 gap floor; retrying with a larger
     /// `max_outer` changes nothing there — loosen `gap_tol` instead,
     /// see its doc). Last certified iterate is available for

@@ -1,9 +1,10 @@
 //! Minimum-volume ellipsoidal cone (spherical aspect ratio) solver.
 //!
-//! Idiomatic Zig port of csrc/csar.c. Uses @Vector(N, f64) + generic helpers
-//! for 3D math. The algorithm is: Farkas halfspace check, optional convex
-//! hull preprocessing, FW step + Newton polish + constructed dual certificate
-//! in a single outer loop.
+//! Shared solver core: preprocessing (Farkas halfspace check, optional
+//! convex-hull reduction, coplanarity rejection), the gnomonic-chart MVEE
+//! primitives (FW steps, moments, damped axis step, Newton polish,
+//! constructed dual certificate), and `solve`, which dispatches to
+//! `trust.zig`. Uses @Vector(N, f64) + generic helpers for 3D math.
 //!
 //! Allocator convention:
 //!   - solve() takes any std.mem.Allocator. The returned Info.cert lives on
@@ -98,7 +99,7 @@ pub inline fn computeMoments(Ps: []const [2]f64, w: []const f64, s_scale: f64) M
 
 /// Damping controller for the axis update. Shrinks the step when |c|
 /// grew, grows it when |c| shrank, bounded in [algo.DAMP_MIN, algo.DAMP_MAX].
-/// (`pub` for the trust path's alternating-cadence opening rounds.)
+/// (`pub`: used by `trust.zig`'s opening rounds.)
 pub const DampState = struct {
     alpha: f64 = 1.0,
     prev_c_norm: f64 = 1e30,
@@ -554,7 +555,7 @@ const newton = @import("newton.zig");
 const NewtonScratch = newton.NewtonScratch;
 const newtonPolish = newton.newtonPolish;
 
-// The trust solver path (`SolveOptions.method`).
+// The solver (`trust.solveTrust`).
 const trust = @import("trust.zig");
 
 // ----------------------------------------------------------------
@@ -577,36 +578,6 @@ pub const GapScratch = struct {
         };
     }
 };
-
-/// Per-call working buffers backing the outer loop. All allocations
-/// live on the scratch arena passed to `init`, so there's no `deinit` —
-/// `solve` frees the arena once at the end. The fields are mutable
-/// slices; methods that take them (`mveeFw`, `newtonPolish`,
-/// `dualityGapConstructed`, etc.) read or write directly.
-const WorkBuffers = struct {
-    P_buf: [][2]f64,
-    Ps: [][2]f64,
-    Ql: []Vec3,
-    w: []f64,
-    cert_active: []usize,
-    cert_lambdas: []f64,
-    newton_scratch: NewtonScratch,
-    gap_scratch: GapScratch,
-
-    fn init(scratch: std.mem.Allocator, nw: usize) !WorkBuffers {
-        return .{
-            .P_buf = try scratch.alloc([2]f64, nw),
-            .Ps = try scratch.alloc([2]f64, nw),
-            .Ql = try scratch.alloc(Vec3, nw),
-            .w = try scratch.alloc(f64, nw),
-            .cert_active = try scratch.alloc(usize, nw),
-            .cert_lambdas = try scratch.alloc(f64, nw),
-            .newton_scratch = try NewtonScratch.init(scratch, nw),
-            .gap_scratch = try GapScratch.init(scratch, nw),
-        };
-    }
-};
-
 
 // ----------------------------------------------------------------
 // Dual-certificate gap
@@ -883,7 +854,7 @@ fn isCoplanarInput(points: []const Vec3, b: Vec3, threshold: f64) bool {
     return tr <= 0 or 4.0 * det < threshold * tr * tr;
 }
 
-/// Preprocessed problem handed to a solver path: a strictly feasible
+/// Preprocessed problem handed to the solver: a strictly feasible
 /// axis, the (possibly hull-reduced) working point set, and the map
 /// back to the caller's original indices (`null` = identity).
 pub const Prep = struct {
@@ -899,7 +870,7 @@ const PrepResult = union(enum) {
     ready: Prep,
 };
 
-/// Steps shared by every solver path: input validation, Farkas
+/// Everything before the solver: input validation, Farkas
 /// feasibility check, optional hull reduction, coplanarity rejection.
 /// `scratch_alloc` backs `Xw`/`work_to_orig` (arena, freed by `solve`);
 /// `allocator` backs the Farkas cert on the infeasible branch.
@@ -949,9 +920,8 @@ fn preprocess(
     //      `InsufficientPoints` — both are "X is structurally bad."
     //      `coplanarity_tol <= 0` opts out of the NEAR-coplanar
     //      rejection only: exactly rank-deficient input is always
-    //      rejected (tol.COPLANAR_FLOOR), uniformly across solver
-    //      paths — there is no meaningful answer for it, and the
-    //      per-path alternatives were a max_outer burn vs. an internal
+    //      rejected (tol.COPLANAR_FLOOR) — there is no meaningful
+    //      answer for it, and letting it through surfaced an internal
     //      error mislabeled as a library bug.
     const cop_tol = if (opts.coplanarity_tol > 0) opts.coplanarity_tol else tol.COPLANAR_FLOOR;
     if (isCoplanarInput(hp.Xw, b, cop_tol)) {
@@ -963,7 +933,7 @@ fn preprocess(
 
 /// Classify a freshly computed certificate gap. Returns true when the
 /// solve is converged at `gap_tol`. ORDER MATTERS and is shared by
-/// every certification site in both solver paths: a converged-at-noise
+/// every certification site: a converged-at-noise
 /// gap can be slightly negative (seen on H3 r15 cells, gap ~ −5e-9
 /// from κ·ε noise) and must be ACCEPTED before the hard NegGap guard
 /// fires; anything meaningfully negative beyond `tol.NEG_GAP` is a
@@ -978,8 +948,8 @@ pub fn gapConverged(gap: f64, gap_tol: f64) SolveError!bool {
     return false;
 }
 
-/// Finalization for the solver path: translate the
-/// work-set certificate back to caller indices, bundle the full
+/// Bundle the final outcome: translate the work-set certificate back to
+/// caller indices, bundle the full
 /// eigendecomposition (Q's columns are (b, v1, v2) with eigenvalues
 /// (SIGMA_0, sigma[0], sigma[1]); v2 flipped if needed so det Q = +1),
 /// and wrap as Converged / DidNotConverge.
@@ -1037,7 +1007,8 @@ pub fn buildOutcome(
 ///
 /// Preprocessing (validation, Farkas feasibility, hull reduction,
 /// coplanarity rejection) is shared; `opts.method` selects the solver
-/// path that runs on the preprocessed working set (see `api.Method`).
+/// that runs on the preprocessed working set (see `api.Method`; today
+/// only `.trust`).
 pub fn solve(
     allocator: std.mem.Allocator,
     X: []const [3]f64,

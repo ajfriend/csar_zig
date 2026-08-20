@@ -316,8 +316,13 @@ docs.
 
 ### 9. Retire the standalone alternating path from the public API
 
-**Done — removed outright in #5 (v0.3.0).** The close-out comparison
-is in that PR. What follows is the record of how the disposition evolved.
+**Done — removed outright in PR #30 (issue #5), for v0.3.0.** The
+close-out comparison is in that PR. One correction to the checklist
+below: the quasi-Newton preconditioner (`quasiNewtonAxisDirection`,
+`PRECOND_COND_MIN`, `AXIS_WARMUP`) did *not* stay — the trust path's
+opening rounds never iterate far enough to engage it, so it was dead
+and was deleted. What follows is the record of how the disposition
+evolved.
 
 **Disposition upgraded to full removal — see #5.** The oracle-retention
 idea below is superseded: both solve paths share `dualityGapConstructed`,

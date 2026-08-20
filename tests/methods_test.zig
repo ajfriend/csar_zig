@@ -1,6 +1,6 @@
-//! Tests for solver path selection
-//! (`SolveOptions.method`; `src/trust.zig`), incl. the away-step FW
-//! solver kept for the record.
+//! Tests for `SolveOptions.method` and the trust solver's wide-cap
+//! canaries (`src/trust.zig`), incl. the away-step FW solver kept for
+//! the record.
 //!
 //! Coverage:
 //!  - the wide-cap manifest cases (cases/zon/wide_cap*.zon) that the

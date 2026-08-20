@@ -1,4 +1,4 @@
-//! The trust solver path (`SolveOptions.method = .trust`, the default).
+//! The trust solver (`SolveOptions.method = .trust`, what `.auto` resolves to).
 //!
 //! Trust-region descent on the *reduced* convex objective
 //!
@@ -11,8 +11,8 @@
 //! to it — no spurious strict local minima for a descent method to
 //! fall into.
 //!
-//! The inner minimization at fixed b is EXACTLY the 2D lifted MVEE the
-//! alternating path already solves in the gnomonic chart: the lifted points
+//! The inner minimization at fixed b is EXACTLY the 2D lifted MVEE that
+//! `csar.zig`'s chart primitives solve in the gnomonic chart: the lifted points
 //! qᵢ = [pᵢ; 1] are the coordinates of zᵢ = xᵢ/(bᵀxᵢ) in the [Q̂ | b]
 //! basis, so the centered 3D D-optimal design on the zᵢ and the chart
 //! MVEE coincide, and D-optimal design values transform predictably
@@ -27,19 +27,17 @@
 //!              S = Σ wᵢ·qᵢ·qᵢᵀ the design moment in the scaled chart;
 //!  - gradient: by the envelope theorem ∇h(b) = −3·Σ wᵢ·zᵢ, whose
 //!              tangent component is −3·c where c is the weighted
-//!              centroid the alternating path already computes — i.e. the
-//!              alternating path IS gradient descent on h, minus the merit
-//!              function. This path adds the merit function and a
-//!              second-order (envelope-Hessian) model;
-//!  - cert:     `recoverAPerp` + `dualityGapConstructed`, identical to
-//!              the alternating path; convergence is declared on the same
-//!              certified |gap| ≤ gap_tol.
+//!              centroid from `computeMoments` — so a damped step along
+//!              c (the opening rounds) IS gradient descent on h; the
+//!              trust region adds the merit function and a second-order
+//!              (envelope-Hessian) model;
+//!  - cert:     `recoverAPerp` + `dualityGapConstructed`; convergence is
+//!              declared on the certified |gap| ≤ gap_tol.
 //!
-//! Diagnostics: outcomes carry `Diagnostics.trust` (typed per-path —
-//! see api.zig): `eager_certified`, `tr_iters` (accepted + rejected
+//! Diagnostics: outcomes carry `Diagnostics.trust` (see api.zig):
+//! `eager_certified`, `open_iters`, `tr_iters` (accepted + rejected
 //! trials, each one inner-oracle evaluation), `recert_attempts`, and
-//! `polish_failures`. Nothing here overloads the alternating path's
-//! counters.
+//! `polish_failures`.
 
 const std = @import("std");
 
@@ -473,7 +471,7 @@ pub fn doglegStep(B: Mat2, g: Vec2, delta: f64) TrStep {
 }
 
 /// Solve the preprocessed problem by trust-region descent on h(b) over
-/// the sphere. Same contract as `solveAlternating`.
+/// the sphere. Same contract as `csar.solve` after preprocessing.
 pub fn solveTrust(
     allocator: std.mem.Allocator,
     scratch_alloc: std.mem.Allocator,
@@ -497,8 +495,8 @@ pub fn solveTrust(
     // steps past the last certificate.
     var b_cert = b;
 
-    // Eager first certificate — the alternating path's exact opening cadence
-    // (two FW steps, one polish, certify) BEFORE any full-precision
+    // Eager first certificate — two FW steps, one polish, certify —
+    // BEFORE any full-precision
     // oracle work. On the DGGS hot path the certificate passes right
     // here and the solve ends having done essentially what the fast
     // path's first outer iteration would have done; the full oracle
@@ -559,14 +557,12 @@ pub fn solveTrust(
 
     // Full-precision evaluation at the initial axis (warm-started from
     // the eager phase's weights), certified again at oracle quality.
-    // Reuses the alternating path's certification wholesale.
     var cur: Eval = undefined;
     if (!converged) {
         // The projection cannot fail: b is the halfspace axis or an
         // opening-round axis accepted at FEAS_MARGIN. A rank-deficient
         // design here means the input slipped past the coplanarity
-        // gate — surface it as the same error the alternating path's
-        // recoverAPerp would raise.
+        // gate — surface it as the error `recoverAPerp` raises for it.
         cur = evalH(b, Xw, &wb, -std.math.inf(f64)) orelse return SolveError.SingularMoment;
         if (cur.polish_failed) polish_failures += 1;
 
@@ -616,7 +612,7 @@ pub fn solveTrust(
         b = b_trial;
         cur = trial.?;
 
-        // Certify the accepted iterate (alternating-path machinery) — but only
+        // Certify the accepted iterate — but only
         // once the accepted step's predicted decrease is within a
         // couple of orders of gap_tol; while the model still predicts
         // ≫ gap_tol of remaining descent no certificate can pass. See
@@ -641,14 +637,13 @@ pub fn solveTrust(
     // can do at a bit-frozen axis is idempotent: the h-guarded oracle
     // restores weights on no-improvement, a raw FW step is a no-op once
     // g_max < 3 numerically, and polish is at its fixed point — so
-    // retrying at fixed b certifies the identical state forever. The
-    // alternating path escapes this because its axis moves a little every
-    // outer iteration, re-projecting the points and re-sampling the
-    // whole numerical state (measured on A5 res-30: fast's first cert
-    // fails the same M-Cholesky; its second passes). So this phase IS
-    // a few alternating-path outer iterations warm-started at the TR optimum:
-    // FW step → polish → certify → damped axis micro-step. TR for the
-    // global descent, fast iteration for the terminal certification.
+    // retrying at fixed b certifies the identical state forever. Moving
+    // the axis a little re-projects the points and re-samples the whole
+    // numerical state (measured on A5 res-30: the first cert fails the
+    // M-Cholesky; after one micro-step it passes). So this phase is a
+    // few cheap rounds warm-started at the TR optimum: FW step → polish
+    // → certify → axis micro-step. TR for the global descent, cheap
+    // iteration for the terminal certification.
     if (!converged) {
         var Q = cur.Q;
         // The last trial may have been rejected, leaving the projection
@@ -668,7 +663,7 @@ pub fn solveTrust(
             }
             // Axis micro-step along the h-gradient (plain, undamped —
             // ‖center‖ is at noise scale here). This is the numerical
-            // re-sample the alternating path gets for free each iteration.
+            // re-sample.
             const bstep = core.acceptBUpdate(Xw, b, Q, m.center, 1.0, wb.P_buf, wb.Ps);
             b = bstep.b;
             Q = bstep.Q;

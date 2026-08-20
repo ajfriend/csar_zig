@@ -148,7 +148,7 @@ first is a question, not a technique, and it comes first:
 
 - **Ask whether the code should exist.** An uncovered line is evidence
   that nothing reaches it; before working out how to reach it, check
-  whether anything *should*. Removing the alternating path (#5) left the
+  whether anything *should*. Removing the alternating path (PR #30) left the
   quasi-Newton preconditioner in `quasiNewtonAxisDirection` uncovered:
   the trust path's opening rounds never iterate far enough to engage it,
   so it was dead with the shipped constants. It was deleted, along with

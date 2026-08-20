@@ -193,7 +193,7 @@ test "checkRotationInvariance: gap branch prints case+k label" {
         .Q = csar.Mat3.zero,
         .sigma = .{ 0, 1, 1 },
         .gap = 1.0,
-        .diag = .{ .trust = .{ .eager_certified = false, .open_iters = 0, .tr_iters = 0, .recert_attempts = 0, .polish_failures = 0 } },
+        .diag = .{ .trust = std.mem.zeroes(csar.TrustDiagnostics) },
         .cert = .{ .indices = &[_]u32{}, .lambdas = &[_]f64{} },
         .allocator = std.testing.allocator,
     } };
@@ -212,7 +212,7 @@ test "checkRotationInvariance: AR branch prints case+k label" {
         .Q = csar.Mat3.zero,
         .sigma = .{ 0, 1, 2 },
         .gap = 0,
-        .diag = .{ .trust = .{ .eager_certified = false, .open_iters = 0, .tr_iters = 0, .recert_attempts = 0, .polish_failures = 0 } },
+        .diag = .{ .trust = std.mem.zeroes(csar.TrustDiagnostics) },
         .cert = .{ .indices = &[_]u32{}, .lambdas = &[_]f64{} },
         .allocator = std.testing.allocator,
     } };

@@ -18,7 +18,7 @@ test "max_outer cap forces DidNotConverge on any input" {
     // certifies with gap ≈ 0 exactly (measured ~5e-32 on the trust
     // path's eager certificate), which slips under even a 1e-20
     // tolerance. Irregularity keeps the achievable gap at the f64
-    // noise floor (~1e-16) ≫ 1e-20 for both paths.
+    // noise floor (~1e-16) ≫ 1e-20.
     const pts = [_][3]f64{
         .{ 1, 0, 0 },
         .{ 0.1, 0.97, 0.2 },
