@@ -240,7 +240,7 @@ pub const Tally = struct {
 /// and #9 as "an empty deterministic diff".
 ///
 /// AR is compared **bit-for-bit**, not within a tolerance. The commit gate already
-/// checks AR within 1e-6 (`tests/cases/cases_test.zig`); comparing exactly here
+/// checks AR within 1e-6 (`tests/cases_test.zig`); comparing exactly here
 /// is what makes the A/B cover the gap that leaves — a change that shifts a
 /// result in the 12th digit is invisible to the suite and visible here.
 ///

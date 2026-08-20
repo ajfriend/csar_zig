@@ -31,6 +31,7 @@
 | `just test-slow` | Full suite + 100% line coverage gate under `kcov`. Builds with `-Dslow=true` so randomized stress tests run. ~10s; the pre-commit / CI check. |
 | `just test-selfhosted` | Full suite under zig's self-hosted backend (`-Dllvm=false`). See "Two backends" below. |
 | `just check` | Compile the library and every executable, running nothing (CI's Build step). |
+| `just consumer-smoke` | Fetch the working tree into a scratch consumer package — packed through `build.zig.zon`'s `.paths`, exactly as a release tarball is — and solve through it. The only check that exercises what a consumer *receives* (13 files: `src/`, `build.zig`, `build.zig.zon`, `changelog.md`, `readme.md`, `LICENSE`) rather than the working tree. `scripts/consumer_smoke/` is the consumer. |
 | `just bench` | Run the benchmark suite (release-built `ex-bench`) — single-version timing. |
 | `just ab` | A/B the working tree against the pinned baseline, both in one binary. `just ab --aa` calibrates. See "A/B benchmarking" below. |
 | `just clean` | Remove `zig-out/`, `.zig-cache/`, `coverage/`, and the bench package's caches and unpacked baseline. |
@@ -95,10 +96,9 @@ Both contain the same aggregate percentages today (one binary, one
 run). If you're debugging a gate failure, the JSON is in the
 hash-suffixed sibling, not the merged dir.
 
-The gate enforces **100% line coverage** over `src/`, `tests/` and
+The gate enforces **100% line coverage** over `src/`, `tests/`, `cases/` and
 `bench/core.zig` (`INCLUDE_PATTERN` in `scripts/coverage_gate.py`) —
-production code, the tests themselves including the case manifest, and the
-benchmarking policy. kcov instruments one binary, so a file is in scope only
+production code, the tests, the case manifest, and the benchmarking policy. kcov instruments one binary, so a file is in scope only
 if the test binary compiles it; widening the pattern alone reaches nothing
 new (#25).
 Test code isn't exempt — dead test helpers are dead code too. The
@@ -241,9 +241,9 @@ re-exporting them through the public API.
 | `tests/all.zig` | Aggregator: `comptime { _ = @import(...); }` for each test file. |
 | `tests/solver_test.zig` | Synthetic property/contract tests of `solve` (e.g. the `max_outer` DNC contract). No fixture dependency. |
 | `tests/extreme_aspect_test.zig` | Rotation-invariance, coplanarity, near-degenerate edge-case tests on synthesized inputs. Also hits internal helpers (`acceptBUpdate`, `convexHull2d`) via filesystem imports for branches not reachable through `solve` for all inputs. |
-| `tests/cases/cases.zig` | Comptime manifest over `tests/cases/zon/*.zon` — defines the `Case` schema and the `all` list. Exposed as the `cases` build module; imported by tests / bench / the `ex-cases` example. |
-| `tests/cases/cases_test.zig` | Tests driven by the case manifest: cases.byName lookup, per-case outcome dispatch, Q/sigma shape invariants on np100. Lives next to `cases.zig` but is not part of the cases module compilation. |
-| `tests/cases/zon/*.zon` | Per-case fixture: description + tags + points + expected outcome. |
+| `tests/cases_test.zig` | Tests driven by the case manifest: cases.byName lookup, per-case outcome dispatch, Q/sigma shape invariants on np100. |
+| `cases/cases.zig` | Comptime manifest over `cases/zon/*.zon` — defines the `Case` schema and the `all` list. Exposed as the `cases` build module; imported by the tests, the examples and `bench/`. Top-level because it is a shared corpus, not test code. |
+| `cases/zon/*.zon` | Per-case fixture: description + tags + points + expected outcome. |
 
 To add a new test file: create `tests/<name>_test.zig`, then add
 `_ = @import("<name>_test.zig");` to `tests/all.zig`. The test

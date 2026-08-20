@@ -41,6 +41,8 @@ jobs:
           enable-cache: false
       - name: Build
         run: just check
+      - name: Consumer smoke (the package as shipped through .paths)
+        run: just consumer-smoke
       - name: Test (self-hosted backend)
         # See dev.md "Two backends". The LLVM-backend suite runs below,
         # under the coverage gate.

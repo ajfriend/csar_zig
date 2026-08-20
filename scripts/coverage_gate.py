@@ -36,7 +36,7 @@ LOG = Path('zig-out/test-slow.log')
 GATED_DIR = Path('coverage')
 SUMMARY = GATED_DIR / 'summary.txt'
 SUMMARY_MD = GATED_DIR / 'summary.md'  # fenced form; CI puts it in the step summary + PR comment
-INCLUDE_PATTERN = 'src/,tests/,bench/core.zig'
+INCLUDE_PATTERN = 'src/,tests/,cases/,bench/core.zig'
 # Exclusion rules (see dev.md "Coverage exclusions"): `=> unreachable`
 # switch arms can never execute in a passing run; `kcov-excl` markers
 # carry a per-site reason in-source. (zig 0.16 DWARF attributes some

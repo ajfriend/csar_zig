@@ -1,5 +1,5 @@
 //! Solver-contract tests that don't depend on case fixtures.
-//! Cases-driven tests live in `tests/cases/cases_test.zig`; this
+//! Cases-driven tests live in `tests/cases_test.zig`; this
 //! file holds synthetic / property tests of `solve`'s contract.
 
 const std = @import("std");
@@ -11,7 +11,7 @@ test "max_outer cap forces DidNotConverge on any input" {
     // gap, regardless of input geometry. Pins the contract that solve
     // returns `.did_not_converge` with `outer_iters == max_outer` and
     // a real (non-degenerate) last-iterate gap. No real case in
-    // tests/cases/ currently DNCs at default tolerance, so this is
+    // cases/ currently DNCs at default tolerance, so this is
     // the only end-to-end DNC coverage.
     const allocator = std.testing.allocator;
     // Deliberately IRREGULAR triangle: a perfectly symmetric frame
