@@ -38,6 +38,23 @@ test-slow:
 test-selfhosted:
     zig build test -Dslow=true -Dllvm=false
 
+# Compile-check the library (CI's Build step).
+check:
+    zig build
+
+# Everything CI checks that can run on this machine — use before
+# pushing a PR. The self-hosted backend suite runs where the backend
+# supports the target (x86_64-linux); elsewhere it is skipped with a
+# note and CI covers it.
+ci: check test-slow _ci-selfhosted
+
+[linux]
+_ci-selfhosted: test-selfhosted
+
+[macos]
+_ci-selfhosted:
+    @echo "note: skipping the self-hosted backend suite — unsupported on aarch64-macos; CI covers it (dev.md 'Two backends')"
+
 # Build the library (optimized).
 build:
     zig build -Doptimize=ReleaseFast

@@ -18,7 +18,7 @@ jobs:
           version: 0.15.2
       - uses: extractions/setup-just@v3
       - name: Build
-        run: zig build
+        run: just check
       - name: Test (self-hosted backend)
         # See dev.md "Two backends". The LLVM-backend suite runs below,
         # under the coverage gate.

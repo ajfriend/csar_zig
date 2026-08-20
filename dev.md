@@ -17,9 +17,11 @@
 
 | Command | What it does |
 | --- | --- |
+| `just ci` | Everything CI checks that can run on this machine: `check` + `test-slow` (+ `test-selfhosted` where supported). Run before pushing a PR. |
 | `just test` | Fast test loop — skips long-running randomized stress tests, no coverage gate. Sub-second; the inner-loop iteration command. |
 | `just test-slow` | Full suite + 100% line coverage gate under `kcov`. Builds with `-Dslow=true` so randomized stress tests run. ~10s; the pre-commit / CI check. |
 | `just test-selfhosted` | Full suite under zig's self-hosted backend (`-Dllvm=false`). See "Two backends" below. |
+| `just check` | Compile-check the library (CI's Build step). |
 | `just build` | Build the library (release-optimized). |
 | `just coverage` | Same as `just test-slow`, then prints the path to the HTML report. |
 | `just bench` | Run the benchmark suite (release-built `ex-bench`). |
