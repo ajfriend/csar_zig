@@ -44,7 +44,9 @@ pub fn build(b: *std.Build) void {
     mod.addImport("cases", cur.module("cases"));
     mod.addOptions("build_options", options);
 
-    const exe = b.addExecutable(.{ .name = "csar-ab", .root_module = mod });
+    // LLVM always: a Debug x86_64-linux build would otherwise use the
+    // self-hosted backend, whose DWARF kcov cannot read (dev.md "Coverage").
+    const exe = b.addExecutable(.{ .name = "csar-ab", .root_module = mod, .use_llvm = true });
     // `zig build --build-file bench/build.zig install` → bench/zig-out/bin/csar-ab,
     // which the coverage gate runs under kcov.
     b.installArtifact(exe);

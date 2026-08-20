@@ -181,7 +181,15 @@ excluded = {f: ls for f, ls in excluded.items() if ls}
 # marker on a line that would have been covered is NOT detectable here:
 # kcov excludes it before measuring, and the raw pass's hit data is lossy.
 problems = []
-for file in sorted(set(raw) | set(gated)):
+# Every source file under the gate's roots that carries a marker takes part,
+# whether or not any report mentions it — a file kcov did not measure at all
+# must not make its markers disappear from the check.
+marked_files = {str(p.resolve()) for d in ('src', 'tests', 'cases', 'examples', 'bench') for p in Path(d).glob('*.zig')
+                if 'kcov-excl' in p.read_text() or '=> unreachable' in p.read_text()}
+for file in sorted(set(raw) | set(gated) | marked_files):
+    if file not in gated and file not in raw:
+        problems.append(f'{file.removeprefix(ROOT)}: carries exclusion markers but was not measured by any run')
+        continue
     rel = file.removeprefix(ROOT)
     src = Path(file).read_text().splitlines()
     exc, in_gate = set(excluded.get(file, [])), set(gated.get(file, {}))

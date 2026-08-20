@@ -166,6 +166,11 @@ fn addExample(
     const exe = b.addExecutable(.{
         .name = b.fmt("csar-ex-{s}", .{stem}),
         .root_module = mod,
+        // LLVM always: on x86_64-linux a Debug executable would otherwise
+        // use the self-hosted backend, whose DWARF kcov cannot read — the
+        // coverage gate would silently measure nothing of it (dev.md
+        // "Coverage"). ReleaseFast is LLVM regardless.
+        .use_llvm = true,
     });
     const run = b.addRunArtifact(exe);
     // Pass through any args after `--` on the `zig build` command.
