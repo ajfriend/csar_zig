@@ -18,8 +18,12 @@ jobs:
           version: 0.15.2
       - name: Build
         run: zig build
-      - name: Test (including slow stress tests)
+      - name: Test (including slow stress tests, LLVM backend)
         run: zig build test -Dslow=true
+      - name: Test (self-hosted backend)
+        # Same suite, same iteration-ceiling bounds, zig's self-hosted
+        # codegen. Coverage below still measures the LLVM binary only.
+        run: zig build test -Dslow=true -Dllvm=false
       - uses: extractions/setup-just@v3
       - name: Cache kcov
         id: kcov-cache

@@ -35,6 +35,15 @@ test-slow:
         '($g[0].files | map({key: .file, value: (.total_lines|tonumber)}) | from_entries) as $gt | [$r[0].files[] | {f: (.file|ltrimstr($root)), d: ((.total_lines|tonumber) - ($gt[.file] // 0))} | select(.d > 0)] | sort_by(.f) as $per | "coverage exclusions: \($per | map(.d) | add // 0) lines excluded from the gate", ($per[] | "  \(.f): \(.d)")'
     @jq -e '(.percent_covered | tonumber) >= 100' coverage/csar-test.*/coverage.json > /dev/null
 
+# Full suite under zig's SELF-HOSTED backend (-Dllvm=false). The suite
+# — including the deterministic iteration-ceiling bounds — must pass
+# under both backends; coverage is only measured on the LLVM binary
+# (kcov can't read self-hosted DWARF). Backend support is per-target:
+# works on x86_64-linux (CI runs it there); the 0.15.2 self-hosted
+# backend crashes compiling this suite on aarch64-macos.
+test-selfhosted:
+    zig build test -Dslow=true -Dllvm=false
+
 # Build the library (optimized).
 build:
     zig build -Doptimize=ReleaseFast

@@ -19,6 +19,7 @@
 | --- | --- |
 | `just test` | Fast test loop — skips long-running randomized stress tests, no coverage gate. Sub-second; the inner-loop iteration command. |
 | `just test-slow` | Full suite + 100% line coverage gate under `kcov`. Builds with `-Dslow=true` so randomized stress tests run. ~10s; the pre-commit / CI check. |
+| `just test-selfhosted` | Full suite under zig's self-hosted backend (`-Dllvm=false`). See "Two backends" below. |
 | `just build` | Build the library (release-optimized). |
 | `just coverage` | Same as `just test-slow`, then prints the path to the HTML report. |
 | `just bench` | Run the benchmark suite (release-built `ex-bench`). |
@@ -44,6 +45,20 @@ test "my slow test" {
 Slow tests show up as `SKIP` in the fast tier and `OK` in the slow
 tier. Coverage only makes sense on the slow tier — fast-tier
 coverage would be incomplete by design.
+
+### Two backends
+
+Zig has two code generators (LLVM, and its own self-hosted backend —
+the Debug default on x86_64-linux), and their FP code paths can
+differ, which matters for this solver's κ-limited cells. Policy: the
+**suite — including the deterministic iteration-ceiling bounds — must
+pass under both backends**; CI runs both on every push. The test
+binary defaults to LLVM (`-Dllvm=false` selects self-hosted) because
+the kcov gate can only read LLVM-emitted DWARF, so coverage is
+measured on the LLVM binary alone. Backend support is per-target:
+the 0.15.2 self-hosted backend crashes compiling the suite on
+aarch64-macos, so run `just test-selfhosted` where it's supported
+(x86_64-linux; CI covers it).
 
 ## Coverage
 
