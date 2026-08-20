@@ -72,17 +72,6 @@ pub const algo = struct {
     pub const FEAS_MARGIN: f64 = 1e-8;
     pub const MAX_BACKTRACKS: u32 = 30;
 
-    /// Quasi-Newton b-update gate: only precondition the axis step by
-    /// M⁻¹ when cond(M) exceeds this. For near-isotropic M (hex, DGGS
-    /// cells, rotations near coordinate axes) the preconditioner adds
-    /// sub-ULP direction noise that interacts badly with damping after
-    /// Newton polish; the plain gradient step is used instead.
-    pub const PRECOND_COND_MIN: f64 = 1.2;
-
-    /// Skip the quasi-Newton machinery for the first `AXIS_WARMUP`
-    /// outer iterations. Easy cases (hex, most DGGS cells) converge
-    /// in ≤ this, so they pay zero preconditioner overhead.
-    pub const AXIS_WARMUP: u32 = 2;
 
     /// Sparse Frank-Wolfe weight initialization, gated on input size.
     ///

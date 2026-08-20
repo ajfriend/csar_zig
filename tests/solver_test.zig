@@ -24,22 +24,15 @@ test "max_outer cap forces DidNotConverge on any input" {
         .{ 0.1, 0.97, 0.2 },
         .{ -0.2, 0.3, 0.93 },
     };
-    // The cap is a shared contract: both paths must respect it (the
-    // trust path counts opening + TR + recert iterations against it).
-    for ([_]csar.Method{ .alternating, .trust }) |method| {
-        var outcome = try csar.solve(allocator, &pts, .{
-            .max_outer = 1,
-            .gap_tol = 1e-20,
-            .method = method,
-        });
-        defer outcome.deinit();
-        try std.testing.expect(std.meta.activeTag(outcome) == .did_not_converge);
-        const p = outcome.did_not_converge;
-        try std.testing.expectEqual(@as(u32, 1), p.diag.totalIters());
-        // Convergence is `@abs(gap) <= gap_tol`. So DNC means `@abs(gap) > tol`,
-        // not `gap > tol` — gap can be FP-noise-negative on near-converged inputs.
-        try std.testing.expect(@abs(p.gap) > 1e-20);
-    }
+    // The cap counts opening + TR + recert iterations.
+    var outcome = try csar.solve(allocator, &pts, .{ .max_outer = 1, .gap_tol = 1e-20 });
+    defer outcome.deinit();
+    try std.testing.expect(std.meta.activeTag(outcome) == .did_not_converge);
+    const p = outcome.did_not_converge;
+    try std.testing.expectEqual(@as(u32, 1), p.diag.totalIters());
+    // Convergence is `@abs(gap) <= gap_tol`. So DNC means `@abs(gap) > tol`,
+    // not `gap > tol` — gap can be FP-noise-negative on near-converged inputs.
+    try std.testing.expect(@abs(p.gap) > 1e-20);
 }
 
 test "duplicate-heavy input with hull preprocessing disabled still converges" {
@@ -62,10 +55,8 @@ test "duplicate-heavy input with hull preprocessing disabled still converges" {
     var pts: [20][3]f64 = undefined;
     for (0..20) |i| pts[i] = corners[i % 4];
 
-    for ([_]csar.Method{ .alternating, .trust }) |method| {
-        var o = try csar.solve(allocator, &pts, .{ .n_hull = -1, .method = method });
-        defer o.deinit();
-        try std.testing.expect(std.meta.activeTag(o) == .converged);
-        try std.testing.expectApproxEqAbs(@as(f64, 1.0), o.converged.aspectRatio(), 1e-6);
-    }
+    var o = try csar.solve(allocator, &pts, .{ .n_hull = -1 });
+    defer o.deinit();
+    try std.testing.expect(std.meta.activeTag(o) == .converged);
+    try std.testing.expectApproxEqAbs(@as(f64, 1.0), o.converged.aspectRatio(), 1e-6);
 }

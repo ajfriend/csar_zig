@@ -102,18 +102,12 @@ pub fn main(init: std.process.Init) !void {
             switch (lo) {
                 .converged => |c| {
                     outer_iters = c.diag.totalIters();
-                    newton_polish_failures = switch (c.diag) {
-                        .alternating => |d| d.newton_polish_failures,
-                        .trust => |d| d.polish_failures,
-                    };
+                    newton_polish_failures = c.diag.trust.polish_failures;
                     aspect_ratio = c.aspectRatio();
                 },
                 .did_not_converge => |p| {
                     outer_iters = p.diag.totalIters();
-                    newton_polish_failures = switch (p.diag) {
-                        .alternating => |d| d.newton_polish_failures,
-                        .trust => |d| d.polish_failures,
-                    };
+                    newton_polish_failures = p.diag.trust.polish_failures;
                     // Uncertified ratio from the last iterate — useful when
                     // chasing a DNC regression. `DidNotConverge` intentionally
                     // omits an `aspectRatio()` method since the value isn't

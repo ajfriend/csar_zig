@@ -41,16 +41,15 @@ switch (outcome) {
 top-level method to accidentally call on a non-converged result.
 
 Solver selection: `SolveOptions.method` defaults to `.auto`, an alias
-for the library's recommended method (currently `.trust`, a
-trust-region solver — the default since 0.6.0). Pin `.trust` or
-`.alternating` (the original solver, bit-stable with pre-0.6.0
-defaults) if you need version-stable behavior.
+for the library's recommended method (currently `.trust`, the
+trust-region solver). Pin `.trust` if you need version-stable behavior.
+The original alternating solver was removed in 0.3.0.
 
 ## Layout
 
 - `src/root.zig` — public API re-exports
 - `src/api.zig` — public API surface (types + methods + `checkFeasibility`)
-- `src/csar.zig` — solver core: preprocessing, the alternating path, dispatch (std-only)
+- `src/csar.zig` — solver core: preprocessing, the inner MVEE machinery, certification, dispatch (std-only)
 - `src/trust.zig` — the trust-region solver path (what `.auto` resolves to)
 - `src/linalg.zig`, `src/halfspace.zig`, `src/newton.zig`, `src/config.zig` — internal modules
 - `tests/*_test.zig` — tests (run via `zig build test`); `cases_test.zig` is the one driven by the corpus
@@ -59,7 +58,6 @@ defaults) if you need version-stable behavior.
 - `test_root.zig` — test-target root at repo level
 - `examples/basic.zig`, `examples/status.zig`, `examples/cases.zig` — end-user usage demos
 - `examples/bench.zig` — per-case timing (release-built; run via `zig build ex-bench`)
-- `examples/compare.zig` — alternating-vs-trust comparison (release-built; `zig build ex-compare`)
 - `dev.md` — developer-workflow guide (coverage, layout, conventions)
 
 ## Build

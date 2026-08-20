@@ -85,7 +85,6 @@ pub fn build(b: *std.Build) void {
     addExample(b, check_step, csar_mod, cases_mod, target, optimize, "status", null, "Run examples/status.zig (full Outcome branching)");
     addExample(b, check_step, csar_mod, cases_mod, target, optimize, "cases", null, "Run examples/cases.zig (run a named case or --all)");
     addExample(b, check_step, csar_mod, cases_mod, target, optimize, "bench", .ReleaseFast, "Run examples/bench.zig (per-case timing, release-built)");
-    addExample(b, check_step, csar_mod, cases_mod, target, optimize, "compare", .ReleaseFast, "Run examples/compare.zig (alternating vs trust solver paths, release-built)");
 
     // US-states aspect-ratio example (see scripts/states/). Standalone
     // exec, not an example: lives under scripts/, force-built ReleaseFast,

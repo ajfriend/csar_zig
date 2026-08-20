@@ -52,14 +52,3 @@ test "the no-certificate sentinel never certifies, and absurd gap_tol is rejecte
     );
 }
 
-test "alternating DNC snapshot is also self-consistent" {
-    // Same invariant on the alternating path (whose staleness was one
-    // damped axis step rather than several TR steps — smaller, but the
-    // same class). Wide caps DNC structurally under .alternating.
-    const allocator = std.testing.allocator;
-    const pts = helpers.casePoints("wide_cap82");
-    var o = try csar.solve(allocator, pts, .{ .method = .alternating });
-    defer o.deinit();
-    try std.testing.expect(std.meta.activeTag(o) == .did_not_converge);
-    try helpers.expectOrthonormalQ(helpers.resolvedView(&o).Q);
-}

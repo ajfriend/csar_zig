@@ -526,21 +526,18 @@ pub fn solveTrust(
             eager_certified = true;
         }
 
-        // Opening rounds: continue the alternating path's outer-loop cadence
-        // (see solveAlternating in csar.zig — axis step from the current
-        // moments, cheap FW cycle, polish + certificate every
-        // FW_PER_NEWTON-th cycle) for up to OPEN_ROUNDS certified
-        // rounds. Mid-size DGGS cells converge right here at
-        // alternating-path cost; hard inputs fall through to the trust
-        // region having spent a bounded, cheap prefix. See
+        // Opening rounds: a damped axis step along the moment centroid,
+        // a cheap FW cycle, polish + certificate every FW_PER_NEWTON-th
+        // cycle, for up to OPEN_ROUNDS certified rounds. Mid-size DGGS
+        // cells converge right here; hard inputs fall through to the
+        // trust region having spent a bounded, cheap prefix. See
         // config.trust.OPEN_ROUNDS.
         var damp = core.DampState{};
         const max_rounds = @min(tc.OPEN_ROUNDS, opts.max_outer);
         var cycle: u32 = 0;
         while (!converged and open_iters < max_rounds) : (cycle += 1) {
-            const axis = core.quasiNewtonAxisDirection(cycle / algo.FW_PER_NEWTON, m.M, m.center);
-            damp.tick(axis.c_norm);
-            const st = core.acceptBUpdate(Xw, b, Q, axis.u, damp.alpha, wb.P_buf, wb.Ps);
+            damp.tick(m.center.norm());
+            const st = core.acceptBUpdate(Xw, b, Q, m.center, damp.alpha, wb.P_buf, wb.Ps);
             b = st.b;
             Q = st.Q;
             s_scale = st.s_scale;

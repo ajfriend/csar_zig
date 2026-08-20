@@ -115,39 +115,6 @@ pub const DampState = struct {
     }
 };
 
-/// Quasi-Newton axis-update direction in the tangent plane. Returns u =
-/// M⁻¹·center (preconditioned by the 2D moment) when M is anisotropic
-/// enough to benefit; else u = center. u's magnitude is renormalized to
-/// ‖center‖, so on isotropic M the step is bit-identical to the old
-/// damped gradient, and the damping signal (`c_norm`, returned alongside)
-/// is ‖center‖ either way.
-///
-/// Skip the whole check for the first algo.AXIS_WARMUP iters — easy cases
-/// converge inside the warmup and pay zero preconditioner cost. See
-/// docs/mvee_derivation.md "Quasi-Newton axis update" appendix for history.
-pub const AxisStep = struct { u: Vec2, c_norm: f64 };
-
-pub inline fn quasiNewtonAxisDirection(outer: u32, M: Mat2, center: Vec2) AxisStep {
-    const c_norm = center.norm();
-    var u: Vec2 = center;
-    if (outer >= algo.AXIS_WARMUP and c_norm > tol.TINY) {
-        const eigM = eig2(M.m);
-        const eig_lo = eigM.vals[0];
-        const eig_hi = eigM.vals[1];
-        // cond(M) > algo.PRECOND_COND_MIN  ⟺  eig_hi > algo.PRECOND_COND_MIN · eig_lo,
-        // division-free and robust to a near-zero eig_lo that we'd
-        // otherwise guard separately.
-        if (eig_hi > algo.PRECOND_COND_MIN * eig_lo) {
-            const u_p = M.inverse().apply(center);
-            const u_norm_2d = u_p.norm();
-            if (u_norm_2d > tol.TINY) {
-                u = u_p.scale(c_norm / u_norm_2d);
-            }
-        }
-    }
-    return .{ .u = u, .c_norm = c_norm };
-}
-
 /// Feasibility-safeguarded b update, fused with the projection that the
 /// next cycle will consume. The raw step b + α·Q·u can walk b out of the
 /// cone {v : v·xᵢ > 0 ∀i}; once outside, projectGnomonic divides by a
@@ -994,116 +961,6 @@ fn preprocess(
     return .{ .ready = .{ .b0 = b, .Xw = hp.Xw, .work_to_orig = hp.work_to_orig } };
 }
 
-/// The alternating path: alternating axis/MVEE outer loop (FW + Newton polish
-/// + constructed dual certificate). This is the original `solve` body;
-/// see the module doc-comment for the algorithm.
-fn solveAlternating(
-    allocator: std.mem.Allocator,
-    scratch_alloc: std.mem.Allocator,
-    prep: Prep,
-    opts: SolveOptions,
-) !Outcome {
-    var b = prep.b0;
-    const Xw = prep.Xw;
-    const work_to_orig = prep.work_to_orig;
-    const nw = Xw.len;
-
-    // 3) Working buffers — all backed by the arena, freed once at the
-    //    end of `solve`.
-    var wb = try WorkBuffers.init(scratch_alloc, nw);
-
-    var damp = DampState{};
-    var outer_count: u32 = 0;
-    var converged = false;
-    var newton_polish_failures: u32 = 0;
-
-    // Eigen-data from the last gap call — feeds the converged/partial
-    // outcome's Q/sigma at finalization without a redundant eig2 + lift.
-    var last_gap = GapResult{ .gap = tol.GAP_UNCERTIFIED, .cert_n = 0, .v1 = Vec3.zero, .v2 = Vec3.zero, .sigma = .{ 0, 0 } };
-    // Axis at which last_gap was computed. The outer loop steps b AFTER
-    // certifying, so on DNC the final b is one step past the last
-    // certificate — returning (b_cert, last_gap) keeps the outcome's
-    // Q/sigma/gap a consistent snapshot of one iterate.
-    var b_cert = b;
-
-    // Orthonormal tangent basis at the current b. Rebuilt after each
-    // accepted step in the outer loop (trivial: one project-and-normalize
-    // plus one cross-and-normalize; see `Vec3.orthoBasis`).
-    var Q: Mat3x2 = b.orthoBasis();
-
-    // Seed P_buf/Ps/s_scale so the loop invariant holds on entry to the
-    // first cycle. `halfspaceCheck` guarantees b·xᵢ > 0 strictly (not
-    // necessarily ≥ algo.FEAS_MARGIN), so bypass the feasibility check here.
-    _ = projectGnomonic(Xw, b, Q, wb.P_buf, -std.math.inf(f64));
-    var s_scale: f64 = rescaleP(wb.P_buf, wb.Ps);
-
-    // FW weight init (sparse seed vs uniform, chosen by size — see initWeights).
-    initWeights(wb.Ps, wb.w);
-
-    // 4) Hybrid outer loop. Each outer iteration runs algo.FW_PER_NEWTON cycles
-    //    of (FW + b-update); only the last cycle also runs Newton polish +
-    //    gap check. Extra cheap cycles buy more b-motion per Newton call.
-    //    At algo.FW_PER_NEWTON = 1 this is the original one-FW-per-Newton
-    //    schedule; larger values amortise Newton's cost across more b-motion.
-    //
-    //    Loop invariant: on entry to each cycle, P_buf/Ps/s_scale correspond
-    //    to the current (b, Q). The accepted b-update at cycle end also
-    //    produces the next cycle's projection in one sweep.
-    var outer: u32 = 0;
-    outer_loop: while (outer < opts.max_outer) : (outer += 1) {
-        outer_count += 1;
-        var cycle: u32 = 0;
-        while (cycle < algo.FW_PER_NEWTON) : (cycle += 1) {
-            const is_full = (cycle == algo.FW_PER_NEWTON - 1);
-
-            mveeFw(wb.Ps, 1, 0.0, wb.Ql, wb.w);
-
-            if (is_full) {
-                if (!newtonPolish(wb.Ql, wb.w, algo.ACTIVE_THRESH, algo.POLISH_MAX_ITER, tol.NEWTON_INNER, &wb.newton_scratch)) {
-                    newton_polish_failures += 1;
-                }
-            }
-
-            const m = computeMoments(wb.Ps, wb.w, s_scale);
-
-            if (is_full) {
-                const A_perp = try recoverAPerp(wb.P_buf, m.M);
-                last_gap = try dualityGapConstructed(wb.w, b, Xw, A_perp, Q, &wb.gap_scratch, wb.cert_active, wb.cert_lambdas);
-                b_cert = b;
-                // Convergence + broken-certificate guard (see
-                // gapConverged for the load-bearing ordering).
-                if (try gapConverged(last_gap.gap, opts.gap_tol)) {
-                    converged = true;
-                    break :outer_loop;
-                }
-            }
-
-            const axis = quasiNewtonAxisDirection(outer, m.M, m.center);
-            damp.tick(axis.c_norm);
-            const step = acceptBUpdate(Xw, b, Q, axis.u, damp.alpha, wb.P_buf, wb.Ps);
-            b = step.b;
-            Q = step.Q;
-            s_scale = step.s_scale;
-        }
-    }
-
-    // 5) Build final cert (translate work indices back to original X indices)
-    //    and bundle the outcome. Shared with the trust path.
-    return buildOutcome(
-        allocator,
-        converged,
-        b_cert,
-        last_gap,
-        .{ .alternating = .{
-            .outer_iters = outer_count,
-            .newton_polish_failures = newton_polish_failures,
-        } },
-        wb.cert_active,
-        wb.cert_lambdas,
-        work_to_orig,
-    );
-}
-
 /// Classify a freshly computed certificate gap. Returns true when the
 /// solve is converged at `gap_tol`. ORDER MATTERS and is shared by
 /// every certification site in both solver paths: a converged-at-noise
@@ -1121,7 +978,7 @@ pub fn gapConverged(gap: f64, gap_tol: f64) SolveError!bool {
     return false;
 }
 
-/// Shared finalization for the alternating and trust paths: translate the
+/// Finalization for the solver path: translate the
 /// work-set certificate back to caller indices, bundle the full
 /// eigendecomposition (Q's columns are (b, v1, v2) with eigenvalues
 /// (SIGMA_0, sigma[0], sigma[1]); v2 flipped if needed so det Q = +1),
@@ -1205,7 +1062,6 @@ pub fn solve(
     };
 
     switch (opts.method.resolved()) {
-        .alternating => return solveAlternating(allocator, scratch_alloc, prep, opts),
         .trust => return trust.solveTrust(allocator, scratch_alloc, prep, opts),
     }
 }

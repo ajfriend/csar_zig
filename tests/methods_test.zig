@@ -3,11 +3,9 @@
 //! solver kept for the record.
 //!
 //! Coverage:
-//!  - the wide-cap manifest cases (cases/zon/wide_cap*.zon) that
-//!    the alternating path limit-cycles on: `.trust` must converge
+//!  - the wide-cap manifest cases (cases/zon/wide_cap*.zon) that the
+//!    removed alternating path limit-cycled on: `.trust` must converge
 //!    within iteration ceilings, matching the Clarabel SDP cross-check;
-//!  - easy-case agreement: `.trust` reproduces `.alternating`'s aspect ratio
-//!    on a spread of bundled manifest cases;
 //!  - `.auto` is a pure alias for `Method.recommended` (currently
 //!    `.trust`) — identical outcomes, and the resolution pinned;
 //!  - certificate sanity on a trust solve (λ ≥ 0, certified gap in
@@ -24,9 +22,6 @@ const GAP_TOL: f64 = 1e-6;
 /// eigenvalues of a near-optimal iterate — allow a few × 1e-4 relative
 /// against the Clarabel reference (which has its own ~1e-8 tolerance).
 const AR_REF_REL_TOL: f64 = 1e-3;
-/// Both solvers converge to the same optimum; both carry ~gap-sized
-/// slack in the AR.
-const AR_AGREE_REL_TOL: f64 = 1e-4;
 
 test "trust: wide-cap iteration ceilings (CANARY-style) + Clarabel cross-check" {
     // Trust-region iteration guard on the wide-angle frontier
@@ -62,44 +57,6 @@ test "trust: wide-cap iteration ceilings (CANARY-style) + Clarabel cross-check" 
     }
 }
 
-test "trust: agrees with alternating on bundled cases incl. extreme-kappa cells" {
-    const allocator = std.testing.allocator;
-    // Includes the finest-resolution extreme-kappa cells: the trust
-    // path certifies in the scaled chart, so it must handle the cells
-    // whose raw-3D certification floors (the removed joint IPM's
-    // failure regime).
-    const names = [_][]const u8{
-        "hex",           "h3_res09",      "np20",        "np400",
-        "ha_05",         "ha_14",         "dnc_small_wide",
-        "h3_r12_ring10", "h3_r15_midLat", "h3_r15_pent", "h3_r15_ring10",
-    };
-    for (names) |name| {
-        const case = cases.byName(name) orelse unreachable;
-        var fast_out = try csar.solve(allocator, case.points, .{ .method = .alternating });
-        defer fast_out.deinit();
-        var red_out = try csar.solve(allocator, case.points, .{ .method = .trust });
-        defer red_out.deinit();
-        try std.testing.expect(std.meta.activeTag(fast_out) == .converged);
-        try std.testing.expect(std.meta.activeTag(red_out) == .converged);
-        const ar_f = fast_out.converged.aspectRatio();
-        const ar_r = red_out.converged.aspectRatio();
-        try expectArAgreement(name, ar_f, ar_r);
-        try std.testing.expect(@abs(red_out.converged.gap) <= GAP_TOL);
-    }
-}
-
-test "alternating: wide-cap fixtures still DNC (the gap the trust default closes)" {
-    // Pins the motivating failure. If the alternating path ever starts
-    // converging here, celebrate — and update the .alternating
-    // doc-comment's caveat (see docs/wide-cap-dnc-report.md).
-    const allocator = std.testing.allocator;
-    for ([_][]const u8{ "wide_cap82", "wide_cap85", "wide_cap89" }) |name| {
-        var outcome = try csar.solve(allocator, helpers.casePoints(name), .{ .method = .alternating });
-        defer outcome.deinit();
-        try std.testing.expect(std.meta.activeTag(outcome) == .did_not_converge);
-    }
-}
-
 test "auto: resolves to Method.recommended (pure alias, identical outcomes)" {
     // .auto is the "library's current recommendation" placeholder;
     // `Method.recommended` is the single source of truth for the
@@ -124,21 +81,6 @@ test "auto: resolves to Method.recommended (pure alias, identical outcomes)" {
         try std.testing.expectEqual(trust_out.converged.gap, auto_out.converged.gap);
         try std.testing.expectEqual(trust_out.converged.sigma, auto_out.converged.sigma);
     }
-}
-
-/// AR agreement check with case-name context on failure. The failure
-/// path is real code, covered by the quiet expectError self-test below.
-fn expectArAgreement(name: []const u8, ar_alternating: f64, ar_trust: f64) !void {
-    if (@abs(ar_alternating - ar_trust) > AR_AGREE_REL_TOL * ar_alternating) {
-        helpers.diagPrint("trust/alternating AR mismatch case={s}: alternating={d:.10} trust={d:.10}\n", .{ name, ar_alternating, ar_trust });
-        return error.TrustAlternatingArMismatch;
-    }
-}
-
-test "expectArAgreement: the mismatch diagnostic fires (quiet self-test)" {
-    helpers.quiet_diagnostics = true;
-    defer helpers.quiet_diagnostics = false;
-    try std.testing.expectError(error.TrustAlternatingArMismatch, expectArAgreement("diagnostic-selftest", 1.0, 2.0));
 }
 
 test "mveeFwAway: converges the design and keeps weights in the simplex" {
