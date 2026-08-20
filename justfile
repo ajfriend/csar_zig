@@ -1,9 +1,6 @@
 _:
     just --list
 
-kcov_include := "src/,tests/"
-kcov_exclude := "=> unreachable,kcov-excl"
-
 # Skips the long-running randomized stress tests (e.g. cap_test) and
 # the coverage gate; use while iterating, and run `just test-slow`
 # (or `just ci`) before committing. zig's build runner does the output
@@ -12,27 +9,12 @@ kcov_exclude := "=> unreachable,kcov-excl"
 test:
     zig build test --summary all
 
-# Exclusion policy and the ledger's meaning: dev.md "Coverage
-# exclusions". The report-only second pass derives the exclusion
-# ledger from the same collected data (its line classification only;
-# report-only hit data is lossy and never consulted). The summary
-# block lands in coverage/summary.txt for CI to post on PRs; full
-# runner output lands in zig-out/test-slow.log, shown on failure.
+# The gate logic (kcov invocations, exclusion ledger, threshold) lives
+# in scripts/coverage_gate.py; policy: dev.md "Coverage exclusions".
 # Full suite + 100% line-coverage gate + exclusion ledger (~10s; the pre-commit / CI check).
 test-slow:
-    @zig build install-test -Dslow=true
-    @rm -rf coverage coverage_raw
-    @kcov --include-pattern={{kcov_include}} --exclude-line='{{kcov_exclude}}' coverage zig-out/bin/csar-test > zig-out/test-slow.log 2>&1 || { cat zig-out/test-slow.log; exit 1; }
-    @tail -1 zig-out/test-slow.log
-    @cp -r coverage coverage_raw
-    @kcov --report-only --include-pattern={{kcov_include}} coverage_raw zig-out/bin/csar-test >> zig-out/test-slow.log 2>&1
-    @n=$(ls -1d coverage/csar-test.*/ 2>/dev/null | wc -l | tr -d ' '); \
-        if [ "$n" != "1" ]; then echo "expected exactly 1 coverage/csar-test.*/ dir, got $n"; exit 1; fi
-    @{ jq -r '"csar coverage: \(.percent_covered)%"' coverage/csar-test.*/coverage.json; \
-        jq -rn --arg root "$(pwd)/" --slurpfile g coverage/csar-test.*/coverage.json --slurpfile r coverage_raw/csar-test.*/coverage.json \
-        '($g[0].files | INDEX(.file)) as $gt | [$r[0].files[] | {f: (.file|ltrimstr($root)), d: ((.total_lines|tonumber) - (($gt[.file].total_lines // 0) | tonumber))} | select(.d > 0)] | sort_by(.f) as $per | "coverage exclusions: \($per | map(.d) | add // 0) lines excluded from the gate", ($per[] | "  \(.f): \(.d)")'; } > coverage/summary.txt
-    @cat coverage/summary.txt
-    @jq -e '(.percent_covered | tonumber) >= 100' coverage/csar-test.*/coverage.json > /dev/null
+    zig build install-test -Dslow=true
+    uv run scripts/coverage_gate.py
 
 # Per-target support (it crashes compiling this suite on
 # aarch64-macos; CI runs it on x86_64-linux): dev.md "Two backends".

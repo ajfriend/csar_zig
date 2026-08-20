@@ -10,8 +10,9 @@
   used by `just test-slow`. `brew install kcov` on macOS and Linux
   alike (the formula ships a linux bottle; it's not in the Ubuntu apt
   repos). CI installs it the same way.
-- **[jq](https://stedolan.github.io/jq/)** — used by `just test-slow` to
-  check the coverage threshold. `brew install jq` / `apt-get install jq`.
+- **[uv](https://docs.astral.sh/uv/)** — runs the Python scripts
+  (`scripts/coverage_gate.py` behind `just test-slow`, and the
+  states/countries examples). `brew install uv`.
 
 ## Common commands
 
@@ -79,8 +80,8 @@ writes two directories under `coverage/`:
 - `coverage/csar-test/` — the **merged** HTML report; open
   `coverage/csar-test/index.html` to browse covered lines.
 - `coverage/csar-test.<hash>/` — the **per-binary** report containing
-  the `coverage.json` summary that `just test` parses with `jq` to
-  enforce the threshold.
+  the `coverage.json` summary that `scripts/coverage_gate.py` parses
+  to enforce the threshold and derive the exclusion ledger.
 
 Both contain the same aggregate percentages today (one binary, one
 run). If you're debugging a gate failure, the JSON is in the
@@ -111,7 +112,8 @@ The gate stays at exactly 100% — a newly uncovered line always fails
 it. Lines that *cannot* execute in a passing run are excluded
 explicitly rather than absorbed into a percentage allowance (which
 would let real regressions slip through silently). Two generic rules
-plus a per-site marker, all wired in the `justfile` kcov invocation:
+plus a per-site marker, all wired in `scripts/coverage_gate.py`'s
+kcov invocation:
 
 - `--exclude-line='=> unreachable'`: a switch arm ending in
   `unreachable` that executes is a panic, so no passing run ever
