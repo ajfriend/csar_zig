@@ -2,8 +2,9 @@
 //! comptime case manifest, runs the solver N times per case, prints
 //! per-case min/median μs.
 //!
-//! Uses std.heap.smp_allocator (Zig's fast thread-safe production allocator)
-//! — see the allocator note in csar.zig.
+//! Uses init.gpa, which resolves to std.heap.smp_allocator (Zig's fast
+//! thread-safe production allocator) in this example's forced
+//! ReleaseFast build — see the allocator note in csar.zig.
 
 const std = @import("std");
 const csar = @import("csar");
@@ -20,8 +21,11 @@ fn cmpF64(_: void, a: f64, b: f64) bool {
     return a < b;
 }
 
-pub fn main() !void {
-    const allocator = std.heap.smp_allocator;
+pub fn main(init: std.process.Init) !void {
+    // init.gpa resolves to std.heap.smp_allocator in release builds
+    // (this example is forced ReleaseFast) — see the allocator note in
+    // csar.zig.
+    const allocator = init.gpa;
 
     // Representative subset of the full manifest. Intentionally fewer
     // cases than `cases.all` — bench is for cross-config timing, not
@@ -33,7 +37,10 @@ pub fn main() !void {
         "infeas_antipodal", "near_collinear",
     };
 
-    const stdout = std.fs.File.stdout().deprecatedWriter();
+    const io = init.io;
+    var stdout_buffer: [4096]u8 = undefined;
+    var stdout_writer = std.Io.File.stdout().writer(io, &stdout_buffer);
+    const stdout = &stdout_writer.interface;
     try stdout.print("case                    status    n   iters  time_min_us  time_median_us  aspect_ratio  np_fail\n", .{});
     try stdout.print("----------------------  --------  --  -----  -----------  --------------  ------------  -------\n", .{});
 
@@ -64,10 +71,10 @@ pub fn main() !void {
         // elsewhere. It is common-mode across an A/B pair, so read small-case
         // ratios rather than absolutes.
         for (0..N_RUNS) |r| {
-            const t0 = std.time.nanoTimestamp();
+            const t0 = std.Io.Timestamp.now(io, .awake);
             const outcome = try csar.solve(allocator, X, .{ .gap_tol = TOL, .n_hull = 10, .coplanarity_tol = 1e-12 });
-            const t1 = std.time.nanoTimestamp();
-            times[r] = @as(f64, @floatFromInt(t1 - t0)) / 1000.0;
+            const t1 = std.Io.Timestamp.now(io, .awake);
+            times[r] = @as(f64, @floatFromInt(t0.durationTo(t1).nanoseconds)) / 1000.0;
             if (last_outcome) |*lo| lo.deinit();
             last_outcome = outcome;
         }
@@ -144,4 +151,5 @@ pub fn main() !void {
         "TOTAL (converged only)", "ok", n_converged, "—",
         total_converged_min, total_converged_median,
     });
+    try stdout.flush();
 }

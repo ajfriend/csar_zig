@@ -2,8 +2,14 @@
 
 ## Dependencies
 
-- **[zig](https://ziglang.org/)** 0.15.2+ — the language. `brew install zig`
-  on macOS; see ziglang.org for other platforms.
+- **[zig](https://ziglang.org/)** 0.16.0+ — the language. Managed via
+  [mise](https://mise.jdx.dev/), pinned by the committed `mise.toml`:
+  `brew install mise` on macOS, then `mise install` in the repo root.
+  On macOS 0.16.0 is a hard floor, not a preference: 0.15.x fails to link
+  against macOS 26.x SDKs — the build runner itself dies with
+  `undefined symbol: _free` and a dozen similar — so `zig build` cannot
+  run at all there, and `--sysroot` doesn't help (the runner is compiled
+  before the flag applies).
 - **[just](https://github.com/casey/just)** — task runner.
   `brew install just`.
 - **[kcov](https://github.com/SimonKagstrom/kcov)** — line-coverage tool
@@ -24,7 +30,7 @@
 | `just test` | Fast test loop — skips long-running randomized stress tests, no coverage gate. Sub-second; the inner-loop iteration command. |
 | `just test-slow` | Full suite + 100% line coverage gate under `kcov`. Builds with `-Dslow=true` so randomized stress tests run. ~10s; the pre-commit / CI check. |
 | `just test-selfhosted` | Full suite under zig's self-hosted backend (`-Dllvm=false`). See "Two backends" below. |
-| `just check` | Compile-check the library (CI's Build step). |
+| `just check` | Compile the library and every executable, running nothing (CI's Build step). |
 | `just bench` | Run the benchmark suite (release-built `ex-bench`). |
 | `just clean` | Remove `zig-out/`, `.zig-cache/`, `coverage/`. |
 | `just surveys::…` | The states/countries survey pipelines (research/example tooling), grouped in the `surveys` module (`surveys.just`) — `just --list surveys`. |
@@ -68,8 +74,8 @@ pass under both backends**; CI runs both on every push. The test
 binary defaults to LLVM (`-Dllvm=false` selects self-hosted) because
 the kcov gate can only read LLVM-emitted DWARF, so coverage is
 measured on the LLVM binary alone. Backend support is per-target:
-the 0.15.2 self-hosted backend crashes compiling the suite on
-aarch64-macos, so run `just test-selfhosted` where it's supported
+the self-hosted backend crashes compiling the suite on
+aarch64-macos (0.15.2 and 0.16.0), so run `just test-selfhosted` where it is supported
 (x86_64-linux; CI covers it).
 
 ## Coverage

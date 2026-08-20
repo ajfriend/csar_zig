@@ -2,7 +2,7 @@
     .name = .csar,
     .version = "0.1.0",
     .fingerprint = 0x9c8d1b0e21364c6e,
-    .minimum_zig_version = "0.15.2",
+    .minimum_zig_version = "0.16.0",
     .dependencies = .{},
     .paths = .{
         "build.zig",

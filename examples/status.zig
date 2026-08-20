@@ -13,10 +13,10 @@
 const std = @import("std");
 const csar = @import("csar");
 
-pub fn main() !void {
-    var gpa: std.heap.GeneralPurposeAllocator(.{}) = .{};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    // init.gpa: leak-checked DebugAllocator in Debug, smp_allocator in
+    // release builds.
+    const allocator = init.gpa;
 
     const points = [_][3]f64{
         .{ 1, 0, 0 },

@@ -1,7 +1,13 @@
 name: ci
 
+# A bare `push:` alongside `pull_request:` runs every PR commit twice: both
+# events fire for a same-repo branch, and the concurrency group below can't
+# dedupe them (github.ref is refs/heads/<branch> for one and refs/pull/N/merge
+# for the other). Restricting push to main gives each commit exactly one run —
+# PRs via pull_request, main (including merge commits) via push.
 on:
   push:
+    branches: [main]
   pull_request:
 
 permissions:
@@ -24,7 +30,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: mlugg/setup-zig@v2
         with:
-          version: 0.15.2
+          version: 0.16.0
       - uses: extractions/setup-just@v3
       # No moving major tag past v7, so pin the exact release. Caching is off
       # because there is nothing to cache: coverage_gate.py declares no

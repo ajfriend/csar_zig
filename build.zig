@@ -68,16 +68,24 @@ pub fn build(b: *std.Build) void {
     const install_test_step = b.step("install-test", "Install the test binary at zig-out/bin/csar-test");
     install_test_step.dependOn(&install_test.step);
 
+    // `zig build check`: compile every executable (library, examples,
+    // survey execs) WITHOUT running anything — the CI Build step and
+    // `just check`. Run steps only compile their exe when invoked, so
+    // without this, toolchain churn in examples/scripts is invisible
+    // to CI.
+    const check_step = b.step("check", "Compile the library and every executable without running");
+    check_step.dependOn(&lib.step);
+
     // Examples. Single-file runnable programs. Step name matches the
     // example's filename (examples/<stem>.zig → `zig build ex-<stem>`).
     // `ex-cases` accepts pass-through args after `--`: `zig build
     // ex-cases -- hex` or `-- --all`. `ex-bench` is force-built in
     // ReleaseFast — timing numbers are meaningless in Debug.
-    addExample(b, csar_mod, cases_mod, target, optimize, "basic", null, "Run examples/basic.zig (happy-path only)");
-    addExample(b, csar_mod, cases_mod, target, optimize, "status", null, "Run examples/status.zig (full Outcome branching)");
-    addExample(b, csar_mod, cases_mod, target, optimize, "cases", null, "Run examples/cases.zig (run a named case or --all)");
-    addExample(b, csar_mod, cases_mod, target, optimize, "bench", .ReleaseFast, "Run examples/bench.zig (per-case timing, release-built)");
-    addExample(b, csar_mod, cases_mod, target, optimize, "compare", .ReleaseFast, "Run examples/compare.zig (alternating vs trust solver paths, release-built)");
+    addExample(b, check_step, csar_mod, cases_mod, target, optimize, "basic", null, "Run examples/basic.zig (happy-path only)");
+    addExample(b, check_step, csar_mod, cases_mod, target, optimize, "status", null, "Run examples/status.zig (full Outcome branching)");
+    addExample(b, check_step, csar_mod, cases_mod, target, optimize, "cases", null, "Run examples/cases.zig (run a named case or --all)");
+    addExample(b, check_step, csar_mod, cases_mod, target, optimize, "bench", .ReleaseFast, "Run examples/bench.zig (per-case timing, release-built)");
+    addExample(b, check_step, csar_mod, cases_mod, target, optimize, "compare", .ReleaseFast, "Run examples/compare.zig (alternating vs trust solver paths, release-built)");
 
     // US-states aspect-ratio example (see scripts/states/). Standalone
     // exec, not an example: lives under scripts/, force-built ReleaseFast,
@@ -96,6 +104,7 @@ pub fn build(b: *std.Build) void {
     run_states_aspect.setCwd(b.path(""));
     const states_aspect_step = b.step("states-aspect", "Run scripts/states/states.zig over data/states.json");
     states_aspect_step.dependOn(&run_states_aspect.step);
+    check_step.dependOn(&states_aspect_exe.step);
 
     // Top-100-countries aspect-ratio example (see scripts/countries/). Same
     // standalone-exec pattern as the states example above.
@@ -113,10 +122,12 @@ pub fn build(b: *std.Build) void {
     run_countries_aspect.setCwd(b.path(""));
     const countries_aspect_step = b.step("countries-aspect", "Run scripts/countries/countries.zig over data/countries.json");
     countries_aspect_step.dependOn(&run_countries_aspect.step);
+    check_step.dependOn(&countries_aspect_exe.step);
 }
 
 fn addExample(
     b: *std.Build,
+    check_step: *std.Build.Step,
     csar_mod: *std.Build.Module,
     cases_mod: *std.Build.Module,
     target: std.Build.ResolvedTarget,
@@ -145,4 +156,5 @@ fn addExample(
     if (b.args) |args| run.addArgs(args);
     const step = b.step(b.fmt("ex-{s}", .{stem}), description);
     step.dependOn(&run.step);
+    check_step.dependOn(&exe.step);
 }

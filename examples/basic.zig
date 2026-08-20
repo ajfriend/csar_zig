@@ -11,10 +11,10 @@
 const std = @import("std");
 const csar = @import("csar");
 
-pub fn main() !void {
-    var gpa: std.heap.GeneralPurposeAllocator(.{}) = .{};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    // init.gpa: leak-checked DebugAllocator in Debug, smp_allocator in
+    // release builds.
+    const allocator = init.gpa;
 
     // Three unit vectors at the standard basis directions — the
     // vertices of one octant of the unit sphere. By 3-fold symmetry

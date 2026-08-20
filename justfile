@@ -14,9 +14,9 @@ test-slow:
 test-selfhosted:
     zig build test -Dslow=true -Dllvm=false
 
-# Compile-check the library (CI's Build step).
+# Compile the library and every executable without running (CI's Build step).
 check:
-    zig build
+    zig build check
 
 # Everything CI checks that can run on this machine — use before pushing a PR.
 ci: check test-slow _ci-selfhosted
