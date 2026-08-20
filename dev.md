@@ -139,10 +139,14 @@ Before marking a line, exhaust these — each has an in-tree example:
   one-liners: the line executes (and is covered) every pass. This
   leans on the documented branch-coverage caveat above — reserve it
   for bodies trivially correct by inspection.
-- **Cover a failure path with an expectError self-test.** The
-  trust/alternating AR-mismatch diagnostic is a helper whose failure
-  path a self-test drives directly (`expectArAgreement` in
-  methods_test).
+- **Cover a failure path with an expectError self-test.** A failure
+  diagnostic lives in a helper, and a self-test drives it with fake
+  inputs, asserting the expected error (`expectArAgreement` in
+  methods_test; `checkRotationInvariance`'s three self-tests in
+  extreme_aspect_test). Side effect: each prints its diagnostic once
+  per suite run — every such line is labeled
+  `case=diagnostic-selftest`, so passing-run output that mentions
+  mismatches is self-identifying.
 - **Cover platform-dependent arms with a deterministic sibling.**
   The tolerant switch over converged/DNC lives once, in
   `tests/helpers.zig` (`resolvedView`), and its own test feeds it

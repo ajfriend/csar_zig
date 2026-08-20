@@ -179,7 +179,7 @@ test "checkRotationInvariance: status branch prints case+k label" {
     } };
     try std.testing.expectError(
         error.RotationNotConverged,
-        checkRotationInvariance("test_label", 7, 1.0, fake, 1e-6, 1e-4),
+        checkRotationInvariance("diagnostic-selftest", 7, 1.0, fake, 1e-6, 1e-4),
     );
 }
 
@@ -194,7 +194,7 @@ test "checkRotationInvariance: gap branch prints case+k label" {
     } };
     try std.testing.expectError(
         error.RotationGapTooLarge,
-        checkRotationInvariance("test_label", 3, 1.0, fake, 1e-6, 1e-4),
+        checkRotationInvariance("diagnostic-selftest", 3, 1.0, fake, 1e-6, 1e-4),
     );
 }
 
@@ -211,7 +211,7 @@ test "checkRotationInvariance: AR branch prints case+k label" {
     } };
     try std.testing.expectError(
         error.RotationArMismatch,
-        checkRotationInvariance("test_label", 0, 1.0, fake, 1e-6, 1e-4),
+        checkRotationInvariance("diagnostic-selftest", 0, 1.0, fake, 1e-6, 1e-4),
     );
 }
 
