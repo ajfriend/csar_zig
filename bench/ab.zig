@@ -25,9 +25,15 @@
 //!
 //! ### The design
 //!
-//! **No process isolation, deliberately.** Both versions live in one binary —
-//! the opposite of the usual harness default (JMH and friends fork per variant
-//! to isolate them). Co-location is the point: a freshly built binary's first
+//! **No process isolation, deliberately.** Both versions live in one binary.
+//! That inverts the usual harness default — JVM harnesses fork a fresh process
+//! per variant — but their reason does not apply here: the JIT builds a
+//! profile as it runs, so two implementations in one process contaminate each
+//! other's compilation, and isolation is the only fix. Zig is AOT-compiled;
+//! both versions are machine code before main() starts and there is no profile
+//! to pollute. So we get pairing without the hazard that forces forking there.
+//!
+//! Co-location is also positively wanted here: a freshly built binary's first
 //! *launch* runs 2-5x slow, and that penalty survives an in-process warm-up
 //! and a min-over-reps, so a two-process A/B can invent a small-cell
 //! regression outright. It did, while A/B-ing the 0.16 bump. Sharing one
