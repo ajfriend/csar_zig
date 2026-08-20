@@ -21,6 +21,7 @@ pub fn build(b: *std.Build) void {
     // sides ship their own `tests/`, and drawing them from different sides
     // would silently compare two different point sets.
     mod.addImport("cases", cur.module("cases"));
+    mod.addImport("benchcore", cur.module("benchcore"));
 
     // The baseline is lazy: `check` builds without it, `ab` needs it.
     if (b.lazyDependency("csar_base", .{ .target = target, .optimize = optimize })) |base| {
@@ -42,6 +43,7 @@ pub fn build(b: *std.Build) void {
     });
     check_mod.addImport("cur", cur.module("csar"));
     check_mod.addImport("cases", cur.module("cases"));
+    check_mod.addImport("benchcore", cur.module("benchcore"));
     check_mod.addImport("base", cur.module("csar"));
     const check_exe = b.addExecutable(.{ .name = "csar-ab-check", .root_module = check_mod });
     b.step("check", "Compile the harness without running or fetching the baseline")
