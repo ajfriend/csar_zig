@@ -107,7 +107,7 @@ pub const SolveOptions = struct {
     /// O(κ(A)·ε) ≈ O(σ_max·ε). For well-conditioned inputs this is far
     /// below the 1e-6 default. But very small, far-from-origin scatters
     /// (e.g. sub-meter DGGS cells at finest resolution, where σ_max ~ 1e9)
-    /// floor at ~1e-4–1e-3, and many will return `.did_not_converge`
+    /// floor at ~1e-4–1e-3, and many will return `.precision_floor`
     /// at the default — correctly, since f64 cannot certify a tighter
     /// bound (the optimal cone axis is a sub-ulp rotation away). WHICH
     /// cells sit above vs below the floor at a tolerance near it is
@@ -116,9 +116,8 @@ pub const SolveOptions = struct {
     /// ratios agree to ~1e-7 regardless).
     /// Raising `max_outer` does NOT help at the floor; pass a looser
     /// `gap_tol` (e.g. 1e-3) for such inputs — the aspect ratio is
-    /// input-precision-limited and accurate regardless of the gap.
-    /// Such a solve returns `.precision_floor`, with the floor on
-    /// `Uncertified.gap_floor`.
+    /// input-precision-limited and accurate regardless of the gap. The
+    /// floor itself is reported on `Uncertified.gap_floor`.
     gap_tol: f64 = 1e-6,
 
     /// Convex-hull preprocessing threshold. If `X.len > n_hull`,
@@ -142,7 +141,8 @@ pub const SolveOptions = struct {
     /// budget counts opening rounds, trust-region iterations (each a
     /// full-precision inner-oracle evaluation) and re-certification
     /// attempts. The solver can also stop BELOW the cap when its merit
-    /// function is stationary at the f64 floor — `.precision_floor`.
+    /// function is stationary — `.precision_floor` if that is at the
+    /// input's floor, `.did_not_converge` otherwise.
     max_outer: u32 = 100,
 
     /// Solver path selection.
@@ -230,9 +230,9 @@ pub const TrustDiagnostics = struct {
     /// Oracle evaluations where Newton polish bailed.
     polish_failures: u32,
     /// Certifications whose gap fell below the floating-point error model
-    /// (`csar.gapFloor`). Weak duality makes that impossible for a valid
-    /// certificate, so this should read 0 on every input; a nonzero value
-    /// is a bug in the duality code — please report it.
+    /// (the one behind `Uncertified.gap_floor`) — impossible for a valid
+    /// certificate, so this reads 0 on every input; nonzero is a bug in
+    /// the duality code, please report it.
     gaps_below_model: u32,
 };
 
@@ -348,9 +348,9 @@ pub const Uncertified = struct {
     /// measured gap and can never satisfy any legal `gap_tol`.
     gap: f64,
     /// The smallest gap this solver's certificate can reach at f64 for
-    /// this input's geometry — the measured error model `csar.gapFloor`
-    /// (~1e-6 for a cell 1e-10 rad across, ~1e-9 for the finest DGGS
-    /// cells). A `gap_tol` below it cannot be met.
+    /// this input's geometry, from a measured error model (≈ 64·σ_max·ε
+    /// + κ·ε; ~1e-6 for a cell 1e-10 rad across, ~1e-9 for the finest
+    /// DGGS cells). A `gap_tol` below it cannot be met — see `gap_tol`.
     gap_floor: f64,
     /// Algorithm-specific diagnostics; the tag records which solver
     /// path produced this outcome.
@@ -379,17 +379,19 @@ pub const Outcome = union(enum) {
     /// points, or the deepest hemisphere's margin is below ~1e-8
     /// (bounded by `Infeasible.residual`; see that doc).
     infeasible: Infeasible,
-    /// The iteration budget (`max_outer`) ran out before the gap closed
-    /// — raise it, or inspect `diag`. A property of the algorithm on
-    /// this input, not of the precision. Last certified iterate is
+    /// The solver stopped with the gap still above the input's
+    /// `gap_floor`: the iteration budget (`max_outer`) ran out, or the
+    /// trust region went stationary short of the floor. A property of
+    /// the algorithm on this input, not of the precision — raise
+    /// `max_outer`, or inspect `diag`. Last certified iterate is
     /// available for inspection; no certified cone.
     did_not_converge: Uncertified,
     /// `gap_tol` is below what this solver can certify at f64 for this
     /// input (`Uncertified.gap_floor`), and the iterate is at that
     /// floor. The cone is as accurate as the input allows; only the
     /// certificate is missing. Raising `max_outer` changes nothing —
-    /// loosen `gap_tol` (see its doc), or use a higher precision when
-    /// one exists. Same payload as `did_not_converge`.
+    /// loosen `gap_tol` (see its doc). Same payload as
+    /// `did_not_converge`.
     precision_floor: Uncertified,
 
     pub fn deinit(self: *Outcome) void {

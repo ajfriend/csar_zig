@@ -7,8 +7,9 @@
 //! `solve` returns four distinct outcomes; only `.converged` produces
 //! a certified cone. `.infeasible`, `.did_not_converge` and
 //! `.precision_floor` are still valid library responses — the caller
-//! dispatches on the union tag to decide what to do. Structural input problems (too few points,
-//! rank-deficient X) propagate as `InputError` via `try`.
+//! dispatches on the union tag to decide what to do. Structural input
+//! problems (too few points, rank-deficient X) propagate as `InputError`
+//! via `try`.
 
 const std = @import("std");
 const csar = @import("csar");
@@ -27,7 +28,8 @@ pub fn main(init: std.process.Init) !void {
     //    tolerance below the f64 floor: the budget runs out first.
     // 4. A hexagon ~4e-10 rad across (an H3 r15-scale cell far from the
     //    origin): its certificate's f64 floor is ~1e-6, above the default
-    //    tolerance, so the cone is found but cannot be certified.
+    //    tolerance, so the cone is found but cannot be certified. (The
+    //    same points are `HEX1` in tests/neg_gap_test.zig.)
     const octant = [_][3]f64{ .{ 1, 0, 0 }, .{ 0, 1, 0 }, .{ 0, 0, 1 } };
     const antipodal = [_][3]f64{ .{ 1, 0, 0 }, .{ -1, 0, 0 }, .{ 0, 1, 0 } };
     const irregular = [_][3]f64{ .{ 1, 0, 0 }, .{ 0.1, 0.97, 0.2 }, .{ -0.2, 0.3, 0.93 } };

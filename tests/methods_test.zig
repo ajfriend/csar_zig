@@ -9,7 +9,7 @@
 //!  - `.auto` is a pure alias for `Method.recommended` (currently
 //!    `.trust`) — identical outcomes, and the resolution pinned;
 //!  - certificate sanity on a trust solve (λ ≥ 0, certified gap in
-//!    [−NEG_GAP, gap_tol], primal feasibility ≤ roundoff).
+//!    [−gap_tol, gap_tol], primal feasibility ≤ roundoff).
 
 const std = @import("std");
 const csar = @import("../src/root.zig");

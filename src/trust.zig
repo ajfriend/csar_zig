@@ -108,27 +108,17 @@ pub const Buffers = struct {
     }
 };
 
-/// The last certificate, as one consistent snapshot: the gap, the chart
-/// moment matrix it was built from (the error model's κ input), and the
-/// axis (see buildOutcome's contract — TR-loop certification is gated on
-/// pred and the RECERT loop can be budget-skipped, so on DNC the final
-/// axis may be several accepted steps past this one).
-const LastCert = struct { gap: GapResult, M: Mat2, b: Vec3 };
+const LastCert = core.LastCert;
 
 /// Certify a structured iterate: recover the budget-tight A_perp from
 /// the chart moment matrix, run the shared constructed-dual gap, record
-/// the snapshot, and return whether it certifies at `gap_tol`. One
-/// recipe for all five certification sites (eager, opening, initial, TR
-/// accept, RECERT); reads the chart buffers (`P_buf`, `w`) that the
-/// preceding oracle/moments computation left in place.
-///
-/// Also the duality-code bug detector: `core.gapBelowModel` hits are
-/// counted into `TrustDiagnostics.gaps_below_model` and asserted against
-/// in Debug builds — what the test suite and the coverage gate run.
-/// Release builds only count, so a user build returns an Outcome on
-/// every valid input (#6). Those two lines are branch-free so both
-/// execute on every pass (dev.md "Coverage exclusions": collapse, don't
-/// exclude).
+/// the `LastCert` snapshot, and return whether it certifies at
+/// `gap_tol`. One recipe for all five certification sites (eager,
+/// opening, initial, TR accept, RECERT); reads the chart buffers
+/// (`P_buf`, `w`) that the preceding oracle/moments computation left in
+/// place. Also runs the bug detector (`core.gapFloor`): counted always,
+/// asserted in Debug — written as two unconditional lines so the
+/// coverage gate sees them execute (dev.md "Coverage exclusions").
 fn certify(
     last: *LastCert,
     below_model: *u32,
@@ -691,8 +681,7 @@ pub fn solveTrust(
     return core.buildOutcome(
         allocator,
         converged,
-        last.b,
-        last.gap,
+        last,
         .{ .trust = .{
             .eager_certified = eager_certified,
             .open_iters = open_iters,
@@ -704,7 +693,6 @@ pub fn solveTrust(
         wb.cert_active,
         wb.cert_lambdas,
         prep.work_to_orig,
-        last.M,
         opts.gap_tol,
     );
 }

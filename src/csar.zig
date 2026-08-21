@@ -928,18 +928,17 @@ pub fn gapConverged(gap: f64, gap_tol: f64) bool {
 
 /// The error model: how far below zero a valid certificate's computed
 /// gap can fall at this precision, for this geometry. Two measured
-/// sources (#6), both in units of ε:
+/// sources (#6), with coefficients in units of ε so a higher-precision
+/// instantiation need only supply its own `floatEps` and κ:
 ///   - evaluating the gap costs ≈ σ_max·ε (4–7× measured; the factor
 ///     `tol.NEG_GAP_SIGMA` = 64 gives headroom);
 ///   - the certificate's A_perp is feasible only to κ(M)·ε, the error
 ///     in forming M^{-1/2} (0.03× measured; coefficient 1).
 /// A logic error in the duality code violates this by orders of
 /// magnitude (inflating A by 0.1% moves the gap ~10⁴× the bound:
-/// `tests/neg_gap_test.zig`). Below the bound the solver reports
-/// `.precision_floor`; beyond it the
-/// Debug tripwire fires and `TrustDiagnostics.gaps_below_model` counts.
-/// The coefficients are in units of ε; a higher-precision instantiation
-/// (#9) supplies its own `floatEps` and κ.
+/// `tests/neg_gap_test.zig`). A gap inside the bound is reported as
+/// `.precision_floor`; one beyond it trips the Debug assert in
+/// `trust.certify` and counts in `TrustDiagnostics.gaps_below_model`.
 pub fn gapFloor(sigma_max: f64, M: Mat2) f64 {
     const e = eig2(M.m).vals;
     const kappa = e[1] / e[0];
@@ -956,28 +955,34 @@ pub fn gapBelowModel(r: GapResult, M: Mat2, gap_tol: f64) bool {
     return r.gap < -gapFloor(r.sigma[1], M);
 }
 
+/// The last certificate, as one consistent snapshot: the gap, the chart
+/// moment matrix it was built from (the error model's κ input), and the
+/// axis. A solver's certification sites write it whole — TR-loop
+/// certification is gated on pred and the RECERT loop can be
+/// budget-skipped, so on an uncertified outcome the final axis may be
+/// several accepted steps past this one.
+pub const LastCert = struct { gap: GapResult, M: Mat2, b: Vec3 };
+
 /// Bundle the final outcome: translate the work-set certificate back to
 /// caller indices, bundle the full
 /// eigendecomposition (Q's columns are (b, v1, v2) with eigenvalues
 /// (SIGMA_0, sigma[0], sigma[1]); v2 flipped if needed so det Q = +1),
 /// and wrap as `converged`, or `did_not_converge` / `precision_floor`.
-/// `b` MUST be the axis at which `last_gap` was computed: Q's
+/// `last` is one snapshot by construction (see `LastCert`): Q's
 /// orthonormality (and the meaning of gap/sigma) depends on v1/v2
-/// being tangent to this exact axis. Callers keep the axis and
-/// `last_gap` as one snapshot for this reason; `last_M` is the moment
-/// matrix that certificate was built from, for the error model.
+/// being tangent to the exact axis the gap was computed at.
 pub fn buildOutcome(
     allocator: std.mem.Allocator,
     converged: bool,
-    b: Vec3,
-    last_gap: GapResult,
+    last: LastCert,
     diag: api.Diagnostics,
     cert_active: []const usize,
     cert_lambdas: []const f64,
     work_to_orig: ?[]const u32,
-    last_M: Mat2,
     gap_tol: f64,
 ) !Outcome {
+    const last_gap = last.gap;
+    const b = last.b;
     const cert = try buildPrimalCert(allocator, cert_active, cert_lambdas, last_gap.cert_n, work_to_orig);
 
     var v1 = last_gap.v1;
@@ -1001,7 +1006,7 @@ pub fn buildOutcome(
         // iterate actually reached the floor — a solve that ran out of
         // budget far from optimum (or never built a certificate: the
         // sentinel) is `.did_not_converge` whatever the tolerance.
-        const gap_floor = gapFloor(last_gap.sigma[1], last_M);
+        const gap_floor = gapFloor(last_gap.sigma[1], last.M);
         const at_floor = gap_tol < gap_floor and @abs(last_gap.gap) <= gap_floor;
         const payload: api.Uncertified = .{
             .Q = Qmat,

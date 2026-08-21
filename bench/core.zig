@@ -188,8 +188,8 @@ pub fn pairedRun(
 /// this module stays solver-free so the tests can drive it without one.
 /// `tests/bench_core_test.zig` asserts the transcription matches the real
 /// union's tags, and `Side.metrics` below builds every status with `@tagName`
-/// over a switch that is exhaustive on that union — so the two vocabularies
-/// cannot drift apart without a test or compile failure.
+/// over a switch on that union — so the two vocabularies cannot drift apart
+/// without a test failure.
 pub const OutcomeTag = enum { converged, infeasible, did_not_converge, precision_floor };
 
 /// The one place a status string becomes an `OutcomeTag`; `null` is an
@@ -459,11 +459,9 @@ pub fn Side(comptime lib: type) type {
             defer o.deinit();
             // @tagName, not a literal: the status is the library's own
             // spelling, which the suite pins `OutcomeTag` to. The uncertified
-            // variants are an `inline else` prong rather than named: the
-            // pinned baseline's union predates `.precision_floor` (drop the
-            // `inline else` for the two names once the pin moves past
-            // v0.4.0). A new variant without the `Uncertified` fields still
-            // fails to compile here.
+            // variants are an `inline else` prong rather than named because
+            // the pinned baseline predates `.precision_floor` — the same
+            // skew `belowModel` absorbs; both go at the same re-pin.
             const status = @tagName(o);
             return switch (o) {
                 .converged => |c| .{

@@ -1,10 +1,12 @@
 //! The #1 / #2 repros (#6): inputs whose certificate gap goes negative at
 //! the certification boundary. `solve` returns an `Outcome` for them —
 //! `.precision_floor` when the requested tolerance is below what f64 can
-//! certify for that geometry — and the
-//! error model behind that verdict (`csar.gapFloor`) is pinned to the
-//! inputs that motivated it. The batches at `gap_tol = 1e-9` cover the #2
-//! class at scale (`just ab --gap-tol=1e-9`); these are the named originals.
+//! certify for that geometry — and the error model behind that verdict
+//! (`csar.gapFloor`) is pinned to the inputs that motivated it. The
+//! batches at `gap_tol = 1e-9` cover the #2 class at scale
+//! (`just ab --gap-tol=1e-9`); these are the named originals. `HEX1` is
+//! also `examples/status.zig`'s floor input (a second copy on purpose:
+//! `cases/` holds only inputs that certify at the default tolerance).
 
 const std = @import("std");
 const csar = @import("../src/root.zig");
@@ -61,8 +63,8 @@ test "a negative gap is the symptom of an infeasible certificate, and the model 
     // budget — what `gaps_below_model` counts and Debug asserts on.
     // Construct one: a regular hexagon, the solver's uniform seed weights
     // (its optimal design by symmetry), a budget-tight A_perp from
-    // `recoverAPerp`, then
-    // that A_perp inflated by (1 + δ). Inflating A shrinks the cone the
+    // `recoverAPerp`, then that A_perp inflated by (1 + δ). Inflating A
+    // shrinks the cone the
     // certificate claims, so −log det A understates the feasible value by
     // 2·log(1+δ) and the gap drops by that much — ~10⁴× the model at
     // δ = 1e-3.

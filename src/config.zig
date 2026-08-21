@@ -10,8 +10,9 @@ pub const SIGMA_0: f64 = 1.0 / @sqrt(3.0);
 
 /// Gate for tripwire assertions on invariants the solver checks at
 /// runtime (today: the duality-gap error model, `trust.certify`). Debug
-/// only — what the test suite and the coverage gate run — so a bare
-/// `std.debug.assert` never becomes `unreachable` in a release build.
+/// only — what the test suite and the coverage gate run. A bare
+/// `std.debug.assert` would compile to `unreachable` in ReleaseFast, so
+/// every tripwire goes behind this gate.
 pub const debug_checks = @import("builtin").mode == .Debug;
 
 /// Algorithm tuning parameters — internal knobs tuned together for the
@@ -275,7 +276,7 @@ pub const tol = struct {
     pub const NEWTON_RANGE_PIVOT_MIN: f64 = 1e-14;
     /// Coefficient of the σ_max·ε (evaluation-noise) term of the gap's
     /// error model — see `csar.gapFloor` for the model and its
-    /// measurements. #9's triage owns it from here.
+    /// measurements.
     pub const NEG_GAP_SIGMA: f64 = 64.0;
     /// FW inner loops: minimum w_i to participate in the pairwise-swap candidate set.
     /// Distinct from (and looser than) algo.ACTIVE_THRESH, which is the *cert* cutoff.

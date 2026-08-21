@@ -5,13 +5,11 @@ commit that carries the full detail.
 
 ## [Unreleased]
 
-- **Breaking:** `Outcome` gains `.precision_floor` — `gap_tol` is below what
-  f64 can certify for the input and the iterate is at that floor (loosen
-  `gap_tol`); `.did_not_converge` now means only that `max_outer` ran out.
-  Both carry the `Uncertified` payload (was `DidNotConverge`), which gains
-  `gap_floor`. `SolveError.NegativeDualityGap` is removed: a negative gap at
-  the floor is evaluation noise, not a theorem violation; the bug detector is
-  now `TrustDiagnostics.gaps_below_model` (should read 0). Fixes #1, #2.
+- **Breaking:** `Outcome` gains `.precision_floor` (the tolerance is below
+  the input's f64 floor — loosen `gap_tol`), `.did_not_converge` now means
+  the budget ran out, both carry `Uncertified` (was `DidNotConverge`), and
+  `SolveError.NegativeDualityGap` is removed. Details in
+  [#53](https://github.com/ajfriend/csar_zig/pull/53).
 
 ## [0.3.0]
 
