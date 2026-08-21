@@ -12,9 +12,18 @@ gate guarantees, and the ledger's meaning: dev.md "Coverage".
 
 Output: quiet on success — the test-run summary line, then the summary
 block (also written to coverage/summary.txt, which CI posts on PRs).
-Every kcov invocation's output lands in zig-out/test-slow.log, dumped
-only when a run fails. Exits nonzero unless coverage is exactly 100%
-and the ledger matches the markers.
+Every kcov invocation's output lands in zig-out/test-slow.log, in RUNS
+order, dumped only when a run fails.
+
+The runs are independent (one output dir each) and dominate the wall
+time, so they go through a thread pool; each captures its own output
+and the log is assembled afterwards, so all runs finish before any
+failure is reported. Coverage reads which lines ran, never how long, so
+concurrency cannot change the result — only the timing tables csar-ab's
+self-test modes print into the log get noisy.
+
+Exits nonzero unless coverage is exactly 100% and the ledger matches
+the markers.
 
 Edit the constants below in place — no CLI args by project convention.
 Run with:  uv run scripts/coverage_gate.py   (after `just test-slow`'s
@@ -26,6 +35,7 @@ import subprocess
 import sys
 import tempfile
 import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 # (binary, args, expect_success). Several runs per binary reach the
@@ -73,19 +83,18 @@ def rel(file):
     return file.removeprefix(ROOT)
 
 
-def run_logged(argv):
-    with open(LOG, 'a') as f:
-        f.write(f'\n$ {" ".join(argv)}\n')
-        f.flush()
-        return subprocess.run(argv, stdout=f, stderr=subprocess.STDOUT).returncode
+def run(argv):
+    """(exit code, log text) — the command line, then its combined output."""
+    p = subprocess.run(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors='replace')
+    return p.returncode, f'\n$ {" ".join(argv)}\n{p.stdout}'
 
 
 def kcov(flags, out_dir, binary, bin_args):
     # kcov's own return code is ignored: it does not reliably propagate the
     # child's exit status (it returns 0 on macOS regardless), so each run's
     # outcome is checked by a direct run instead.
-    run_logged(['kcov', f'--include-pattern={INCLUDE_PATTERN}', f'--exclude-pattern={EXCLUDE_PATTERN}',
-                *flags, str(out_dir), binary, *bin_args])
+    return run(['kcov', f'--include-pattern={INCLUDE_PATTERN}', f'--exclude-pattern={EXCLUDE_PATTERN}',
+                *flags, str(out_dir), str(binary), *bin_args])[1]
 
 
 def lines_by_file(out_dir):
@@ -129,36 +138,44 @@ if missing := installed - {b for b, _, _ in RUNS}:
 shutil.rmtree(OUT, ignore_errors=True)
 LOG.unlink(missing_ok=True)
 
-# Gated pass: each run into its own dir, with the exclusion rules.
-run_dirs = []
-for i, (binary, bin_args, expect_success) in enumerate(RUNS):
-    rc = run_logged([binary, *bin_args])  # the outcome, since kcov won't say
-    if (rc == 0) != expect_success:
-        print(LOG.read_text(), end='')
-        sys.exit(f'{binary} {" ".join(bin_args)}: exit {rc}, expected {"success" if expect_success else "failure"}')
+# Per run: the direct run (for the exit code), then kcov into the run's
+# own dir with the exclusion rules. The first run of each binary also does
+# the raw pass: reclassify the collected data WITHOUT the rules, in a
+# throwaway copy — which lines exist is a property of the binary, not the
+# args. kcov's hit data in that mode is lossy; only the classification is
+# used. Returns (log, exit code, gated lines, raw lines or None).
+def measure(i, spec, tmp):
+    binary, bin_args, _ = spec
+    rc, log = run([binary, *bin_args])  # the outcome, since kcov won't say
     d = OUT / f'{i:02d}-{Path(binary).name}{"-" + "-".join(a.strip("-") for a in bin_args) if bin_args else ""}'
-    d.mkdir(parents=True)  # kcov creates its output dir, not its parents
-    kcov([f'--exclude-line={EXCLUDE_LINE}'], d, binary, bin_args)
-    run_dirs.append((d, binary))
-print(next(l for l in reversed(LOG.read_text().splitlines()) if l.startswith('All ') and 'tests passed' in l))
-
-gated = merge([lines_by_file(d) for d, _ in run_dirs])
-
-# Raw pass: reclassify collected data without the rules, in a throwaway
-# copy. Which lines exist is a property of the binary, not the args, so
-# once per binary. kcov's hit data in this mode is lossy — only the line
-# classification is used.
-with tempfile.TemporaryDirectory() as tmp:
-    raws, done = [], set()
-    for d, binary in run_dirs:
-        if binary in done:
-            continue
-        done.add(binary)
+    # kcov gets its own copy of the binary: on macOS it runs `dsymutil` beside
+    # the binary on EVERY invocation (a fresh .dSYM does not stop it), so
+    # concurrent runs of one binary would race on the .dSYM ("kcov: error:
+    # Not a debug file", lines silently dropped from the report).
+    (d / 'bin').mkdir(parents=True)
+    copy = shutil.copy2(binary, d / 'bin')
+    log += kcov([f'--exclude-line={EXCLUDE_LINE}'], d, copy, bin_args)
+    raw = None
+    if i == next(j for j, (b, _, _) in enumerate(RUNS) if b == binary):
         raw_d = Path(tmp) / d.name
         shutil.copytree(d, raw_d)
-        kcov(['--report-only'], raw_d, binary, [])
-        raws.append(lines_by_file(raw_d))
-    raw = merge(raws)
+        log += kcov(['--report-only'], raw_d, raw_d / 'bin' / Path(binary).name, [])
+        raw = lines_by_file(raw_d)
+    return log, rc, lines_by_file(d), raw
+
+
+with tempfile.TemporaryDirectory() as tmp, ThreadPoolExecutor() as pool:
+    results = list(pool.map(lambda ir: measure(*ir, tmp), enumerate(RUNS)))
+log = ''.join(r[0] for r in results)
+LOG.write_text(log)
+if failed := [f'{b} {" ".join(a)}: exit {rc}, expected {"success" if ok else "failure"}'
+              for (b, a, ok), (_, rc, _, _) in zip(RUNS, results) if (rc == 0) != ok]:
+    print(log, end='')
+    sys.exit('\n'.join(failed))
+print(next(l for l in reversed(log.splitlines()) if l.startswith('All ') and 'tests passed' in l))
+
+gated = merge([g for _, _, g, _ in results])
+raw = merge([r for _, _, _, r in results if r])
 
 # The ledger: lines present raw but absent gated, per file.
 excluded = {f: sorted(raw[f].keys() - gated.get(f, {}).keys()) for f in raw if raw[f].keys() - gated.get(f, {}).keys()}
