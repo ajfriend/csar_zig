@@ -29,7 +29,6 @@ const algo = config.algo;
 const tol = config.tol;
 const SIGMA_0 = config.SIGMA_0;
 
-
 const linalg = @import("linalg.zig");
 const Vec2 = linalg.Vec2;
 const Vec3 = linalg.Vec3;
@@ -1027,6 +1026,13 @@ pub fn solve(
     // All internal routines work in []const Vec3.
     const Xv: []const Vec3 = @ptrCast(X);
 
+    // COVERAGE DEMO: no caller passes more than 2^20 points, so this
+    // branch never runs and the gate must report these lines.
+    if (X.len > 1 << 20) {
+        std.debug.print("csar: {d} points, this will be slow\n", .{X.len});
+        if (opts.gap_tol < 1e-12) std.debug.print("csar: and the tolerance is tight\n", .{});
+    }
+
     const prep = switch (try preprocess(scratch_alloc, allocator, Xv, opts)) {
         .infeasible => |outcome| return outcome,
         .ready => |p| p,
@@ -1036,4 +1042,3 @@ pub fn solve(
         .trust => return trust.solveTrust(allocator, scratch_alloc, prep, opts),
     }
 }
-

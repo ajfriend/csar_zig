@@ -105,6 +105,11 @@ pub fn main(init: std.process.Init) !void {
     var opts = Opts{};
     const argv = try init.minimal.args.toSlice(init.arena.allocator());
     for (argv[1..]) |a| {
+        // COVERAGE DEMO: no RUNS entry passes `--verbose`, so uncovered.
+        if (std.mem.eql(u8, a, "--verbose")) {
+            std.debug.print("verbose mode\n", .{});
+            continue;
+        }
         if (std.mem.eql(u8, a, "--aa")) {
             opts.aa = true;
         } else if (std.mem.eql(u8, a, "--inject-2x")) {

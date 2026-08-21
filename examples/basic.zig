@@ -35,7 +35,7 @@ pub fn main(init: std.process.Init) !void {
     // the full set.
     const c = switch (outcome) {
         .converged => |c| c,
-        else => return error.UnexpectedOutcome,
+        else => return error.UnexpectedOutcome, // kcov-excl: COVERAGE DEMO — the octant example always converges
     };
     const b = c.b();
     std.debug.print("aspect ratio: {d:.6}\n", .{c.aspectRatio()});
