@@ -25,9 +25,10 @@ pub const PIN = .{
     .coplanarity_tol = 1e-12,
 };
 
-/// The batch fixtures (cases/batches/*.zon): ~1000-cell DGGS samples,
-/// every cell of which converges. Nothing but the tests and `bench/`
-/// reference this, so lazy analysis keeps the data out of the examples.
+/// The batch fixtures (cases/batches/*.zon): ~1000-cell DGGS samples —
+/// the timing workload for `csar-ab` (#37), every cell of which
+/// converges. Nothing but the tests and `bench/` reference this, so lazy
+/// analysis keeps the data out of the examples.
 pub const batches = @import("batches.zig");
 
 pub const Expected = union(enum) {
