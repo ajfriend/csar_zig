@@ -94,9 +94,8 @@ and merges the runs' line-level reports itself (why not kcov's merge:
 `lines_by_file` in the script). Every installed binary must appear in
 `RUNS`; the script refuses to run otherwise. The A/B harness knows it is
 the gate's binary (`-Dcoverage` reaches it as a `build_options` flag) and
-covers one batch at one rep instead of eight at a hundred: a Debug pass
-over a batch is ~0.4 s, and the gate needs each line once (`N_BATCHES`
-in `bench/ab.zig`; "A/B benchmarking" has the knobs table).
+covers one batch at one rep instead of all of them (`BATCHES` in
+`bench/ab.zig` says why).
 
 Scope is `INCLUDE_PATTERN` in the script: `src/`, `tests/`, `cases/`,
 `examples/`, `bench/`. A file is measured through whichever binary
@@ -397,11 +396,11 @@ Every loop has one lever, each a constant edited in place — no flags:
 | loop | cost | lever |
 | --- | --- | --- |
 | `just test` | the batch test's 8000 Debug solves | its tier — behind `-Dslow` if it ever grates |
-| `just test-slow` | the coverage build's `csar-ab` runs | `N_BATCHES` / `BATCH_REPS` in `bench/ab.zig` (one batch, diffed and timed at one rep, under `-Dcoverage`; a Debug pass over a batch is ~0.4 s) |
-| `just ab` | ~3 s | `N_REPS`, `INTERVAL_TARGET_US` in `bench/core.zig`; the unit lists in `bench/ab.zig` |
+| `just test-slow` | the coverage build's `csar-ab` runs | `BATCHES` / `BATCH_REPS` in `bench/ab.zig` (why: their doc comment) |
+| `just ab` | ~1 s | `N_REPS`, `INTERVAL_TARGET_US` in `bench/core.zig`; `BATCH_REPS` and the unit lists in `bench/ab.zig` |
 
-If a quick local `just ab` is ever wanted, the `-Dcoverage` `build_options`
-mechanism gives a `-Dquick` for free; not built until someone needs it.
+A quick local `just ab`, if ever wanted, is the same `build_options`
+mechanism the coverage build uses.
 
 The baseline pin lives in `bench/build.zig.zon`; resolving it fetches once per
 machine and is then cached (why that's fine, rather than lazy: `bench/build.zig`).

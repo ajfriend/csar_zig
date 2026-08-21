@@ -93,7 +93,7 @@ test "passesFor: clamped, and a useless probe asks for the longest interval" {
 test "calibrate: the passes come from the min of the probes" {
     // A contaminated first probe must not shrink the count for the whole
     // unit: that is why there are N_PROBE of them and the min is taken.
-    var spiked: Fake = .{ .per_solve_us = 2.0, .spike_at = 1 };
+    var spiked: Fake = .{ .per_pass_us = 2.0, .spike_at = 1 };
     try std.testing.expectEqual(bc.passesFor(2.0), bc.calibrate(&spiked));
     try std.testing.expectEqual(bc.N_PROBE, spiked.calls);
 }
@@ -120,16 +120,9 @@ test "Tally: min gap is inf when nothing converged" {
 test "GapShift: identical sides count as a row and do not move" {
     // What --aa sees on every row.
     var s: bc.GapShift = .{};
-    s.add("ico_00", null, converged, converged);
+    s.add(0, converged, converged);
     try std.testing.expectFmt("max |Δgap| 0.00e0 over 1 rows", "{f}", .{s});
-}
-
-test "GapShift: a batch cell is named name[idx]" {
-    var s: bc.GapShift = .{};
-    var moved = converged;
-    moved.gap = 3e-9;
-    s.add("h3_r9", 417, converged, moved);
-    try std.testing.expectFmt("max |Δgap| 2.00e-9 over 1 rows (h3_r9[417])", "{f}", .{s});
+    try std.testing.expectEqual(@as(?usize, null), s.idx);
 }
 
 test "GapShift: the max is over rows the diff does not flag" {
@@ -138,28 +131,30 @@ test "GapShift: the max is over rows the diff does not flag" {
     // Counted: same status/iters/AR, gaps 2e-9 apart.
     var moved = converged;
     moved.gap = 3e-9;
-    s.add("hex", null, converged, moved);
+    s.add(7, converged, moved);
 
     // Not counted: flagged by `differs` (iters moved) — its gap belongs to
     // that row, however large.
     var flagged = converged;
     flagged.iters = 4;
     flagged.gap = 1.0;
-    s.add("np100", null, converged, flagged);
+    s.add(8, converged, flagged);
 
     // Not counted: not converged on both sides.
     var dnc = converged;
     dnc.status = "did_not_converge";
     dnc.gap = 1.0;
-    s.add("ha_12", null, converged, dnc);
+    s.add(9, converged, dnc);
 
-    try std.testing.expectFmt("max |Δgap| 2.00e-9 over 1 rows (hex)", "{f}", .{s});
+    try std.testing.expectFmt("max |Δgap| 2.00e-9 over 1 rows", "{f}", .{s});
+    // The row is reported by index; the caller owns the names.
+    try std.testing.expectEqual(@as(?usize, 7), s.idx);
 }
 
 /// A scripted stand-in for "run `count` solves and report the elapsed µs".
 /// Exact arithmetic, so the loop's own maths is assertable to the ulp.
 const Fake = struct {
-    per_solve_us: f64,
+    per_pass_us: f64,
     calls: u32 = 0,
     last_count: u32 = 0,
     /// Rep index at which to return a contaminated sample; 0 = never.
@@ -168,7 +163,7 @@ const Fake = struct {
     pub fn measure(self: *Fake, count: u32) f64 {
         self.calls += 1;
         self.last_count = count;
-        const elapsed = self.per_solve_us * @as(f64, @floatFromInt(count));
+        const elapsed = self.per_pass_us * @as(f64, @floatFromInt(count));
         return if (self.calls == self.spike_at) elapsed * 50 else elapsed;
     }
 };
@@ -180,8 +175,8 @@ fn run(a: *Fake, b: *Fake, passes: u32, cur_mult: u32) bc.Timing {
 }
 
 test "pairedRun: identical sides report 1.0 exactly" {
-    var a: Fake = .{ .per_solve_us = 3.0 };
-    var b: Fake = .{ .per_solve_us = 3.0 };
+    var a: Fake = .{ .per_pass_us = 3.0 };
+    var b: Fake = .{ .per_pass_us = 3.0 };
     const t = run(&a, &b, 10, 1);
     try std.testing.expectEqual(@as(f64, 1.0), t.ratio());
     try std.testing.expectEqual(@as(f64, 3.0), t.cur_us);
@@ -191,10 +186,9 @@ test "pairedRun: identical sides report 1.0 exactly" {
 }
 
 test "pairedRun: a multi-cell unit reports per solve, not per pass" {
-    // The Fake's `per_solve_us` is really per *pass* here: one pass over a
-    // 1000-cell batch taking 4000us is 4us per solve.
-    var a: Fake = .{ .per_solve_us = 4000.0 };
-    var b: Fake = .{ .per_solve_us = 4000.0 };
+    // A pass over a 1000-cell unit taking 4000us is 4us per solve.
+    var a: Fake = .{ .per_pass_us = 4000.0 };
+    var b: Fake = .{ .per_pass_us = 4000.0 };
     var sc: [4]f64 = undefined;
     var sb: [4]f64 = undefined;
     const t = bc.pairedRun(&a, &b, 1, 1000, 1, &sc, &sb);
@@ -204,8 +198,8 @@ test "pairedRun: a multi-cell unit reports per solve, not per pass" {
 }
 
 test "pairedRun: passes divide out, so per-solve time is pass-independent" {
-    var a: Fake = .{ .per_solve_us = 0.25 };
-    var b: Fake = .{ .per_solve_us = 0.25 };
+    var a: Fake = .{ .per_pass_us = 0.25 };
+    var b: Fake = .{ .per_pass_us = 0.25 };
     const big = run(&a, &b, 400, 1);
     try std.testing.expectEqual(@as(u32, 400), a.last_count);
     const small = run(&a, &b, 1, 1);
@@ -215,8 +209,8 @@ test "pairedRun: passes divide out, so per-solve time is pass-independent" {
 test "pairedRun: the 2x injector multiplies solves but not the divisor" {
     // The positive control that keeps "no difference" from being vacuous: a
     // tool hardcoded to report 1.0 fails here.
-    var a: Fake = .{ .per_solve_us = 1.0 };
-    var b: Fake = .{ .per_solve_us = 1.0 };
+    var a: Fake = .{ .per_pass_us = 1.0 };
+    var b: Fake = .{ .per_pass_us = 1.0 };
     const t = run(&a, &b, 7, 2);
     try std.testing.expectEqual(@as(f64, 2.0), t.ratio());
     // 14 solves inside the interval, still divided by 7.
@@ -225,8 +219,8 @@ test "pairedRun: the 2x injector multiplies solves but not the divisor" {
 }
 
 test "pairedRun: both sides are measured once per rep, interleaved" {
-    var a: Fake = .{ .per_solve_us = 1.0 };
-    var b: Fake = .{ .per_solve_us = 1.0 };
+    var a: Fake = .{ .per_pass_us = 1.0 };
+    var b: Fake = .{ .per_pass_us = 1.0 };
     _ = run(&a, &b, 1, 1);
     try std.testing.expectEqual(@as(u32, 4), a.calls);
     try std.testing.expectEqual(@as(u32, 4), b.calls);
@@ -235,8 +229,8 @@ test "pairedRun: both sides are measured once per rep, interleaved" {
 test "pairedRun reduces with the min, so a slow rep cannot inflate the result" {
     // One contaminated rep among clean ones must not move the number: that is
     // the whole reason the statistic is a min.
-    var a: Fake = .{ .per_solve_us = 2.0, .spike_at = 2 };
-    var b: Fake = .{ .per_solve_us = 2.0 };
+    var a: Fake = .{ .per_pass_us = 2.0, .spike_at = 2 };
+    var b: Fake = .{ .per_pass_us = 2.0 };
     const t = run(&a, &b, 3, 1);
     try std.testing.expectEqual(@as(f64, 1.0), t.ratio());
 }
@@ -258,7 +252,7 @@ test "writeTiming renders the documented column shape" {
 test "writeSkipped puts the reason where the numbers would be" {
     var buf: [256]u8 = undefined;
     var w = std.Io.Writer.fixed(&buf);
-    try bc.writeSkipped(&w, "a5_r23", "{d} cells did not converge", .{@as(u32, 32)});
+    try bc.writeSkipped(&w, "a5_r23", "32 cells did not converge");
     try std.testing.expectEqualStrings("  a5_r23               skipped: 32 cells did not converge\n", w.buffered());
 }
 

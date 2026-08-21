@@ -62,8 +62,7 @@ When changing the solver, the full check is: `just ci` green (suite + coverage
 gate + both backends where supported) + **`just ab`**, which measures the
 working tree against the pinned baseline in one binary and reports a
 deterministic diff over every fixture and batch cell plus interleaved timing
-(the batches are the hot-path rows — µs per solve, averaged over ~1000
-cells). Attach its
+(the batches — `cases/batches.zig` — are the hot-path rows). Attach its
 report to the PR; `just ab --aa` gives the noise floor to read it against. Its
 methodology is documented in `bench/core.zig` and `bench/ab.zig`.
 

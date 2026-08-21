@@ -1,4 +1,4 @@
-//! Benchmarking policy: how many solves go in a timed interval, how samples
+//! Benchmarking policy: how many passes go in a timed interval, how samples
 //! reduce to a statistic, what counts as a difference — and `Side`, the
 //! default adapter from a library version to the numbers the policy consumes.
 //!
@@ -141,8 +141,8 @@ pub const Timing = struct {
 /// f64` — a `Side` each in `ab.zig`, a scripted fake in the tests.
 ///
 /// Both sides use the SAME passes per interval, so the comparison stays
-/// like-for-like; `cells` is how many solves one pass is (1 for a fixture),
-/// so the result is per solve whatever the unit. `cur_mult` is the injector:
+/// like-for-like; `solves_per_pass` (the unit's cell count) makes the result
+/// per solve whatever the unit. `cur_mult` is the injector:
 /// it multiplies how many passes the current side performs inside its
 /// interval, but never the divisor, so the reported per-solve time scales by
 /// exactly that factor. That is the whole mechanism behind `--inject-2x`.
@@ -153,14 +153,14 @@ pub fn pairedRun(
     cur: anytype,
     base: anytype,
     passes: u32,
-    cells: u32,
+    solves_per_pass: u32,
     cur_mult: u32,
     scratch_cur: []f64,
     scratch_base: []f64,
 ) Timing {
     std.debug.assert(scratch_cur.len > 0);
     std.debug.assert(scratch_cur.len == scratch_base.len);
-    const solves = passes * cells;
+    const solves = passes * solves_per_pass;
     const divisor: f64 = @floatFromInt(solves);
     for (0..scratch_cur.len) |r| {
         // Order within a rep is fixed (current, then baseline) rather than
@@ -229,7 +229,7 @@ pub const Metrics = struct {
 ///
 /// Over whatever set the caller feeds it: the whole fixture corpus in
 /// `csar-ab`'s report, one batch at a time in `tests/batches_test.zig`
-/// (and in #37's per-batch rows).
+/// (each batch is its own group there).
 pub const Tally = struct {
     converged: u32 = 0,
     did_not_converge: u32 = 0,
@@ -276,34 +276,27 @@ pub const Tally = struct {
 /// not a gate (#18). `--aa` reads zero.
 pub const GapShift = struct {
     max: f64 = 0,
-    name: []const u8 = "",
-    /// The cell within `name` for a batch row, printed `name[idx]`; null for
-    /// a fixture. Stored as an index rather than a formatted name because
-    /// `name` must outlive the loop and a per-row buffer would not.
+    /// Index of the row holding the max, for the caller to name — it knows
+    /// the rows; this does not. Null while the max is zero.
     idx: ?usize = null,
     /// Rows considered, so "0 over 3 rows" and "0 over 60 rows" read differently.
     rows: u32 = 0,
 
-    pub fn add(self: *GapShift, name: []const u8, idx: ?usize, a: Metrics, b: Metrics) void {
+    pub fn add(self: *GapShift, idx: usize, a: Metrics, b: Metrics) void {
         // `differs` false implies equal statuses, so one side's tag decides.
         if (differs(a, b) or !isConverged(a)) return;
         self.rows += 1;
         const d = @abs(a.gap - b.gap);
         if (d > self.max) {
             self.max = d;
-            self.name = name;
             self.idx = idx;
         }
     }
 
-    /// zig's `{f}` formatting hook.
+    /// zig's `{f}` formatting hook. The row's name, if any, is the caller's
+    /// to append.
     pub fn format(self: GapShift, w: *std.Io.Writer) std.Io.Writer.Error!void {
         try w.print("max |Δgap| {e:.2} over {d} rows", .{ self.max, self.rows });
-        if (self.max > 0) {
-            try w.print(" ({s}", .{self.name});
-            if (self.idx) |i| try w.print("[{d}]", .{i});
-            try w.print(")", .{});
-        }
     }
 };
 
@@ -366,11 +359,9 @@ pub fn writeTiming(w: *std.Io.Writer, name: []const u8, t: Timing) std.Io.Writer
     try w.print(row_fmt ++ "\n", .{ name, t.cur_us, t.base_us, t.ratio(), t.solves });
 }
 
-const skip_fmt = std.fmt.comptimePrint("  {{s:<{d}}} skipped: ", .{w_name});
-
 /// A timing row that was not measured, with the reason in the number columns.
-pub fn writeSkipped(w: *std.Io.Writer, name: []const u8, comptime reason: []const u8, args: anytype) std.Io.Writer.Error!void {
-    try w.print(skip_fmt ++ reason ++ "\n", .{name} ++ args);
+pub fn writeSkipped(w: *std.Io.Writer, name: []const u8, reason: []const u8) std.Io.Writer.Error!void {
+    try w.print(std.fmt.comptimePrint("  {{s:<{d}}} skipped: {{s}}\n", .{w_name}), .{ name, reason });
 }
 
 /// One deterministic-diff row, printed only for cases that differ. `gap` rides
@@ -395,8 +386,8 @@ pub fn writeDiff(w: *std.Io.Writer, name: []const u8, a: Metrics, b: Metrics) st
 // (42ns on aarch64-macos, the 24MHz timebase) and the cost of a read (tens of
 // ns). Both reads sit INSIDE the measured interval, so their cost is charged
 // to the solve — but identically on both sides, so it is common-mode and
-// cancels in a ratio. Resolution does not cancel, which is what batching is
-// for.
+// cancels in a ratio. Resolution does not cancel, which is what the passes
+// per interval are for.
 // ---------------------------------------------------------------------------
 
 /// The tolerance the corpus is pinned at, so a report is comparable to what

@@ -11,7 +11,7 @@
 //!
 //! ## Benchmarking methodology
 //!
-//! The policy — warm-up, batching, pairing, the statistic — and `Side`, the
+//! The policy — warm-up, passes per interval, pairing, the statistic — and `Side`, the
 //! adapter that reads the clock, live in `core.zig`. What follows are the
 //! parts that are properties of *this binary* rather than of `core.zig`.
 //!
@@ -62,39 +62,64 @@ const cur = @import("cur");
 const base = @import("base");
 const cases = @import("cases");
 
-/// Timing selection. The batches (`cases.batches`) are the hot path — ~1000
-/// cells per family and resolution, every cell converging — and the fixtures
-/// cover the regimes batches lack: `np100` (mid-size), `ha_12` (hard/wide),
-/// `near_collinear` (infeasible). `hex` stays as the one row whose interval
-/// spans many passes, the quantization canary. Deterministic metrics run over
-/// every fixture and every batch cell regardless.
+/// What the report works on: a named list of cells. The deterministic pass
+/// diffs a unit as one group (one tally per side, one gap-shift line, the
+/// differing rows capped); the timing pass times it as one row. A fixture is a
+/// one-cell unit; the whole fixture corpus is one unit with per-row `names`;
+/// a batch is ~1000 cells named `name[idx]`.
+const Unit = struct {
+    name: []const u8,
+    cells: []const []const [3]f64,
+    /// Per-cell row names; null means `name[idx]`.
+    names: ?[]const []const u8 = null,
+
+    fn label(self: Unit, i: usize, buf: []u8) []const u8 {
+        if (self.names) |n| return n[i];
+        return std.fmt.bufPrint(buf, "{s}[{d}]", .{ self.name, i }) catch unreachable;
+    }
+};
+
+fn fixture(comptime name: []const u8) Unit {
+    return .{ .name = name, .cells = &.{cases.get(name).points} };
+}
+
+/// The fixture corpus as one unit, for the deterministic pass.
+const FIXTURES: Unit = blk: {
+    var names: [cases.all.len][]const u8 = undefined;
+    var cells: [cases.all.len][]const [3]f64 = undefined;
+    for (cases.all, 0..) |e, i| {
+        names[i] = e.name;
+        cells[i] = e.case.points;
+    }
+    const n = names;
+    const c = cells;
+    break :blk .{ .name = "fixtures", .cells = &c, .names = &n };
+};
+
+/// The batches the report covers — diffed and timed. Under the coverage build
+/// (`-Dcoverage`, the kcov gate's Debug binary) one batch at one rep: a Debug
+/// pass over a batch is ~0.4 s, and the gate needs each line to run once, not
+/// eight batches × 1000 cells × 2 sides (#37). Outside it, 30 reps rather
+/// than `N_REPS`: a batch interval is ~2 ms and already a mean over 1000
+/// cells, so the min settles sooner — measured `--aa` floor on batch rows:
+/// ≤0.2% at 30 (as the fixture rows), up to 1.2% at 10.
+const coverage = build_options.coverage;
+const BATCHES: [if (coverage) 1 else cases.batches.all.len]Unit = blk: {
+    var units: [if (coverage) 1 else cases.batches.all.len]Unit = undefined;
+    for (&units, cases.batches.all[0..units.len]) |*u, e| u.* = .{ .name = e.name, .cells = e.batch.cells };
+    break :blk units;
+};
+const BATCH_REPS = if (coverage) 1 else 30;
+
+/// Timing rows beyond the batches: the regimes they lack — `np100` (mid-size),
+/// `ha_12` (hard/wide), `near_collinear` (infeasible) — and `hex`, the one row
+/// whose interval spans many passes, the quantization canary.
 const TIMING_FIXTURES = [_]Unit{
     fixture("hex"),
     fixture("np100"),
     fixture("ha_12"),
     fixture("near_collinear"),
 };
-
-/// The batches the report covers — diffed and timed. Under the coverage build
-/// (`-Dcoverage`, the kcov gate's Debug binary) one batch at one rep: a Debug
-/// pass over a batch is ~0.4 s, and the gate needs each line to run once, not
-/// eight batches × 1000 cells × 2 sides (#37).
-const N_BATCHES = if (build_options.coverage) 1 else cases.batches.all.len;
-const BATCH_REPS = if (build_options.coverage) 1 else bc.N_REPS;
-const BATCHES = cases.batches.all[0..N_BATCHES];
-
-/// What the harness times: a named list of cells. One cell for a fixture.
-const Unit = struct {
-    name: []const u8,
-    cells: []const []const [3]f64,
-};
-
-fn fixture(comptime name: []const u8) Unit {
-    return .{
-        .name = name,
-        .cells = &.{cases.get(name).points},
-    };
-}
 
 /// Differing rows printed per group before "… and k more". Fixtures never
 /// reach it; a regressed batch would otherwise print a thousand rows.
@@ -189,24 +214,20 @@ fn report(comptime Base: type, init: std.process.Init, opts: Opts) !void {
     try out.print("\n", .{});
 
     // ---- deterministic pass: the fixtures as one group, each batch as one --
-    try out.print("deterministic diff (status / iters / ar; {d} fixtures, {d} batches)\n", .{ cases.all.len, N_BATCHES });
-    var fixture_cells: [cases.all.len][]const [3]f64 = undefined;
-    for (cases.all, &fixture_cells) |entry, *c| c.* = entry.case.points;
-    _ = try diffGroup(out, &side_cur, &side_base, "fixtures", &fixture_cells, fixtureName);
-    // A batch is timed only if both sides converged every cell: a DNC cell
-    // would time `max_outer`, and an errored one would panic `measure`
-    // (`--inject-tol` errors most cells on the current side).
-    var timeable: [N_BATCHES]bool = undefined;
-    for (BATCHES, &timeable) |entry, *t| {
-        t.* = try diffGroup(out, &side_cur, &side_base, entry.name, entry.batch.cells, null);
-    }
-    if (N_BATCHES < cases.batches.all.len) {
-        try out.print("  ({d} of {d} batches: coverage build)\n", .{ N_BATCHES, cases.batches.all.len });
+    try out.print("deterministic diff (status / iters / ar; {d} fixtures, {d} batches)\n", .{ cases.all.len, BATCHES.len });
+    _ = try diffGroup(out, &side_cur, &side_base, FIXTURES);
+    var batch_tallies: [BATCHES.len]Tallies = undefined;
+    for (BATCHES, &batch_tallies) |unit, *t| t.* = try diffGroup(out, &side_cur, &side_base, unit);
+    if (BATCHES.len < cases.batches.all.len) {
+        try out.print("  ({d} of {d} batches: coverage build)\n", .{ BATCHES.len, cases.batches.all.len });
     }
     try out.print("\n", .{});
 
     if (opts.gap_tol == null) {
-        try timingSection(out, &side_cur, &side_base, cur_mult, &timeable);
+        try out.print("timing (min of {d} reps, {d} for a batch; µs per solve — a batch row averages its cells)\n", .{ bc.N_REPS, BATCH_REPS });
+        try out.print("{s}\n", .{bc.timing_header});
+        for (TIMING_FIXTURES) |unit| try timeUnit(out, &side_cur, &side_base, cur_mult, unit, null);
+        for (BATCHES, batch_tallies) |unit, t| try timeUnit(out, &side_cur, &side_base, cur_mult, unit, t);
     } else {
         try out.print("timing: skipped under --gap-tol (see the header)\n", .{});
     }
@@ -216,86 +237,69 @@ fn report(comptime Base: type, init: std.process.Init, opts: Opts) !void {
     try out.flush();
 }
 
-/// The fixtures group's row names come from the manifest; a batch's are
-/// `name[idx]`, built by `diffGroup` itself.
-fn fixtureName(i: usize) []const u8 {
-    return cases.all[i].name;
-}
+/// Both sides' tallies over one unit, from the deterministic pass.
+const Tallies = struct { cur: bc.Tally, base: bc.Tally };
 
-/// One group of the deterministic pass — the fixtures, or one batch — with
-/// the same accumulators either way: differing rows (capped), a tally per
-/// side, the gap shift. Returns whether both sides converged every cell.
-fn diffGroup(
-    out: *std.Io.Writer,
-    side_cur: anytype,
-    side_base: anytype,
-    name: []const u8,
-    cells: []const []const [3]f64,
-    comptime row_name: ?fn (usize) []const u8,
-) !bool {
+/// One group of the deterministic pass: differing rows (capped), a tally per
+/// side, the gap shift.
+fn diffGroup(out: *std.Io.Writer, side_cur: anytype, side_base: anytype, unit: Unit) !Tallies {
     var n_diff: usize = 0;
-    var tally_cur: bc.Tally = .{};
-    var tally_base: bc.Tally = .{};
+    var t: Tallies = .{ .cur = .{}, .base = .{} };
     var shift: bc.GapShift = .{};
     var buf: [48]u8 = undefined;
-    try out.print("  {s} ({d} cells)\n", .{ name, cells.len });
-    for (cells, 0..) |pts, i| {
+    try out.print("  {s} ({d} cells)\n", .{ unit.name, unit.cells.len });
+    for (unit.cells, 0..) |pts, i| {
         const a = side_cur.metrics(pts);
         const b = side_base.metrics(pts);
-        tally_cur.add(a);
-        tally_base.add(b);
-        const idx: ?usize = if (row_name == null) i else null;
-        shift.add(if (row_name) |f| f(i) else name, idx, a, b);
+        t.cur.add(a);
+        t.base.add(b);
+        shift.add(i, a, b);
         if (!bc.differs(a, b)) continue;
         n_diff += 1;
-        if (n_diff > MAX_DIFF_ROWS) continue;
-        const label = if (row_name) |f| f(i) else try std.fmt.bufPrint(&buf, "{s}[{d}]", .{ name, i });
-        try bc.writeDiff(out, label, a, b);
+        if (n_diff <= MAX_DIFF_ROWS) try bc.writeDiff(out, unit.label(i, &buf), a, b);
     }
     if (n_diff == 0) {
         try out.print("    none\n", .{});
     } else {
         if (n_diff > MAX_DIFF_ROWS) try out.print("    … and {d} more\n", .{n_diff - MAX_DIFF_ROWS});
-        try out.print("    {d} of {d} differ\n", .{ n_diff, cells.len });
+        try out.print("    {d} of {d} differ\n", .{ n_diff, unit.cells.len });
     }
-    try out.print("    cur : {f}\n", .{tally_cur});
-    try out.print("    base: {f}\n", .{tally_base});
-    try out.print("    gap shift : {f}\n", .{shift});
-    return tally_cur.converged == cells.len and tally_base.converged == cells.len;
+    try out.print("    cur : {f}\n", .{t.cur});
+    try out.print("    base: {f}\n", .{t.base});
+    try out.print("    gap shift : {f}", .{shift});
+    if (shift.idx) |i| try out.print(" ({s})", .{unit.label(i, &buf)});
+    try out.print("\n", .{});
+    return t;
 }
 
-/// The timing section: paired and interleaved, over the fixtures then the
-/// batches. A fixture is warmed up and calibrated; a batch is neither — the
-/// deterministic pass already solved every cell once, and one pass is far
-/// above the interval target, so the answer would be one pass anyway.
-fn timingSection(out: *std.Io.Writer, side_cur: anytype, side_base: anytype, cur_mult: u32, timeable: []const bool) !void {
-    try out.print("timing (min of reps, µs per solve; a batch row averages its cells)\n", .{});
-    try out.print("{s}\n", .{bc.timing_header});
-
+/// One timing row, paired and interleaved. A one-cell unit is warmed up and
+/// calibrated; a batch is neither — its deterministic pass (`tallies`) already
+/// solved every cell, and one pass is far above the interval target, so the
+/// answer would be one pass anyway. A batch is timed only if both sides
+/// converged every cell: a DNC cell would time `max_outer`, and an errored
+/// one (`--inject-tol` errors most) would panic `measure`.
+fn timeUnit(out: *std.Io.Writer, side_cur: anytype, side_base: anytype, cur_mult: u32, unit: Unit, tallies: ?Tallies) !void {
     var samples_cur: [bc.N_REPS]f64 = undefined;
     var samples_base: [bc.N_REPS]f64 = undefined;
-    for (TIMING_FIXTURES) |unit| {
-        side_cur.cells = unit.cells;
-        side_base.cells = unit.cells;
-
+    side_cur.cells = unit.cells;
+    side_base.cells = unit.cells;
+    var passes: u32 = 1;
+    var reps: usize = BATCH_REPS;
+    if (tallies) |t| {
+        const n: u32 = @intCast(unit.cells.len);
+        const unconverged = n - @min(t.cur.converged, t.base.converged);
+        if (unconverged > 0) {
+            var buf: [64]u8 = undefined;
+            return bc.writeSkipped(out, unit.name, try std.fmt.bufPrint(&buf, "{d} cells did not converge on both sides", .{unconverged}));
+        }
+    } else {
         bc.warmUp(side_cur);
         bc.warmUp(side_base);
-
         // Calibrated AFTER warm-up, so the probes measure warm solves, and
         // from the baseline side so both sides use the same passes.
-        const passes = bc.calibrate(side_base);
-
-        const t = bc.pairedRun(side_cur, side_base, passes, 1, cur_mult, &samples_cur, &samples_base);
-        try bc.writeTiming(out, unit.name, t);
+        passes = bc.calibrate(side_base);
+        reps = bc.N_REPS;
     }
-    for (BATCHES, timeable) |entry, ok| {
-        if (!ok) {
-            try bc.writeSkipped(out, entry.name, "not every cell converged on both sides", .{});
-            continue;
-        }
-        side_cur.cells = entry.batch.cells;
-        side_base.cells = entry.batch.cells;
-        const t = bc.pairedRun(side_cur, side_base, 1, @intCast(entry.batch.cells.len), cur_mult, samples_cur[0..BATCH_REPS], samples_base[0..BATCH_REPS]);
-        try bc.writeTiming(out, entry.name, t);
-    }
+    const t = bc.pairedRun(side_cur, side_base, passes, @intCast(unit.cells.len), cur_mult, samples_cur[0..reps], samples_base[0..reps]);
+    try bc.writeTiming(out, unit.name, t);
 }
