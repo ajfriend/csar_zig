@@ -6,3 +6,4 @@ scripts/countries/data/
 .claude/
 .DS_Store
 zig-pkg/
+__pycache__/

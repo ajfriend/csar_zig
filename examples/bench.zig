@@ -15,7 +15,6 @@ const cases = @import("cases");
 /// — see CLAUDE.md "Performance & regression monitoring".
 const N_WARMUP: u32 = 5;
 const N_RUNS: u32 = 100;
-const TOL: f64 = 1e-6;
 
 const Row = struct {
     name: []const u8,
@@ -81,12 +80,8 @@ pub fn main(init: std.process.Init) !void {
         const name = case.name;
         const X = case.points;
 
-        const opts: csar.SolveOptions = .{
-            .gap_tol = TOL,
-            .n_hull = 10,
-            .coplanarity_tol = 1e-12,
-            .max_outer = case.max_outer,
-        };
+        var opts = cases.pin(csar.SolveOptions);
+        opts.max_outer = case.max_outer;
 
         // Warm up.
         for (0..N_WARMUP) |_| {

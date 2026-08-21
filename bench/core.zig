@@ -11,6 +11,7 @@
 //! `ab.zig`.
 
 const std = @import("std");
+const cases = @import("cases");
 
 // ---------------------------------------------------------------------------
 // Warm-up
@@ -215,9 +216,9 @@ pub const Metrics = struct {
 /// Aggregate, not per-case: a report that says N cases differ makes you read N
 /// rows to learn which *direction* things moved. This says it in one line.
 ///
-/// Whole-corpus, not per-family: a per-family convergence rate is #19's, and
-/// the DGGS families here are four cells each — too few for a percentage to
-/// mean anything.
+/// Over whatever set the caller feeds it: the whole fixture corpus in
+/// `csar-ab`'s report, one batch at a time in `tests/batches_test.zig`
+/// (and in #37's per-batch rows).
 pub const Tally = struct {
     converged: u32 = 0,
     did_not_converge: u32 = 0,
@@ -371,9 +372,9 @@ pub fn writeDiff(w: *std.Io.Writer, name: []const u8, a: Metrics, b: Metrics) st
 // for.
 // ---------------------------------------------------------------------------
 
-/// Matches the tolerance the test suite runs at, so a report is comparable to
-/// what `just ci` gates on.
-pub const GAP_TOL = 1e-6;
+/// The tolerance the corpus is pinned at, so a report is comparable to what
+/// `just ci` gates on.
+pub const GAP_TOL = cases.GAP_TOL;
 
 /// One side of a comparison: a library version bound to an allocator, a clock,
 /// and the options it solves under. Exposes `metrics` and `measure`.
@@ -394,22 +395,21 @@ pub fn Side(comptime lib: type) type {
         /// Returns `lib.SolveOptions`, not any one version's — the two
         /// versions have distinct types of the same name.
         ///
-        /// Every solver option is pinned explicitly, including ones that match
-        /// today's defaults. The two sides are different library versions: if
+        /// The corpus pin (`cases.pin`, in this version's options type), plus
+        /// every remaining option pinned explicitly even where it matches
+        /// today's default. The two sides are different library versions: if
         /// a default ever changed between them, an unpinned option would make
         /// them solve different configurations and the difference would
         /// masquerade as a solver change — precisely what this tool exists to
         /// detect.
         fn opts(self: Self) lib.SolveOptions {
-            return .{
-                .gap_tol = self.gap_tol,
-                .n_hull = 10,
-                .coplanarity_tol = 1e-12,
-                .max_outer = 100,
-                // `.trust`, not `.auto`: `.auto` is an alias each version is
-                // free to re-point.
-                .method = .trust,
-            };
+            var o = cases.pin(lib.SolveOptions);
+            o.gap_tol = self.gap_tol;
+            o.max_outer = 100;
+            // `.trust`, not `.auto`: `.auto` is an alias each version is
+            // free to re-point.
+            o.method = .trust;
+            return o;
         }
 
         /// Solve once and reduce to comparable metrics. Errors are reported,
