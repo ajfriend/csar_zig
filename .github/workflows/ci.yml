@@ -43,7 +43,14 @@ jobs:
           # consumer-smoke compiles in $TMPDIR, outside the cached dir.
           use-cache: ${{ matrix.recipe != 'consumer-smoke' }}
       - uses: extractions/setup-just@v3
-      - run: just ${{ matrix.recipe }}
+      - name: DIAGNOSTIC (temporary) — what the restored zig cache serves
+        run: |
+          echo "== restored cache: $(du -sh .zig-cache 2>/dev/null | cut -f1) in $ZIG_LOCAL_CACHE_DIR"
+          case "${{ matrix.recipe }}" in
+            lint)  (cd lint && time zig build lint --summary all) ;;
+            check) time zig build check --summary all; time zig build --build-file bench/build.zig check --summary all ;;
+            *)     just ${{ matrix.recipe }} ;;
+          esac
 
   # The LLVM-backend suite, under kcov: `just test-slow` is both.
   coverage:
