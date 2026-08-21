@@ -81,9 +81,16 @@ pub fn main(init: std.process.Init) !void {
         const name = case.name;
         const X = case.points;
 
+        const opts: csar.SolveOptions = .{
+            .gap_tol = TOL,
+            .n_hull = 10,
+            .coplanarity_tol = 1e-12,
+            .max_outer = case.max_outer,
+        };
+
         // Warm up.
         for (0..N_WARMUP) |_| {
-            var outcome = try csar.solve(allocator, X, .{ .gap_tol = TOL, .n_hull = 10, .coplanarity_tol = 1e-12, .max_outer = case.max_outer });
+            var outcome = try csar.solve(allocator, X, opts);
             outcome.deinit();
         }
 
@@ -98,7 +105,7 @@ pub fn main(init: std.process.Init) !void {
         // ratios rather than absolutes.
         for (0..N_RUNS) |r| {
             const t0 = std.Io.Timestamp.now(io, .awake);
-            const outcome = try csar.solve(allocator, X, .{ .gap_tol = TOL, .n_hull = 10, .coplanarity_tol = 1e-12, .max_outer = case.max_outer });
+            const outcome = try csar.solve(allocator, X, opts);
             const t1 = std.Io.Timestamp.now(io, .awake);
             times[r] = @as(f64, @floatFromInt(t0.durationTo(t1).nanoseconds)) / 1000.0;
             if (last_outcome) |*lo| lo.deinit();
