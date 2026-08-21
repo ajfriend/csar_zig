@@ -5,33 +5,22 @@
 """
 The coverage gate + exclusion ledger behind `just test-slow`.
 
-Runs every binary we ship or run — the test binary, each example, and
-the A/B harness — under kcov (which must be the process runner — that
-is why this can't be `zig build test`), one kcov output dir per run,
-merged here from each run's line-level report. The ledger comes from a
-second, report-only kcov pass over a copy of each run's collected data:
-the lines present raw but absent gated are the lines the exclusion rules
-removed. Only the line *classification* of the report-only pass is used;
-its hit data is lossy and never consulted. The ledger is then
-cross-checked against the source markers, so a rule kcov silently did
-not apply — or a stale marker — fails the gate. Policy, the ledger's
-meaning, and what the gate does and does not guarantee: dev.md
-"Coverage".
+Runs every binary we ship or run under kcov — one kcov output dir per
+run, merged here — then derives the exclusion ledger from a report-only
+pass and cross-checks it against the source markers. Policy, what the
+gate guarantees, and the ledger's meaning: dev.md "Coverage".
 
-Output contract: quiet on success — the test-run summary line, then
-the summary block (also written to coverage/summary.txt, which CI
-posts on PRs). Full kcov/runner output lands in zig-out/test-slow.log
-and is dumped only when a run fails. Exits nonzero unless coverage is
-exactly 100%.
+Output: quiet on success — the test-run summary line, then the summary
+block (also written to coverage/summary.txt, which CI posts on PRs).
+Every kcov invocation's output lands in zig-out/test-slow.log, dumped
+only when a run fails. Exits nonzero unless coverage is exactly 100%
+and the ledger matches the markers.
 
 Edit the constants below in place — no CLI args by project convention.
-Run with:  uv run scripts/coverage_gate.py   (after the two install
-builds in the justfile's `test-slow` recipe, which build with
-`-Dcoverage=true` so every binary is Debug).
+Run with:  uv run scripts/coverage_gate.py   (after `just test-slow`'s
+two install builds, which use `-Dcoverage=true`).
 """
 
-import json
-import re
 import shutil
 import subprocess
 import sys
@@ -40,10 +29,8 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 # (binary, args, expect_success). Several runs per binary reach the
-# branches a single invocation cannot: ex-cases' usage / one case / all /
-# unknown-name paths, and the A/B harness's modes plus its bad-argument
-# path. The two `False` runs are expected to exit nonzero — that IS the
-# branch being covered.
+# branches one invocation cannot; the two `False` runs are expected to
+# exit nonzero — that IS the branch being covered.
 RUNS = [
     ('zig-out/bin/csar-test', [], True),
     ('zig-out/bin/csar-ex-basic', [], True),
@@ -59,6 +46,7 @@ RUNS = [
     ('bench/zig-out/bin/csar-ab', ['--inject-tol'], True),
     ('bench/zig-out/bin/csar-ab', ['--no-such-flag'], False),
 ]
+INSTALL_DIRS = ['zig-out/bin', 'bench/zig-out/bin']  # every binary here must be in RUNS
 LOG = Path('zig-out/test-slow.log')
 OUT = Path('coverage')              # one kcov output dir per run, under here
 SUMMARY = OUT / 'summary.txt'
@@ -75,15 +63,12 @@ EXCLUDE_PATTERN = 'zig-pkg/'
 # future toolchain flags an uncovered doc-comment line, add `///`
 # here with that justification.)
 EXCLUDE_LINE = '=> unreachable,kcov-excl'
-# Block form, for a multi-line arm: `// kcov-excl-start: <reason>` … `// kcov-excl-end`.
-EXCLUDE_REGION = 'kcov-excl-start:kcov-excl-end'
 GATE_PERCENT = 100.0
 ROOT = str(Path.cwd()) + '/'
 
 
-def log(text):
-    with open(LOG, 'a') as f:
-        f.write(text)
+def rel(file):
+    return file.removeprefix(ROOT)
 
 
 def run_logged(argv):
@@ -95,7 +80,8 @@ def run_logged(argv):
 
 def kcov(flags, out_dir, binary, bin_args):
     # kcov's own return code is ignored: it does not reliably propagate the
-    # child's exit status (it returns 0 on macOS regardless).
+    # child's exit status (it returns 0 on macOS regardless), so each run's
+    # outcome is checked by a direct run instead.
     run_logged(['kcov', f'--include-pattern={INCLUDE_PATTERN}', f'--exclude-pattern={EXCLUDE_PATTERN}',
                 *flags, str(out_dir), binary, *bin_args])
 
@@ -103,22 +89,19 @@ def kcov(flags, out_dir, binary, bin_args):
 def lines_by_file(out_dir):
     """{file: {line: hits}} from the single-binary report in `out_dir`.
 
-    Read per run from each run's own cobertura.xml, and merged here, rather
-    than from kcov's merge of many runs into one output dir: that merge
-    proved non-deterministic on ubuntu's kcov 43+dfsg-2 (binaries and files
-    dropping out between identical runs) where one-binary-per-dir has been
-    reliable on every platform for years."""
-    # `<name>.<hash>/` is the binary's data dir; `<name>/` beside it is kcov's
-    # HTML rendering of the same thing.
+    Read per run and merged here rather than via kcov's own many-runs-one-dir
+    merge, which dropped binaries and files between identical runs on
+    ubuntu's kcov 43+dfsg-2; one binary per dir has been reliable everywhere."""
+    # `<name>.<hash>/` is the binary's data dir; `<name>/` beside it is HTML.
     xmls = [x for x in out_dir.glob('*/cobertura.xml') if '.' in x.parent.name]
     assert len(xmls) == 1, f'{out_dir}: expected one per-binary report, found {xmls}'
-    out = {}
     root = ET.parse(xmls[0]).getroot()
-    # `filename` is relative to the report's <source> base — the common
-    # prefix of the files in THAT report, so it varies per run; rejoin it.
-    base = root.find('sources/source').text
+    # `filename` is relative to the report's <source>, the common prefix of
+    # the files in THAT report — so it varies per run; rejoin it.
+    base = Path(root.find('sources/source').text)
+    out = {}
     for cls in root.iter('class'):
-        f = out.setdefault(str(Path(base) / cls.get('filename')), {})
+        f = out.setdefault(str(base / cls.get('filename')), {})
         for l in cls.iter('line'):
             n = int(l.get('number'))
             f[n] = max(f.get(n, 0), int(l.get('hits')))
@@ -135,34 +118,40 @@ def merge(per_run):
     return merged
 
 
+# A binary that is installed but never run is exactly the silence this
+# gate exists to end.
+installed = {str(p) for d in INSTALL_DIRS for p in Path(d).iterdir() if p.is_file() and p.suffix == ''}
+if missing := installed - {b for b, _, _ in RUNS}:
+    sys.exit(f'installed but not in RUNS: {sorted(missing)}')
+
 shutil.rmtree(OUT, ignore_errors=True)
 LOG.unlink(missing_ok=True)
 
 # Gated pass: each run into its own dir, with the exclusion rules.
 run_dirs = []
 for i, (binary, bin_args, expect_success) in enumerate(RUNS):
-    # The run's outcome, checked directly since kcov will not tell us.
-    rc = run_logged([binary, *bin_args])
+    rc = run_logged([binary, *bin_args])  # the outcome, since kcov won't say
     if (rc == 0) != expect_success:
         print(LOG.read_text(), end='')
         sys.exit(f'{binary} {" ".join(bin_args)}: exit {rc}, expected {"success" if expect_success else "failure"}')
     d = OUT / f'{i:02d}-{Path(binary).name}{"-" + "-".join(a.strip("-") for a in bin_args) if bin_args else ""}'
     d.mkdir(parents=True)  # kcov creates its output dir, not its parents
-    kcov([f'--exclude-line={EXCLUDE_LINE}', f'--exclude-region={EXCLUDE_REGION}'], d, binary, bin_args)
+    kcov([f'--exclude-line={EXCLUDE_LINE}'], d, binary, bin_args)
     run_dirs.append((d, binary))
-test_summary = next(l for l in reversed(LOG.read_text().splitlines()) if l.startswith('All ') and 'tests passed' in l)
-print(test_summary)  # e.g. "All N tests passed."
+print(next(l for l in reversed(LOG.read_text().splitlines()) if l.startswith('All ') and 'tests passed' in l))
 
 gated = merge([lines_by_file(d) for d, _ in run_dirs])
-for file, fl in sorted(gated.items()):
-    log(f'gated {file.removeprefix(ROOT)}: {len(fl)} lines, {sum(1 for h in fl.values() if h == 0)} uncovered\n')
 
-# Raw pass: reclassify each run's collected data without the rules, in a
-# throwaway copy (kcov regenerates the report; its hit data in that mode is
-# lossy and never consulted — only which lines exist).
+# Raw pass: reclassify collected data without the rules, in a throwaway
+# copy. Which lines exist is a property of the binary, not the args, so
+# once per binary. kcov's hit data in this mode is lossy — only the line
+# classification is used.
 with tempfile.TemporaryDirectory() as tmp:
-    raws = []
+    raws, done = [], set()
     for d, binary in run_dirs:
+        if binary in done:
+            continue
+        done.add(binary)
         raw_d = Path(tmp) / d.name
         shutil.copytree(d, raw_d)
         kcov(['--report-only'], raw_d, binary, [])
@@ -170,52 +159,34 @@ with tempfile.TemporaryDirectory() as tmp:
     raw = merge(raws)
 
 # The ledger: lines present raw but absent gated, per file.
-excluded = {file: sorted(set(raw[file]) - set(gated.get(file, {}))) for file in raw}
-excluded = {f: ls for f, ls in excluded.items() if ls}
+excluded = {f: sorted(raw[f].keys() - gated.get(f, {}).keys()) for f in raw if raw[f].keys() - gated.get(f, {}).keys()}
 
-# Cross-check the ledger against the source: every excluded line must be
-# explained by a marker (`kcov-excl` on the line, inside a
-# kcov-excl-start/end region, or a `=> unreachable` arm), and every marker
-# must have excluded something — else kcov did not apply the rule (seen on
-# ubuntu's kcov), or the marker no longer sits on an executable line. A
-# marker on a line that would have been covered is NOT detectable here:
-# kcov excludes it before measuring, and the raw pass's hit data is lossy.
+# Cross-check the ledger against the source, both ways: every excluded
+# line must carry a marker (`kcov-excl` on the line, or a `=> unreachable`
+# arm), and every marker must have excluded something — else kcov did not
+# apply the rule, or the marker no longer sits on an executable line. A
+# marked file no run measured is an error too. Not detectable: a marker on
+# a line that would have been covered (kcov excludes before measuring).
+sources = {str(p.resolve()): p.read_text() for pat in INCLUDE_PATTERN.split(',') for p in Path(pat).rglob('*.zig')
+           if EXCLUDE_PATTERN not in str(p)}
+marked = {f for f, t in sources.items() if 'kcov-excl' in t or '=> unreachable' in t}
 problems = []
-# Every source file under the gate's roots that carries a marker takes part,
-# whether or not any report mentions it — a file kcov did not measure at all
-# must not make its markers disappear from the check.
-marked_files = {str(p.resolve()) for d in ('src', 'tests', 'cases', 'examples', 'bench') for p in Path(d).glob('*.zig')
-                if 'kcov-excl' in p.read_text() or '=> unreachable' in p.read_text()}
-for file in sorted(set(raw) | set(gated) | marked_files):
+for file in sorted(set(raw) | set(gated) | marked):
     if file not in gated and file not in raw:
-        problems.append(f'{file.removeprefix(ROOT)}: carries exclusion markers but was not measured by any run')
+        problems.append(f'{rel(file)}: carries exclusion markers but was not measured by any run')
         continue
-    rel = file.removeprefix(ROOT)
-    src = Path(file).read_text().splitlines()
-    exc, in_gate = set(excluded.get(file, [])), set(gated.get(file, {}))
-    explained = set()
-    region_start = None
-    for n, text in enumerate(src, 1):
-        if 'kcov-excl-start' in text:
-            region_start = n
-        elif 'kcov-excl-end' in text:
-            span = set(range(region_start, n + 1))
-            explained |= span
-            if not span & exc:
-                problems.append(f'{rel}:{region_start}-{n}: kcov-excl region excluded nothing')
-            if span & in_gate:
-                problems.append(f'{rel}:{region_start}-{n}: kcov-excl region has lines still in the gate: {sorted(span & in_gate)}')
-            region_start = None
-        elif region_start is None and 'kcov-excl' in text:
+    exc, in_gate, explained = set(excluded.get(file, [])), gated.get(file, {}).keys(), set()
+    for n, text in enumerate(sources.get(file, Path(file).read_text()).splitlines(), 1):
+        if 'kcov-excl' in text:
             explained.add(n)
             if n not in exc:
-                problems.append(f'{rel}:{n}: kcov-excl marker excluded nothing' + (' (the line is still in the gate)' if n in in_gate else ''))
+                problems.append(f'{rel(file)}:{n}: kcov-excl marker excluded nothing' + (' (the line is still in the gate)' if n in in_gate else ''))
         elif '=> unreachable' in text:
             explained.add(n)
             if n in in_gate:
-                problems.append(f'{rel}:{n}: `=> unreachable` arm is still in the gate')
+                problems.append(f'{rel(file)}:{n}: `=> unreachable` arm is still in the gate')
     for n in sorted(exc - explained):
-        problems.append(f'{rel}:{n}: excluded by kcov but carries no marker')
+        problems.append(f'{rel(file)}:{n}: excluded by kcov but carries no marker')
 
 covered = sum(1 for fl in gated.values() for h in fl.values() if h > 0)
 total = sum(len(fl) for fl in gated.values())
@@ -224,7 +195,7 @@ percent = 100.0 * covered / total if total else 0.0
 text = '\n'.join([
     f'csar coverage: {percent:.2f}%',
     f'coverage exclusions: {sum(len(ls) for ls in excluded.values())} lines excluded from the gate',
-    *(f'  {f.removeprefix(ROOT)}: {len(ls)}' for f, ls in sorted(excluded.items())),
+    *(f'  {rel(f)}: {len(ls)}' for f, ls in sorted(excluded.items())),
 ]) + '\n'
 SUMMARY.write_text(text)
 SUMMARY_MD.write_text(f'```\n{text}```\n')
@@ -237,7 +208,6 @@ if problems:
     sys.exit(1)
 if percent < GATE_PERCENT:
     for file, fl in sorted(gated.items()):
-        missed = [str(n) for n, h in sorted(fl.items()) if h == 0]
-        if missed:
-            print(f'  uncovered {file.removeprefix(ROOT)}: {",".join(missed)}')
+        if missed := [str(n) for n, h in sorted(fl.items()) if h == 0]:
+            print(f'  uncovered {rel(file)}: {",".join(missed)}')
     sys.exit(1)

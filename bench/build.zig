@@ -12,7 +12,7 @@ pub fn build(b: *std.Build) void {
     // default to Debug, and the ROOT module's optimize mode governs codegen
     // for the whole compilation — so a Debug root would silently benchmark a
     // Debug solver on both sides. `build.zig` forces this for ex-bench too.
-    // `-Dcoverage=true` builds Debug for the kcov gate (dev.md "Coverage").
+    // `-Dcoverage=true` builds Debug, with LLVM, for the kcov gate (dev.md "Coverage").
     const coverage = b.option(bool, "coverage", "Build for the coverage gate (Debug)") orelse false;
     const optimize: std.builtin.OptimizeMode = if (coverage) .Debug else .ReleaseFast;
 
@@ -44,9 +44,8 @@ pub fn build(b: *std.Build) void {
     mod.addImport("cases", cur.module("cases"));
     mod.addOptions("build_options", options);
 
-    // LLVM always: a Debug x86_64-linux build would otherwise use the
-    // self-hosted backend, whose DWARF kcov cannot read (dev.md "Coverage").
-    const exe = b.addExecutable(.{ .name = "csar-ab", .root_module = mod, .use_llvm = true });
+    // kcov reads only LLVM DWARF (dev.md "Two backends").
+    const exe = b.addExecutable(.{ .name = "csar-ab", .root_module = mod, .use_llvm = if (coverage) true else null });
     // `zig build --build-file bench/build.zig install` → bench/zig-out/bin/csar-ab,
     // which the coverage gate runs under kcov.
     b.installArtifact(exe);

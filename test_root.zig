@@ -1,7 +1,8 @@
 //! Root for the test target. Lives at the repo root so the test
 //! module's filesystem-import scope covers both `src/` (for the
 //! library under test) and `tests/` (for the test files
-//! themselves). Nothing else lives here.
+//! themselves), and forces the library's pub declarations through
+//! analysis so the coverage gate sees them.
 
 const std = @import("std");
 

@@ -41,6 +41,12 @@ jobs:
           enable-cache: false
       - name: Build
         run: just check
+      - name: Cache the linter build
+        # zlinter and its deps compile into lint/.zig-cache (~25s cold).
+        uses: actions/cache@v4
+        with:
+          path: lint/.zig-cache
+          key: lint-${{ runner.os }}-${{ hashFiles('lint/build.zig.zon', 'mise.toml') }}
       - name: Lint (every declaration referenced)
         run: just lint
       - name: Consumer smoke (the package as shipped through .paths)
@@ -58,8 +64,8 @@ jobs:
           just test-slow
           { echo '### Coverage'; cat coverage/summary.md; } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload the gate's log
-        # Every kcov invocation and the per-binary line totals behind the
-        # ledger — what you need when the ledger disagrees with a local run.
+        # Every kcov invocation's output — for when CI's ledger disagrees
+        # with a local run.
         if: always()
         uses: actions/upload-artifact@v4
         with:

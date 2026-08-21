@@ -100,7 +100,7 @@ test "resolvedView: both arms, deterministic on all platforms; snapshot Q orthon
     try expectOrthonormalQ(dv.Q);
 
     // And the arm with no view: an infeasible input, by construction.
-    var inf = try csar.solve(std.testing.allocator, &[_][3]f64{ .{ 1, 0, 0 }, .{ -1, 0, 0 }, .{ 0, 1, 0 } }, .{});
+    var inf = try csar.solve(std.testing.allocator, casePoints("infeas_antipodal"), .{});
     defer inf.deinit();
     try std.testing.expect(resolvedView(&inf) == null);
 }

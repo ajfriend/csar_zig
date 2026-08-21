@@ -28,7 +28,7 @@
 | --- | --- |
 | `just ci` | Everything CI checks that can run on this machine, in the order the `ci` recipe lists. Run before pushing a PR. |
 | `just test` | Fast test loop — skips long-running randomized stress tests, no coverage gate. Sub-second; the inner-loop iteration command. |
-| `just test-slow` | Full suite + the 100% line-coverage gate under `kcov` over every binary (tests, examples, the A/B harness), built Debug with `-Dcoverage=true` and `-Dslow=true`. ~20s; the pre-commit / CI check. |
+| `just test-slow` | Full suite + the 100% line-coverage gate under `kcov` over every binary (tests, examples, the A/B harness), built with `-Dcoverage=true` and `-Dslow=true`. ~20s; the pre-commit / CI check. |
 | `just test-selfhosted` | Full suite under zig's self-hosted backend (`-Dllvm=false`). See "Two backends" below. |
 | `just check` | Compile the library and every executable, running nothing (CI's Build step). |
 | `just lint` | Every declaration is referenced (zlinter `no_unused`, its own package under `lint/`) — the check coverage cannot make; see "Coverage". ~5s warm, ~30s the first time (it builds the linter). |
@@ -73,10 +73,11 @@ Zig has two code generators (LLVM, and its own self-hosted backend —
 the Debug default on x86_64-linux), and their FP code paths can
 differ, which matters for this solver's κ-limited cells. Policy: the
 **suite — including the deterministic iteration-ceiling bounds — must
-pass under both backends**; CI runs both on every push. The test
-binary defaults to LLVM (`-Dllvm=false` selects self-hosted) because
-the kcov gate can only read LLVM-emitted DWARF, so coverage is
-measured on the LLVM binary alone. Backend support is per-target:
+pass under both backends**; CI runs both on every push. kcov reads
+only LLVM-emitted DWARF, so every binary the coverage gate runs is
+built with LLVM (`-Dcoverage=true` forces it; the test binary's
+`-Dllvm=false` selects self-hosted for the other suite run) and
+coverage is measured on LLVM binaries alone. Backend support is per-target:
 the self-hosted backend crashes compiling the suite on
 aarch64-macos (0.15.2 and 0.16.0), so run `just test-selfhosted` where it is supported
 (x86_64-linux; CI covers it).
@@ -86,15 +87,12 @@ aarch64-macos (0.15.2 and 0.16.0), so run `just test-selfhosted` where it is sup
 The gate enforces **100% line coverage over every binary we ship or
 run**: the test suite, each example, and the A/B harness. `kcov` runs
 a binary as a black box — traps at each source line, recording which
-execute — so `scripts/coverage_gate.py` runs it once per binary (and
-once per *mode* where one invocation cannot reach a binary's branches:
-`ex-cases` four ways, `csar-ab` in each of its modes plus a bad
-argument). Each run gets its own output dir, `coverage/NN-<binary>-<args>/`
-(browse `<binary>/index.html` inside it), and the script merges the
-runs' line-level reports itself. Not kcov's own many-runs-one-dir
-merge: on ubuntu's kcov 43+dfsg-2 that proved non-deterministic —
-binaries and files dropped out of the merged report between identical
-runs — while one binary per dir has been reliable on every platform.
+execute — so `scripts/coverage_gate.py` runs it once per binary and per
+mode (`RUNS` in the script), each run into its own
+`coverage/NN-<binary>-<args>/` (browse `<binary>/index.html` inside it),
+and merges the runs' line-level reports itself (why not kcov's merge:
+`lines_by_file` in the script). Every installed binary must appear in
+`RUNS`; the script refuses to run otherwise.
 
 Scope is `INCLUDE_PATTERN` in the script: `src/`, `tests/`, `cases/`,
 `examples/`, `bench/`. A file is measured through whichever binary
@@ -106,25 +104,12 @@ need downloaded survey data; `scripts/consumer_smoke/build.zig` is a
 build script, not a runtime binary; the `.zon` fixtures are comptime
 data with no line table.
 
-**Every gated binary is built with `use_llvm = true`.** On x86_64-linux
-a Debug executable defaults to zig's self-hosted backend, whose DWARF
-kcov cannot read (the same reason the test binary has always forced
-LLVM — see "Two backends"). Without it, CI measured nothing of the
-examples or the harness while reporting 100% over the files it could
-see; the ledger cross-check below is what made that visible (the
-examples' markers "excluded nothing"). ReleaseFast builds are LLVM
-regardless, so this only changes the coverage build.
-
-Everything is built Debug for the gate (`-Dcoverage=true`, which
-overrides the ReleaseFast forced on `ex-bench` and `csar-ab`): line
-coverage of an optimized binary is unreliable. The whole run is ~20s
-on aarch64-macos. Test code isn't exempt — dead test helpers are dead
-code too. The gate runs under `just test-slow`, not `just test` —
-slow-tier tests (currently cap_test) exercise lines the fast tier
-doesn't reach. kcov does not reliably propagate a child's exit status,
-so the script runs each binary directly first to check it exits as
-expected (two runs are *meant* to fail: `ex-cases` with an unknown name
-and `csar-ab` with an unknown flag — that is the branch being covered).
+The gate's binaries are built with `-Dcoverage=true`: Debug (line
+coverage of an optimized binary is unreliable — it overrides the
+ReleaseFast forced on `ex-bench` and `csar-ab`) and LLVM (see "Two
+backends"). Test code isn't exempt — dead test helpers are dead code
+too. The gate runs under `just test-slow`, not `just test` — slow-tier
+tests (currently cap_test) exercise lines the fast tier doesn't reach.
 
 What "100% line coverage" buys you:
 
@@ -148,7 +133,7 @@ What it **doesn't** buy you:
   `WorkBuffers` outlived its only caller in #30. The gate's guarantee
   is "every compiled line runs"; the complementary question — is every
   *written* declaration referenced — is `just lint` (zlinter's
-  `no_unused`, a parse, in `just ci` and CI's Build step). Its
+  `no_unused`, a parse, in `just ci` and CI). Its
   known blind spot is #32: a declaration referenced only from inside
   its own body. For the library's *pub* surface, `test_root.zig` also
   forces every declaration through analysis (`refAllDeclsRecursive`),
@@ -171,14 +156,10 @@ kcov invocation:
   type removes it instead — `Method.resolved()` returning
   `Method.Resolved` is the in-tree example.
 - `--exclude-line=kcov-excl`: a trailing `// kcov-excl: <reason>`
-  marks a single line; `--exclude-region`'s `// kcov-excl-start:
-  <reason>` … `// kcov-excl-end` marks a block. Every marker carries
-  its reason in-source — grep `kcov-excl` for the ledger. There is one
-  marker in the tree: the DNC arm of `ex-cases`'s `report`, which no
-  bundled fixture reaches at the default tolerance until #6 lands the
-  #1/#2 repros as DNC fixtures — then it covers itself and the marker
-  goes. Everything else previously excluded was eliminated by one of
-  the techniques below.
+  marks a single line. Every marker carries its reason in-source —
+  grep `kcov-excl` for the ledger. (kcov also supports
+  `--exclude-region` start/stop markers for blocks; add that flag with
+  its first user if one ever appears.)
 
 Before marking a line, exhaust these — each has an in-tree example. The
 first is a question, not a technique, and it comes first:
@@ -236,23 +217,18 @@ failures).
 
 **The ledger is tracked over time, and cross-checked.** `just
 test-slow` prints a `coverage exclusions:` summary — the lines the
-exclusion rules remove from the gate, per file — and CI posts the same
-block as a comment on every PR, so growth is visible in review. The
-number is kcov-native: the gate run reports with the exclusion flags, a
-second `--report-only` pass on a copy of each run's collected data
-reports without them, and the excluded lines are the ones present raw
-and absent gated. (Only the line classification of the report-only
-pass is trustworthy; its hit data is lossy, so the ledger never uses
-it.) The script then checks that ledger against the source: every
-excluded line must sit on a `kcov-excl` marker, inside a
-`kcov-excl-start/end` region, or on a `=> unreachable` arm, and every
-marker must have excluded something. A disagreement fails the gate —
-so a kcov build that silently ignores a rule (the Linux failure that
-motivated this), or a marker that no longer sits on an executable
-line, is caught rather than posted as a smaller number. What it cannot
+exclusion rules removed, per file — and CI posts the same block as a
+comment on every PR, so growth is visible in review. The number is
+kcov-native: a second, report-only kcov pass reports without the rules,
+and the excluded lines are the ones present raw and absent gated (only
+that pass's line classification is trustworthy; its hit data is lossy).
+The script then checks the ledger against the source both ways — every
+excluded line must sit on a marker or a `=> unreachable` arm, and every
+marker must have excluded something — and a disagreement fails the
+gate, so a rule kcov silently ignored, or a marker that no longer sits
+on an executable line, cannot pass as a smaller number. What it cannot
 catch: a marker on a line that *would* have been covered — kcov
-excludes it before measuring, and the report-only pass's hit data is
-lossy. That one is what the ledger in the PR comment is for.
+excludes before measuring. That one is what the PR comment is for.
 
 ### Why kcov and not LLVM source-based coverage?
 
@@ -292,7 +268,7 @@ re-exporting them through the public API.
 
 | File | Role |
 | --- | --- |
-| `test_root.zig` | Test-target root at the repo level. One `test {}` block that pulls in `tests/all.zig`. |
+| `test_root.zig` | Test-target root at the repo level: pulls in `tests/all.zig` and forces the library's pub declarations through analysis so the gate sees them. |
 | `tests/all.zig` | Aggregator: `comptime { _ = @import(...); }` for each test file. |
 | `tests/solver_test.zig` | Synthetic property/contract tests of `solve` (e.g. the `max_outer` DNC contract). No fixture dependency. |
 | `tests/extreme_aspect_test.zig` | Rotation-invariance, coplanarity, near-degenerate edge-case tests on synthesized inputs. Also hits internal helpers (`acceptBUpdate`, `convexHull2d`) via filesystem imports for branches not reachable through `solve` for all inputs. |
@@ -318,9 +294,8 @@ steps. Two things break it, and `just consumer-smoke` is how both were
 found: configure-time filesystem access in `build.zig` (`std.fs`,
 `@embedFile` of a fixture, or a dependency's builder that walks
 directories — zlinter's does, which is why the linter is its own package
-under `lint/` rather than a step here), and calling `b.lazyDependency`
-unconditionally (a lazy dependency the build always asks for is fetched
-by every consumer anyway). The `cases` module is exported for path
+under `lint/`), and a dependency the build always asks for, lazy or not
+(every consumer fetches it). The `cases` module is exported for path
 dependents (`bench/`) and is not available to tarball consumers.
 
 `just consumer-smoke` verifies it on every `just ci` run and in CI: it copies

@@ -34,10 +34,10 @@ pub fn build(b: *std.Build) void {
     // gate). Slow tests check `test_options.slow` and skip themselves
     // when it's false.
     const slow = b.option(bool, "slow", "Include slow randomized stress tests in the test binary") orelse false;
-    // `-Dcoverage=true` builds for the kcov gate: the binaries normally
-    // forced to ReleaseFast (ex-bench) compile in Debug instead, because
-    // line coverage of an optimized binary is unreliable. Normal builds
-    // are untouched. See dev.md "Coverage".
+    // `-Dcoverage=true` builds for the kcov gate: Debug (line coverage of
+    // an optimized binary is unreliable) and LLVM (kcov reads only its
+    // DWARF) for every executable. Normal builds are untouched. See dev.md
+    // "Coverage".
     const coverage = b.option(bool, "coverage", "Build for the coverage gate (Debug everywhere)") orelse false;
     const test_options = b.addOptions();
     test_options.addOption(bool, "slow", slow);
@@ -66,18 +66,12 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run csar tests");
     test_step.dependOn(&run_tests.step);
 
-    // `zig build install-test` produces `zig-out/bin/csar-test`, the
-    // test binary built without running. Used by the kcov-based
-    // coverage recipe in the justfile.
-    const install_test = b.addInstallArtifact(tests, .{});
-    const install_test_step = b.step("install-test", "Install the test binary at zig-out/bin/csar-test");
-    install_test_step.dependOn(&install_test.step);
-
     // `zig build install-coverage -Dcoverage=true -Dslow=true`: the test
     // binary plus every example, installed for scripts/coverage_gate.py
-    // to run under kcov. The A/B harness is installed by bench/build.zig.
+    // to run under kcov (which must be the process runner — hence
+    // installed, not `zig build test`). bench/build.zig installs csar-ab.
     const install_coverage_step = b.step("install-coverage", "Install the test binary and every example for the coverage gate");
-    install_coverage_step.dependOn(&install_test.step);
+    install_coverage_step.dependOn(&b.addInstallArtifact(tests, .{}).step);
 
     // `zig build check`: compile every executable (library, examples,
     // survey execs) WITHOUT running anything — the CI Build step and
@@ -157,11 +151,8 @@ fn addExample(
     const exe = b.addExecutable(.{
         .name = b.fmt("csar-ex-{s}", .{stem}),
         .root_module = mod,
-        // LLVM always: on x86_64-linux a Debug executable would otherwise
-        // use the self-hosted backend, whose DWARF kcov cannot read — the
-        // coverage gate would silently measure nothing of it (dev.md
-        // "Coverage"). ReleaseFast is LLVM regardless.
-        .use_llvm = true,
+        // kcov reads only LLVM DWARF (dev.md "Two backends").
+        .use_llvm = if (ex.coverage) true else null,
     });
     const run = b.addRunArtifact(exe);
     // Pass through any args after `--` on the `zig build` command.

@@ -401,9 +401,8 @@ pub fn Side(comptime lib: type) type {
             const t0 = std.Io.Timestamp.now(self.io, .awake);
             for (0..count) |_| {
                 // A solve that failed would shorten a *timed* interval and
-                // report a fast, meaningless µs — so it is a harness bug,
-                // not data: the deterministic pass already reported every
-                // fixture's outcome, and only clean ones are timed.
+                // report a meaningless µs. The timing cases are fixtures
+                // that solve, so a failure here is a harness bug: panic.
                 var o = lib.solve(self.gpa, self.pts, self.opts()) catch |e| std.debug.panic("timed solve failed: {t}", .{e});
                 o.deinit();
             }

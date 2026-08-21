@@ -17,6 +17,11 @@ const N_WARMUP: u32 = 5;
 const N_RUNS: u32 = 100;
 const TOL: f64 = 1e-6;
 
+const Row = struct { name: []const u8, points: []const [3]f64, max_outer: u32 };
+fn row(comptime name: []const u8, max_outer: u32) Row {
+    return .{ .name = name, .points = cases.get(name).points, .max_outer = max_outer };
+}
+
 fn cmpF64(_: void, a: f64, b: f64) bool {
     return a < b;
 }
@@ -33,23 +38,12 @@ pub fn main(init: std.process.Init) !void {
     // `max_outer` is per case so the table has one row per outcome:
     // wide_cap89 at a budget of 1 cannot converge (its eager certificate
     // fails by construction), so it shows what a DNC row looks like.
-    const CASES = [_]struct { name: []const u8, points: []const [3]f64, max_outer: u32 = 100 }{
-        .{ .name = "hex", .points = cases.hex.points },
-        .{ .name = "np20", .points = cases.np20.points },
-        .{ .name = "np100", .points = cases.np100.points },
-        .{ .name = "np400", .points = cases.np400.points },
-        .{ .name = "h3_res05", .points = cases.h3_res05.points },
-        .{ .name = "h3_res09", .points = cases.h3_res09.points },
-        .{ .name = "h3_res12", .points = cases.h3_res12.points },
-        .{ .name = "h3_res15", .points = cases.h3_res15.points },
-        .{ .name = "ha_05", .points = cases.ha_05.points },
-        .{ .name = "ha_08", .points = cases.ha_08.points },
-        .{ .name = "ha_10", .points = cases.ha_10.points },
-        .{ .name = "ha_12", .points = cases.ha_12.points },
-        .{ .name = "ha_14", .points = cases.ha_14.points },
-        .{ .name = "infeas_antipodal", .points = cases.infeas_antipodal.points },
-        .{ .name = "near_collinear", .points = cases.near_collinear.points },
-        .{ .name = "wide_cap89", .points = cases.wide_cap89.points, .max_outer = 1 },
+    const CASES = [_]Row{
+        row("hex", 100),      row("np20", 100),     row("np100", 100),    row("np400", 100),
+        row("h3_res05", 100), row("h3_res09", 100), row("h3_res12", 100), row("h3_res15", 100),
+        row("ha_05", 100),    row("ha_08", 100),    row("ha_10", 100),    row("ha_12", 100),   row("ha_14", 100),
+        row("infeas_antipodal", 100), row("near_collinear", 100),
+        row("wide_cap89", 1),
     };
 
     const io = init.io;

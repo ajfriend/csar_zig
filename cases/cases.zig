@@ -9,11 +9,10 @@
 //!   }
 //!
 //! Everything below is compiled into the binary at build time — no
-//! filesystem reads at runtime. Adding a case = drop a `.zon` file, add
-//! its `pub const`, and append its line to `all`. The schema enforces
-//! shape at compile time; the test loop in `tests/cases_test.zig` runs
-//! every entry of `all`, so an unlisted case is the only way to escape
-//! coverage.
+//! filesystem reads at runtime. Adding a case = drop a `.zon` file +
+//! append one line to `all`. The schema enforces shape at compile time;
+//! the test loop in `tests/cases_test.zig` runs every entry, so an
+//! unlisted case is the only way to escape coverage.
 
 const std = @import("std");
 
@@ -39,140 +38,79 @@ pub const Entry = struct {
     case: Case,
 };
 
-// One declaration per case, so code that names a case at compile time
-// names a symbol — `cases.hex.points` — and a misspelling is a compile
-// error. `byName` below is for names that arrive at runtime (ex-cases).
-pub const dnc_small_wide: Case = @import("zon/dnc_small_wide.zon");
-pub const h3_r12_equator: Case = @import("zon/h3_r12_equator.zon");
-pub const h3_r12_midLat: Case = @import("zon/h3_r12_midLat.zon");
-pub const h3_r12_pent: Case = @import("zon/h3_r12_pent.zon");
-pub const h3_r12_ring10: Case = @import("zon/h3_r12_ring10.zon");
-pub const h3_r15_equator: Case = @import("zon/h3_r15_equator.zon");
-pub const h3_r15_midLat: Case = @import("zon/h3_r15_midLat.zon");
-pub const h3_r15_pent: Case = @import("zon/h3_r15_pent.zon");
-pub const h3_r15_ring10: Case = @import("zon/h3_r15_ring10.zon");
-pub const h3_r5_equator: Case = @import("zon/h3_r5_equator.zon");
-pub const h3_r5_midLat: Case = @import("zon/h3_r5_midLat.zon");
-pub const h3_r5_pent: Case = @import("zon/h3_r5_pent.zon");
-pub const h3_r5_ring10: Case = @import("zon/h3_r5_ring10.zon");
-pub const h3_r9_equator: Case = @import("zon/h3_r9_equator.zon");
-pub const h3_r9_midLat: Case = @import("zon/h3_r9_midLat.zon");
-pub const h3_r9_pent: Case = @import("zon/h3_r9_pent.zon");
-pub const h3_r9_ring10: Case = @import("zon/h3_r9_ring10.zon");
-pub const h3_res05: Case = @import("zon/h3_res05.zon");
-pub const h3_res09: Case = @import("zon/h3_res09.zon");
-pub const h3_res12: Case = @import("zon/h3_res12.zon");
-pub const h3_res15: Case = @import("zon/h3_res15.zon");
-pub const ha_05: Case = @import("zon/ha_05.zon");
-pub const ha_08: Case = @import("zon/ha_08.zon");
-pub const ha_10: Case = @import("zon/ha_10.zon");
-pub const ha_12: Case = @import("zon/ha_12.zon");
-pub const ha_14: Case = @import("zon/ha_14.zon");
-pub const hex: Case = @import("zon/hex.zon");
-pub const ico_00: Case = @import("zon/ico_00.zon");
-pub const ico_01: Case = @import("zon/ico_01.zon");
-pub const ico_02: Case = @import("zon/ico_02.zon");
-pub const ico_03: Case = @import("zon/ico_03.zon");
-pub const ico_04: Case = @import("zon/ico_04.zon");
-pub const ico_05: Case = @import("zon/ico_05.zon");
-pub const ico_06: Case = @import("zon/ico_06.zon");
-pub const ico_07: Case = @import("zon/ico_07.zon");
-pub const ico_08: Case = @import("zon/ico_08.zon");
-pub const ico_09: Case = @import("zon/ico_09.zon");
-pub const ico_10: Case = @import("zon/ico_10.zon");
-pub const ico_11: Case = @import("zon/ico_11.zon");
-pub const ico_12: Case = @import("zon/ico_12.zon");
-pub const ico_13: Case = @import("zon/ico_13.zon");
-pub const ico_14: Case = @import("zon/ico_14.zon");
-pub const ico_15: Case = @import("zon/ico_15.zon");
-pub const ico_16: Case = @import("zon/ico_16.zon");
-pub const ico_17: Case = @import("zon/ico_17.zon");
-pub const ico_18: Case = @import("zon/ico_18.zon");
-pub const ico_19: Case = @import("zon/ico_19.zon");
-pub const infeas_antipodal: Case = @import("zon/infeas_antipodal.zon");
-pub const near_collinear: Case = @import("zon/near_collinear.zon");
-pub const np100: Case = @import("zon/np100.zon");
-pub const np20: Case = @import("zon/np20.zon");
-pub const np400: Case = @import("zon/np400.zon");
-pub const oct_n0: Case = @import("zon/oct_n0.zon");
-pub const oct_n1: Case = @import("zon/oct_n1.zon");
-pub const oct_n2: Case = @import("zon/oct_n2.zon");
-pub const oct_n3: Case = @import("zon/oct_n3.zon");
-pub const oct_s0: Case = @import("zon/oct_s0.zon");
-pub const oct_s1: Case = @import("zon/oct_s1.zon");
-pub const oct_s2: Case = @import("zon/oct_s2.zon");
-pub const oct_s3: Case = @import("zon/oct_s3.zon");
-pub const wide_cap82: Case = @import("zon/wide_cap82.zon");
-pub const wide_cap85: Case = @import("zon/wide_cap85.zon");
-pub const wide_cap89: Case = @import("zon/wide_cap89.zon");
-
 pub const all: []const Entry = &.{
-    .{ .name = "dnc_small_wide", .case = dnc_small_wide },
-    .{ .name = "h3_r12_equator", .case = h3_r12_equator },
-    .{ .name = "h3_r12_midLat", .case = h3_r12_midLat },
-    .{ .name = "h3_r12_pent", .case = h3_r12_pent },
-    .{ .name = "h3_r12_ring10", .case = h3_r12_ring10 },
-    .{ .name = "h3_r15_equator", .case = h3_r15_equator },
-    .{ .name = "h3_r15_midLat", .case = h3_r15_midLat },
-    .{ .name = "h3_r15_pent", .case = h3_r15_pent },
-    .{ .name = "h3_r15_ring10", .case = h3_r15_ring10 },
-    .{ .name = "h3_r5_equator", .case = h3_r5_equator },
-    .{ .name = "h3_r5_midLat", .case = h3_r5_midLat },
-    .{ .name = "h3_r5_pent", .case = h3_r5_pent },
-    .{ .name = "h3_r5_ring10", .case = h3_r5_ring10 },
-    .{ .name = "h3_r9_equator", .case = h3_r9_equator },
-    .{ .name = "h3_r9_midLat", .case = h3_r9_midLat },
-    .{ .name = "h3_r9_pent", .case = h3_r9_pent },
-    .{ .name = "h3_r9_ring10", .case = h3_r9_ring10 },
-    .{ .name = "h3_res05", .case = h3_res05 },
-    .{ .name = "h3_res09", .case = h3_res09 },
-    .{ .name = "h3_res12", .case = h3_res12 },
-    .{ .name = "h3_res15", .case = h3_res15 },
-    .{ .name = "ha_05", .case = ha_05 },
-    .{ .name = "ha_08", .case = ha_08 },
-    .{ .name = "ha_10", .case = ha_10 },
-    .{ .name = "ha_12", .case = ha_12 },
-    .{ .name = "ha_14", .case = ha_14 },
-    .{ .name = "hex", .case = hex },
-    .{ .name = "ico_00", .case = ico_00 },
-    .{ .name = "ico_01", .case = ico_01 },
-    .{ .name = "ico_02", .case = ico_02 },
-    .{ .name = "ico_03", .case = ico_03 },
-    .{ .name = "ico_04", .case = ico_04 },
-    .{ .name = "ico_05", .case = ico_05 },
-    .{ .name = "ico_06", .case = ico_06 },
-    .{ .name = "ico_07", .case = ico_07 },
-    .{ .name = "ico_08", .case = ico_08 },
-    .{ .name = "ico_09", .case = ico_09 },
-    .{ .name = "ico_10", .case = ico_10 },
-    .{ .name = "ico_11", .case = ico_11 },
-    .{ .name = "ico_12", .case = ico_12 },
-    .{ .name = "ico_13", .case = ico_13 },
-    .{ .name = "ico_14", .case = ico_14 },
-    .{ .name = "ico_15", .case = ico_15 },
-    .{ .name = "ico_16", .case = ico_16 },
-    .{ .name = "ico_17", .case = ico_17 },
-    .{ .name = "ico_18", .case = ico_18 },
-    .{ .name = "ico_19", .case = ico_19 },
-    .{ .name = "infeas_antipodal", .case = infeas_antipodal },
-    .{ .name = "near_collinear", .case = near_collinear },
-    .{ .name = "np100", .case = np100 },
-    .{ .name = "np20", .case = np20 },
-    .{ .name = "np400", .case = np400 },
-    .{ .name = "oct_n0", .case = oct_n0 },
-    .{ .name = "oct_n1", .case = oct_n1 },
-    .{ .name = "oct_n2", .case = oct_n2 },
-    .{ .name = "oct_n3", .case = oct_n3 },
-    .{ .name = "oct_s0", .case = oct_s0 },
-    .{ .name = "oct_s1", .case = oct_s1 },
-    .{ .name = "oct_s2", .case = oct_s2 },
-    .{ .name = "oct_s3", .case = oct_s3 },
-    .{ .name = "wide_cap82", .case = wide_cap82 },
-    .{ .name = "wide_cap85", .case = wide_cap85 },
-    .{ .name = "wide_cap89", .case = wide_cap89 },
+    .{ .name = "dnc_small_wide", .case = @import("zon/dnc_small_wide.zon") },
+    .{ .name = "h3_r12_equator", .case = @import("zon/h3_r12_equator.zon") },
+    .{ .name = "h3_r12_midLat", .case = @import("zon/h3_r12_midLat.zon") },
+    .{ .name = "h3_r12_pent", .case = @import("zon/h3_r12_pent.zon") },
+    .{ .name = "h3_r12_ring10", .case = @import("zon/h3_r12_ring10.zon") },
+    .{ .name = "h3_r15_equator", .case = @import("zon/h3_r15_equator.zon") },
+    .{ .name = "h3_r15_midLat", .case = @import("zon/h3_r15_midLat.zon") },
+    .{ .name = "h3_r15_pent", .case = @import("zon/h3_r15_pent.zon") },
+    .{ .name = "h3_r15_ring10", .case = @import("zon/h3_r15_ring10.zon") },
+    .{ .name = "h3_r5_equator", .case = @import("zon/h3_r5_equator.zon") },
+    .{ .name = "h3_r5_midLat", .case = @import("zon/h3_r5_midLat.zon") },
+    .{ .name = "h3_r5_pent", .case = @import("zon/h3_r5_pent.zon") },
+    .{ .name = "h3_r5_ring10", .case = @import("zon/h3_r5_ring10.zon") },
+    .{ .name = "h3_r9_equator", .case = @import("zon/h3_r9_equator.zon") },
+    .{ .name = "h3_r9_midLat", .case = @import("zon/h3_r9_midLat.zon") },
+    .{ .name = "h3_r9_pent", .case = @import("zon/h3_r9_pent.zon") },
+    .{ .name = "h3_r9_ring10", .case = @import("zon/h3_r9_ring10.zon") },
+    .{ .name = "h3_res05", .case = @import("zon/h3_res05.zon") },
+    .{ .name = "h3_res09", .case = @import("zon/h3_res09.zon") },
+    .{ .name = "h3_res12", .case = @import("zon/h3_res12.zon") },
+    .{ .name = "h3_res15", .case = @import("zon/h3_res15.zon") },
+    .{ .name = "ha_05", .case = @import("zon/ha_05.zon") },
+    .{ .name = "ha_08", .case = @import("zon/ha_08.zon") },
+    .{ .name = "ha_10", .case = @import("zon/ha_10.zon") },
+    .{ .name = "ha_12", .case = @import("zon/ha_12.zon") },
+    .{ .name = "ha_14", .case = @import("zon/ha_14.zon") },
+    .{ .name = "hex", .case = @import("zon/hex.zon") },
+    .{ .name = "ico_00", .case = @import("zon/ico_00.zon") },
+    .{ .name = "ico_01", .case = @import("zon/ico_01.zon") },
+    .{ .name = "ico_02", .case = @import("zon/ico_02.zon") },
+    .{ .name = "ico_03", .case = @import("zon/ico_03.zon") },
+    .{ .name = "ico_04", .case = @import("zon/ico_04.zon") },
+    .{ .name = "ico_05", .case = @import("zon/ico_05.zon") },
+    .{ .name = "ico_06", .case = @import("zon/ico_06.zon") },
+    .{ .name = "ico_07", .case = @import("zon/ico_07.zon") },
+    .{ .name = "ico_08", .case = @import("zon/ico_08.zon") },
+    .{ .name = "ico_09", .case = @import("zon/ico_09.zon") },
+    .{ .name = "ico_10", .case = @import("zon/ico_10.zon") },
+    .{ .name = "ico_11", .case = @import("zon/ico_11.zon") },
+    .{ .name = "ico_12", .case = @import("zon/ico_12.zon") },
+    .{ .name = "ico_13", .case = @import("zon/ico_13.zon") },
+    .{ .name = "ico_14", .case = @import("zon/ico_14.zon") },
+    .{ .name = "ico_15", .case = @import("zon/ico_15.zon") },
+    .{ .name = "ico_16", .case = @import("zon/ico_16.zon") },
+    .{ .name = "ico_17", .case = @import("zon/ico_17.zon") },
+    .{ .name = "ico_18", .case = @import("zon/ico_18.zon") },
+    .{ .name = "ico_19", .case = @import("zon/ico_19.zon") },
+    .{ .name = "infeas_antipodal", .case = @import("zon/infeas_antipodal.zon") },
+    .{ .name = "near_collinear", .case = @import("zon/near_collinear.zon") },
+    .{ .name = "np100", .case = @import("zon/np100.zon") },
+    .{ .name = "np20", .case = @import("zon/np20.zon") },
+    .{ .name = "np400", .case = @import("zon/np400.zon") },
+    .{ .name = "oct_n0", .case = @import("zon/oct_n0.zon") },
+    .{ .name = "oct_n1", .case = @import("zon/oct_n1.zon") },
+    .{ .name = "oct_n2", .case = @import("zon/oct_n2.zon") },
+    .{ .name = "oct_n3", .case = @import("zon/oct_n3.zon") },
+    .{ .name = "oct_s0", .case = @import("zon/oct_s0.zon") },
+    .{ .name = "oct_s1", .case = @import("zon/oct_s1.zon") },
+    .{ .name = "oct_s2", .case = @import("zon/oct_s2.zon") },
+    .{ .name = "oct_s3", .case = @import("zon/oct_s3.zon") },
+    .{ .name = "wide_cap82", .case = @import("zon/wide_cap82.zon") },
+    .{ .name = "wide_cap85", .case = @import("zon/wide_cap85.zon") },
+    .{ .name = "wide_cap89", .case = @import("zon/wide_cap89.zon") },
 };
 
-/// Look up a case by name. Linear scan; the manifest is tiny.
+/// A case named at compile time: a misspelling is a compile error.
+pub fn get(comptime name: []const u8) Case {
+    return comptime byName(name) orelse @compileError("unknown case: " ++ name);
+}
+
+/// A case named at runtime (`ex-cases` takes one from the command line).
+/// Linear scan; the manifest is tiny.
 pub fn byName(name: []const u8) ?Case {
     for (all) |entry| {
         if (std.mem.eql(u8, entry.name, name)) return entry.case;

@@ -3,10 +3,8 @@
 //! declaration (dev.md "Coverage").
 //!
 //! Its own package, like `bench/`, rather than a step in the root build.zig:
-//! zlinter's builder walks its include directories at configure time, and a
-//! consumer's copy of the package has no `tests/` to walk — and a lazy
-//! dependency that `build()` always asks for is fetched by every consumer
-//! anyway. `just consumer-smoke` caught both.
+//! zlinter's builder walks its include directories at configure time, which a
+//! consumer's copy of the package cannot satisfy (dev.md "Packaging").
 const std = @import("std");
 const zlinter = @import("zlinter");
 
@@ -15,9 +13,8 @@ pub fn build(b: *std.Build) void {
     lint_step.dependOn(step: {
         var builder = zlinter.builder(b, .{});
         // Relative to THIS build root: zlinter resolves include paths
-        // against it and runs with it as cwd. A path it cannot open is a
-        // warning and an empty lint, not an error — so `just lint` checks
-        // the output for that warning.
+        // against it and runs with it as cwd. (A path it cannot open is a
+        // warning, not an error — the `lint` recipe checks for it.)
         builder.addPaths(.{ .include = &.{
             b.path("../src"),
             b.path("../tests"),
