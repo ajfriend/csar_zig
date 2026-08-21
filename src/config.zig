@@ -267,8 +267,13 @@ pub const tol = struct {
     /// block), so a factorization failure signals extreme scaling,
     /// not a routine state.
     pub const NEWTON_RANGE_PIVOT_MIN: f64 = 1e-14;
-    /// Hard floor for SolveError.NegativeDualityGap (FP noise below, bug above).
-    pub const NEG_GAP: f64 = 1e-10;
+    /// The evaluation-noise coefficient of the gap's error model
+    /// (`csar.gapFloor`): a valid certificate's computed gap can fall to
+    /// −NEG_GAP_SIGMA·σ_max·ε from evaluation alone (measured 4–7×
+    /// σ_max·ε on the #1 hexagon and the finest batch cells, #6); the
+    /// model's second term, κ(M)·ε, carries coefficient 1. Anchored in ε
+    /// so it holds at any precision; #9's triage owns it from here.
+    pub const NEG_GAP_SIGMA: f64 = 64.0;
     /// FW inner loops: minimum w_i to participate in the pairwise-swap candidate set.
     /// Distinct from (and looser than) algo.ACTIVE_THRESH, which is the *cert* cutoff.
     pub const WEIGHT_ACTIVE: f64 = 1e-14;
@@ -311,6 +316,6 @@ pub const tol = struct {
     /// Relative cutoff for "FP noise" vs. "theorem violation" on values
     /// that should be ≥ 0 by PSD invariant (eigenvalues of A_perp,
     /// det of Minv). Below the threshold ⇒ silent clip; above ⇒ loud
-    /// SolveError. Mirrors NEG_GAP's role for the gap.
+    /// SolveError.
     pub const PSD_NEG_REL: f64 = 1e-12;
 };

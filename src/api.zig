@@ -43,17 +43,15 @@ const Mat3 = linalg.Mat3;
 /// rejects rank-deficient inputs as `InputError.CoplanarInput` even
 /// when the tunable check is disabled, so a `SolveError` is the
 /// library's fault, not the caller's.)
-/// All three variants share the same tolerance-band shape: ulp-level
-/// negatives on PSD-invariant values are float noise and silently
-/// clipped; anything beyond `tol.NEG_GAP` / `tol.PSD_NEG_REL`
-/// propagates as a typed error.
+/// The PSD variants share one tolerance-band shape: ulp-level negatives
+/// on PSD-invariant values are float noise and silently clipped;
+/// anything beyond `tol.PSD_NEG_REL` propagates as a typed error.
 pub const SolveError = error{
-    /// The duality-gap computation produced a meaningfully negative
-    /// value — either the dual certificate is not actually feasible,
-    /// or the log-det was computed on ill-conditioned input. Weak
-    /// duality (`gap ≥ 0`) is a theorem, so this signals a bug.
-    /// ulp-level negatives are float noise and silently ignored;
-    /// anything beyond that propagates as this error.
+    /// No longer raised (v0.3.1, #6). A negative certificate gap is
+    /// evaluation noise that scales with the certificate's spread, not
+    /// a theorem violation, and the solver reports it as
+    /// `did_not_converge` with the gap visible. Kept so callers that
+    /// switch on this set keep compiling; removed at 0.4.0.
     NegativeDualityGap,
     /// `eig2(A_perp)` produced a smaller eigenvalue below the
     /// PSD-noise threshold. A_perp is PSD by construction (it's the
@@ -235,6 +233,12 @@ pub const TrustDiagnostics = struct {
     recert_attempts: u32,
     /// Oracle evaluations where Newton polish bailed.
     polish_failures: u32,
+    /// Certifications whose gap fell below the floating-point error model
+    /// (`csar.gapFloor`). Weak duality makes that impossible for a valid
+    /// certificate, so this should read 0 on every input; a nonzero value
+    /// is a bug in the duality code — please report it. Debug builds
+    /// assert on it; the A/B harness sums it over every cell.
+    gaps_below_model: u32,
 };
 
 /// Active-set certificate. `indices` / `lambdas` are paired arrays:
@@ -347,6 +351,19 @@ pub const DidNotConverge = struct {
     /// `cert` is empty and Q/sigma carry no information. It is not a
     /// measured gap and can never satisfy any legal `gap_tol`.
     gap: f64,
+    /// The smallest gap this precision can certify for this input's
+    /// geometry — the error model in `csar.gapFloor` (≈ 64·σ_max·ε plus
+    /// κ(M)·ε; ~1e-6 for a cell 1e-10 rad across, ~1e-9 for the finest
+    /// DGGS cells). A `gap_tol` below it cannot be met at f64.
+    gap_floor: f64,
+    /// Why the solve stopped, so the remedy is clear:
+    ///   - `.precision_floor`: `gap_tol < gap_floor` — the tolerance asks
+    ///     for more than f64 can certify here. Loosen `gap_tol` (the
+    ///     iterate is typically converged to the floor), or use a higher
+    ///     precision instantiation when one exists (#9).
+    ///   - `.iteration_limit`: the floor was reachable but `max_outer`
+    ///     ran out — raise it, or inspect `diag`.
+    reason: Reason,
     /// Algorithm-specific diagnostics; the tag records which solver
     /// path produced this outcome.
     diag: Diagnostics,
@@ -354,6 +371,8 @@ pub const DidNotConverge = struct {
     /// did not close the gap).
     cert: Cert,
     allocator: std.mem.Allocator,
+
+    pub const Reason = enum { iteration_limit, precision_floor };
 
     pub fn deinit(self: *DidNotConverge) void {
         self.allocator.free(self.cert.indices);

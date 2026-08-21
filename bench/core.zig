@@ -220,6 +220,9 @@ pub const Metrics = struct {
     iters: u32 = 0,
     ar: f64 = 0,
     gap: f64 = 0,
+    /// `TrustDiagnostics.gaps_below_model`: certifications the duality
+    /// code's own error model says cannot happen. Summed by `Tally`.
+    below_model: u32 = 0,
 };
 
 /// Running count of outcomes on one side.
@@ -239,6 +242,8 @@ pub const Tally = struct {
     /// are none. A negative value is a `converged` outcome whose certificate
     /// sits below zero — the anomaly #6 repairs — so the sign is the point.
     min_gap: f64 = std.math.inf(f64),
+    /// Sum of `Metrics.below_model`: should be 0; printed only otherwise.
+    below_model: u32 = 0,
 
     pub fn add(self: *Tally, m: Metrics) void {
         // A new solver outcome cannot land in `errored` silently: the test
@@ -247,6 +252,7 @@ pub const Tally = struct {
             self.errored += 1;
             return;
         };
+        self.below_model += m.below_model;
         switch (tag) {
             .converged => {
                 self.converged += 1;
@@ -266,6 +272,8 @@ pub const Tally = struct {
             self.errored,
             self.min_gap,
         });
+        // Printed only when nonzero: it is a bug report, not a statistic.
+        if (self.below_model > 0) try w.print(" / {d} BELOW ERROR MODEL", .{self.below_model});
     }
 };
 
@@ -452,6 +460,7 @@ pub fn Side(comptime lib: type) type {
                     .iters = c.diag.totalIters(),
                     .ar = c.aspectRatio(),
                     .gap = c.gap,
+                    .below_model = belowModel(c.diag),
                 },
                 .infeasible => .{ .status = status },
                 .did_not_converge => |p| .{
@@ -459,7 +468,16 @@ pub fn Side(comptime lib: type) type {
                     .iters = p.diag.totalIters(),
                     .ar = p.sigma[2] / p.sigma[1],
                     .gap = p.gap,
+                    .below_model = belowModel(p.diag),
                 },
+            };
+        }
+
+        /// `TrustDiagnostics.gaps_below_model`, or 0 for a library version
+        /// that predates it (the pinned baseline until the next re-pin).
+        fn belowModel(diag: anytype) u32 {
+            return switch (diag) {
+                .trust => |d| if (@hasField(@TypeOf(d), "gaps_below_model")) d.gaps_below_model else 0,
             };
         }
 

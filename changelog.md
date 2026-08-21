@@ -5,6 +5,14 @@ commit that carries the full detail.
 
 ## [Unreleased]
 
+- `solve` returns an `Outcome` on every valid input: a negative certificate
+  gap is floating-point error, reported as `did_not_converge` instead of
+  raising `SolveError.NegativeDualityGap` (the variant stays, unraised, until
+  0.4.0). `DidNotConverge` gains `reason` (`.precision_floor` vs
+  `.iteration_limit`) and `gap_floor`, the smallest gap f64 can certify for
+  that input; `TrustDiagnostics.gaps_below_model` counts certifications the
+  error model rules out — a bug detector that should read 0. Fixes #1, #2.
+
 ## [0.3.0]
 
 - **Breaking:** the original alternating solver is removed — `Method.alternating`,

@@ -37,10 +37,10 @@ test "the no-certificate sentinel never certifies, and absurd gap_tol is rejecte
 
     // The pure convergence predicate: the sentinel never certifies,
     // even at the loosest legal tolerance.
-    try std.testing.expect(!try core.gapConverged(config.tol.GAP_UNCERTIFIED, 1e29));
+    try std.testing.expect(!core.gapConverged(config.tol.GAP_UNCERTIFIED, 1e29));
     // A real gap at the same tolerance does certify (the guard is
     // specific to the sentinel, not a blanket ceiling).
-    try std.testing.expect(try core.gapConverged(1e-7, 1e-6));
+    try std.testing.expect(core.gapConverged(1e-7, 1e-6));
 
     // Validation cap on the option itself.
     const allocator = std.testing.allocator;
@@ -50,4 +50,3 @@ test "the no-certificate sentinel never certifies, and absurd gap_tol is rejecte
         csar.solve(allocator, &pts, .{ .gap_tol = 1e30 }),
     );
 }
-

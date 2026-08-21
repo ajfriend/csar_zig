@@ -911,21 +911,48 @@ fn preprocess(
     return .{ .ready = .{ .b0 = b, .Xw = hp.Xw, .work_to_orig = hp.work_to_orig } };
 }
 
-/// Classify a freshly computed certificate gap. Returns true when the
-/// solve is converged at `gap_tol`. ORDER MATTERS and is shared by
-/// every certification site: a converged-at-noise
-/// gap can be slightly negative (seen on H3 r15 cells, gap ~ −5e-9
-/// from κ·ε noise) and must be ACCEPTED before the hard NegGap guard
-/// fires; anything meaningfully negative beyond `tol.NEG_GAP` is a
-/// broken certificate and errors loudly.
-pub fn gapConverged(gap: f64, gap_tol: f64) SolveError!bool {
+/// Classify a freshly computed certificate gap: true when the solve is
+/// converged at `gap_tol`, false for "no certificate this time" — the
+/// caller iterates on or reports `did_not_converge`. A negative gap is
+/// never an error here: weak duality holds in exact arithmetic, so a
+/// negative value is floating-point error (`gapFloor`), and the accept
+/// test runs first so a converged-at-noise gap (−5e-9 on H3 r15 cells)
+/// certifies.
+pub fn gapConverged(gap: f64, gap_tol: f64) bool {
     // The no-certificate sentinel is not a measured gap and must never
     // certify, no matter how loose gap_tol is (validation additionally
     // caps gap_tol below it, so this guard is belt-and-braces).
     if (gap >= tol.GAP_UNCERTIFIED) return false;
-    if (@abs(gap) <= gap_tol) return true;
-    if (gap < -tol.NEG_GAP) return SolveError.NegativeDualityGap;
-    return false;
+    return @abs(gap) <= gap_tol;
+}
+
+/// The error model: how far below zero a valid certificate's computed
+/// gap can fall at this precision, for this geometry. Two measured
+/// sources (#6), both in units of ε:
+///   - evaluating the gap costs ≈ σ_max·ε (4–7× measured; the factor
+///     `tol.NEG_GAP_SIGMA` = 64 gives headroom);
+///   - the certificate's A_perp is feasible only to κ(M)·ε, the error
+///     in forming M^{-1/2} (0.03× measured; coefficient 1).
+/// A logic error in the duality code violates this by orders of
+/// magnitude (inflating A by 0.1% moves the gap ~10⁴× the bound:
+/// `tests/neg_gap_test.zig`). Below the bound the solver reports
+/// `did_not_converge` with `reason = .precision_floor`; beyond it the
+/// Debug tripwire fires and `TrustDiagnostics.gaps_below_model` counts.
+/// Written in ε so #9's f128 instantiation inherits it unchanged.
+pub fn gapFloor(sigma_max: f64, M: Mat2) f64 {
+    const e = eig2(M.m).vals;
+    const kappa = e[1] / e[0];
+    return (tol.NEG_GAP_SIGMA * sigma_max + kappa) * std.math.floatEps(f64);
+}
+
+/// The bug detector: true when a certificate's gap is negative beyond
+/// both the tolerance and the error model — impossible for a valid
+/// certificate. The model is evaluated only on the rare
+/// negative-beyond-tolerance branch, so the certification hot path is
+/// unchanged.
+pub fn gapBelowModel(r: GapResult, M: Mat2, gap_tol: f64) bool {
+    if (r.gap >= -gap_tol) return false;
+    return r.gap < -gapFloor(r.sigma[1], M);
 }
 
 /// Bundle the final outcome: translate the work-set certificate back to
@@ -946,6 +973,8 @@ pub fn buildOutcome(
     cert_active: []const usize,
     cert_lambdas: []const f64,
     work_to_orig: ?[]const u32,
+    gap_floor: f64,
+    gap_tol: f64,
 ) !Outcome {
     const cert = try buildPrimalCert(allocator, cert_active, cert_lambdas, last_gap.cert_n, work_to_orig);
 
@@ -969,6 +998,8 @@ pub fn buildOutcome(
             .Q = Qmat,
             .sigma = sigma,
             .gap = last_gap.gap,
+            .gap_floor = gap_floor,
+            .reason = if (gap_tol < gap_floor) .precision_floor else .iteration_limit,
             .diag = diag,
             .cert = cert,
             .allocator = allocator,

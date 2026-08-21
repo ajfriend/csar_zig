@@ -124,6 +124,17 @@ fn certifyAt(
     return core.dualityGapConstructed(wb.w, b, Xw, A_perp, Q, &wb.gap_scratch, wb.cert_active, wb.cert_lambdas);
 }
 
+/// Run after every certification: count `core.gapBelowModel` hits into
+/// `TrustDiagnostics.gaps_below_model`, and assert none in Debug builds —
+/// what the test suite and the coverage gate run. Release builds only
+/// count: a user build returns an Outcome on every valid input (#6).
+/// Branch-free so both lines execute on every pass (dev.md "Coverage
+/// exclusions": collapse, don't exclude).
+fn noteGap(r: GapResult, M: Mat2, gap_tol: f64, below_model: *u32) void {
+    below_model.* += @intFromBool(core.gapBelowModel(r, M, gap_tol));
+    if (@import("builtin").mode == .Debug) std.debug.assert(below_model.* == 0);
+}
+
 /// One h-oracle evaluation at a trial axis. `evalH` returns null when
 /// the trial leaves the barrier domain (a point below the feasibility
 /// margin or a rank-deficient design) — the trust region treats that
@@ -484,6 +495,8 @@ pub fn solveTrust(
     var tr_iters: u32 = 0;
     var recert_attempts: u32 = 0;
     var polish_failures: u32 = 0;
+    var gaps_below_model: u32 = 0;
+    var last_M: Mat2 = undefined; // set beside every `last_gap`
     var converged = false;
     var eager_certified = false;
 
@@ -517,8 +530,10 @@ pub fn solveTrust(
         if (!newtonPolish(wb.Ql, wb.w, &wb.newton_scratch)) polish_failures += 1;
         var m = core.computeMoments(wb.Ps, wb.w, s_scale);
         last_gap = try certifyAt(m.M, Q, b, Xw, &wb);
+        last_M = m.M;
+        noteGap(last_gap, last_M, opts.gap_tol, &gaps_below_model);
         b_cert = b;
-        if (try core.gapConverged(last_gap.gap, opts.gap_tol)) {
+        if (core.gapConverged(last_gap.gap, opts.gap_tol)) {
             converged = true;
             eager_certified = true;
         }
@@ -555,8 +570,10 @@ pub fn solveTrust(
             if (is_full) {
                 open_iters += 1;
                 last_gap = try certifyAt(m.M, Q, b, Xw, &wb);
+                last_M = m.M;
+                noteGap(last_gap, last_M, opts.gap_tol, &gaps_below_model);
                 b_cert = b;
-                if (try core.gapConverged(last_gap.gap, opts.gap_tol)) converged = true;
+                if (core.gapConverged(last_gap.gap, opts.gap_tol)) converged = true;
             }
         }
     }
@@ -573,8 +590,10 @@ pub fn solveTrust(
         if (cur.polish_failed) polish_failures += 1;
 
         last_gap = try certifyAt(cur.moments.M, cur.Q, b, Xw, &wb);
+        last_M = cur.moments.M;
+        noteGap(last_gap, last_M, opts.gap_tol, &gaps_below_model);
         b_cert = b;
-        converged = try core.gapConverged(last_gap.gap, opts.gap_tol);
+        converged = core.gapConverged(last_gap.gap, opts.gap_tol);
     }
 
     // Trust-region state. The model Hessian is per-evaluation (the
@@ -625,8 +644,10 @@ pub fn solveTrust(
         // config.trust.CERT_PRED_FACTOR.
         if (step.pred <= tc.CERT_PRED_FACTOR * opts.gap_tol) {
             last_gap = try certifyAt(cur.moments.M, cur.Q, b, Xw, &wb);
+            last_M = cur.moments.M;
+            noteGap(last_gap, last_M, opts.gap_tol, &gaps_below_model);
             b_cert = b;
-            if (try core.gapConverged(last_gap.gap, opts.gap_tol)) {
+            if (core.gapConverged(last_gap.gap, opts.gap_tol)) {
                 converged = true;
                 break;
             }
@@ -662,8 +683,10 @@ pub fn solveTrust(
             if (!newtonPolish(wb.Ql, wb.w, &wb.newton_scratch)) polish_failures += 1;
             const m = core.computeMoments(wb.Ps, wb.w, s_scale);
             last_gap = try certifyAt(m.M, Q, b, Xw, &wb);
+            last_M = m.M;
+            noteGap(last_gap, last_M, opts.gap_tol, &gaps_below_model);
             b_cert = b;
-            if (try core.gapConverged(last_gap.gap, opts.gap_tol)) {
+            if (core.gapConverged(last_gap.gap, opts.gap_tol)) {
                 converged = true;
                 break;
             }
@@ -688,9 +711,12 @@ pub fn solveTrust(
             .tr_iters = tr_iters,
             .recert_attempts = recert_attempts,
             .polish_failures = polish_failures,
+            .gaps_below_model = gaps_below_model,
         } },
         wb.cert_active,
         wb.cert_lambdas,
         prep.work_to_orig,
+        core.gapFloor(last_gap.sigma[1], last_M),
+        opts.gap_tol,
     );
 }
