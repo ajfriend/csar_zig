@@ -212,6 +212,10 @@ pub const Tally = struct {
     did_not_converge: u32 = 0,
     infeasible: u32 = 0,
     errored: u32 = 0,
+    /// Smallest certified gap among the converged entries; `inf` when there
+    /// are none. A negative value is a `converged` outcome whose certificate
+    /// sits below zero — the anomaly #6 repairs — so the sign is the point.
+    min_gap: f64 = std.math.inf(f64),
 
     pub fn add(self: *Tally, m: Metrics) void {
         // Anything `OutcomeTag` does not name is an @errorName from a failed
@@ -222,7 +226,10 @@ pub const Tally = struct {
             return;
         };
         switch (tag) {
-            .converged => self.converged += 1,
+            .converged => {
+                self.converged += 1;
+                self.min_gap = @min(self.min_gap, m.gap);
+            },
             .infeasible => self.infeasible += 1,
             .did_not_converge => self.did_not_converge += 1,
         }
@@ -230,11 +237,54 @@ pub const Tally = struct {
 
     /// zig's `{f}` formatting hook.
     pub fn format(self: Tally, w: *std.Io.Writer) std.Io.Writer.Error!void {
-        try w.print("{d} converged / {d} DNC / {d} infeasible / {d} errored", .{
-            self.converged, self.did_not_converge, self.infeasible, self.errored,
+        try w.print("{d} converged / {d} DNC / {d} infeasible / {d} errored / min gap {e:.2}", .{
+            self.converged,
+            self.did_not_converge,
+            self.infeasible,
+            self.errored,
+            self.min_gap,
         });
     }
 };
+
+/// The largest move of the certified gap among rows the diff does NOT flag:
+/// both sides converged, and `differs` false. `differs` leaves the gap out
+/// on purpose (it moves without meaning a behavioural change), so this is
+/// where "the gaps shifted by at most X" becomes a number — for the PR body,
+/// not a gate (#18). `--aa` reads zero.
+///
+/// `idx` names a cell inside a batch (#37); `null` for a fixture.
+pub const GapShift = struct {
+    max: f64 = 0,
+    name: []const u8 = "",
+    idx: ?usize = null,
+    /// Rows considered, so "0 on nothing" and "0 on 60 rows" read differently.
+    rows: u32 = 0,
+
+    pub fn add(self: *GapShift, name: []const u8, idx: ?usize, a: Metrics, b: Metrics) void {
+        if (!isConverged(a) or !isConverged(b) or differs(a, b)) return;
+        self.rows += 1;
+        const d = @abs(a.gap - b.gap);
+        if (d > self.max) {
+            self.max = d;
+            self.name = name;
+            self.idx = idx;
+        }
+    }
+
+    /// zig's `{f}` formatting hook.
+    pub fn format(self: GapShift, w: *std.Io.Writer) std.Io.Writer.Error!void {
+        if (self.rows == 0) return w.print("no rows converged on both sides", .{});
+        if (self.max == 0) return w.print("none over {d} rows", .{self.rows});
+        try w.print("max |Δgap| {e:.2} on {s}", .{ self.max, self.name });
+        if (self.idx) |i| try w.print("[{d}]", .{i});
+        try w.print(" ({d} rows)", .{self.rows});
+    }
+};
+
+fn isConverged(m: Metrics) bool {
+    return std.meta.stringToEnum(OutcomeTag, m.status) == .converged;
+}
 
 /// The deterministic-diff predicate: the tool's contract, consumed by #5, #6
 /// and #9 as "an empty deterministic diff".

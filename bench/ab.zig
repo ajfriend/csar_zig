@@ -5,6 +5,7 @@
 //!   just ab --aa            # calibration: current vs current
 //!   just ab --inject-2x     # self-test: the current side solves twice
 //!   just ab --inject-tol    # self-test: the current side runs a tight gap_tol
+//!   just ab --gap-tol=1e-9  # both sides at 1e-9; deterministic pass only
 //!
 //! The report is meant to be pasted into a PR. Nothing is written to disk.
 //!
@@ -90,7 +91,14 @@ const Opts = struct {
     aa: bool = false,
     inject_2x: bool = false,
     inject_tol: bool = false,
+    /// `--gap-tol=X`: both sides solve at X instead of `bc.GAP_TOL`, and the
+    /// report is the deterministic pass only — the tallies' pins hold at the
+    /// default, and timing a cell that errors at a tighter tolerance (the
+    /// #2 class at 1e-9, until #6) would panic `measure`.
+    gap_tol: ?f64 = null,
 };
+
+const USAGE = "usage: just ab [--aa] [--inject-2x] [--inject-tol] [--gap-tol=X]\n";
 
 pub fn main(init: std.process.Init) !void {
     var opts = Opts{};
@@ -102,11 +110,16 @@ pub fn main(init: std.process.Init) !void {
             opts.inject_2x = true;
         } else if (std.mem.eql(u8, a, "--inject-tol")) {
             opts.inject_tol = true;
+        } else if (std.mem.startsWith(u8, a, "--gap-tol=")) {
+            opts.gap_tol = std.fmt.parseFloat(f64, a["--gap-tol=".len..]) catch {
+                std.debug.print("bad --gap-tol: {s}\n" ++ USAGE, .{a});
+                return error.UnknownArgument;
+            };
         } else {
             // Fail rather than ignore: a misspelt `--inject-2x` would
             // otherwise run a plain A/B and print a report that looks like a
             // passed self-test.
-            std.debug.print("unknown argument: {s}\nusage: just ab [--aa] [--inject-2x] [--inject-tol]\n", .{a});
+            std.debug.print("unknown argument: {s}\n" ++ USAGE, .{a});
             return error.UnknownArgument;
         }
     }
@@ -131,13 +144,15 @@ fn report(comptime Base: type, init: std.process.Init, opts: Opts) !void {
     // "truncated, exit 0" would be worse than the failure this softens.
     defer out.flush() catch {};
 
-    const cur_tol: f64 = if (opts.inject_tol) INJECT_GAP_TOL else bc.GAP_TOL;
+    // `--inject-tol` overrides the current side regardless of `--gap-tol`.
+    const base_tol: f64 = opts.gap_tol orelse bc.GAP_TOL;
+    const cur_tol: f64 = if (opts.inject_tol) INJECT_GAP_TOL else base_tol;
     const cur_mult: u32 = if (opts.inject_2x) 2 else 1;
 
     const Cur = bc.Side(cur);
 
     var side_cur = Cur{ .gpa = gpa, .io = io, .gap_tol = cur_tol };
-    var side_base = Base{ .gpa = gpa, .io = io };
+    var side_base = Base{ .gpa = gpa, .io = io, .gap_tol = base_tol };
 
     // Self-describing: a local report and a CI report must be comparable, and
     // the invariant that travels between machines is the ratio, not the µs.
@@ -152,6 +167,7 @@ fn report(comptime Base: type, init: std.process.Init, opts: Opts) !void {
         "              launches (see ab.zig, \"No process isolation\"); ratios do not.\n", .{});
     if (opts.inject_2x) try out.print("  injected  : 2x on the current side\n", .{});
     if (opts.inject_tol) try out.print("  injected  : gap_tol={e} on the current side\n", .{INJECT_GAP_TOL});
+    if (opts.gap_tol) |t| try out.print("  gap_tol   : {e} on both sides — deterministic pass only\n", .{t});
     try out.print("\n", .{});
 
     // ---- deterministic pass, over every fixture -------------------------
@@ -159,11 +175,13 @@ fn report(comptime Base: type, init: std.process.Init, opts: Opts) !void {
     var n_diff: usize = 0;
     var tally_cur: bc.Tally = .{};
     var tally_base: bc.Tally = .{};
+    var shift: bc.GapShift = .{};
     for (cases.all) |entry| {
         const a = side_cur.metrics(entry.case.points);
         const b = side_base.metrics(entry.case.points);
         tally_cur.add(a);
         tally_base.add(b);
+        shift.add(entry.name, null, a, b);
         if (!bc.differs(a, b)) continue;
         n_diff += 1;
         try bc.writeDiff(out, entry.name, a, b);
@@ -175,7 +193,14 @@ fn report(comptime Base: type, init: std.process.Init, opts: Opts) !void {
     }
     try out.print("  outcomes  cur : {f}\n", .{tally_cur});
     try out.print("            base: {f}\n", .{tally_base});
+    try out.print("  gap shift : {f}\n", .{shift});
     try out.print("\n", .{});
+
+    if (opts.gap_tol != null) {
+        try out.print("timing: skipped under --gap-tol (see the header)\n", .{});
+        try out.flush();
+        return;
+    }
 
     // ---- timing, paired and interleaved ---------------------------------
     try out.print("timing (min of {d} reps, µs per solve)\n", .{bc.N_REPS});

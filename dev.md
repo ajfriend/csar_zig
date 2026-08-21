@@ -361,6 +361,14 @@ near the noise floor as unproven.
 - `just ab` — current vs the pinned baseline.
 - `just ab --aa` — current vs current. The ratio should read 1.000; whatever it
   isn't by is that run's noise floor. Nothing is stored — re-measure instead.
+- `just ab --gap-tol=1e-9` — both sides at that tolerance, deterministic
+  pass only (the fixtures' pins hold at the default, and timing a cell
+  that errors there would panic the harness). For a change whose effect
+  lives at a tighter tolerance than the suite's — #6's #2 class.
+- The report's `gap shift` line is the largest move of the certified gap
+  among rows the diff does *not* flag, and each tally ends in `min gap`,
+  the smallest certified gap among its converged cases — sign included.
+  Numbers for a PR body, not gates (#18).
 - `just ab --inject-2x` / `--inject-tol` — self-tests. The first must report
   ~2.0, the second must produce deterministic diffs. Without them, a tool that
   always printed "no change" would pass every other check.
