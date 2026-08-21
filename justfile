@@ -15,7 +15,7 @@ test-slow:
 test-selfhosted:
     zig build test -Dslow=true -Dllvm=false
 
-# Compile the library and every executable without running (CI's Build step).
+# Compile the library and every executable without running (CI's `check` job).
 # The bench package builds too — it lives outside this build graph, so nothing
 # else would notice it rotting. Resolving its manifest fetches the pinned
 # baseline the first time on a machine; see bench/build.zig.

@@ -18,61 +18,34 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# One job per `just ci` recipe, run in parallel: wall time is the longest of
-# them (the ReleaseFast `check`, ~70s) instead of their sum (~3 min). Each
-# job sets up zig itself (~10s); setup-zig caches the zig cache per job.
+# One job per `just ci` recipe, in parallel: wall time is the longest job
+# (lint and coverage, ~80s each) rather than the sum (~3 min). Each job sets
+# up zig itself (~10s). What each recipe does: `just --list`, dev.md.
 #
-# Pinned, not ubuntu-latest (24.04): apt has no kcov for noble, which would
-# force a slow brew install (see dev.md "Dependencies"). Revert to
-# ubuntu-latest once it maps to 26.04 or later — apt kcov stays valid there.
-# 26.04 is a *preview* image; if it churns, revert the whole commit, since
-# the apt step depends on the pin. Every job uses the same image so the
-# toolchain is one thing.
+# Pinned, not ubuntu-latest (24.04), for `coverage`: apt has no kcov for
+# noble, which would force a slow brew install (dev.md "Dependencies"). Revert
+# to ubuntu-latest once it maps to 26.04 or later — apt kcov stays valid
+# there. 26.04 is a *preview* image; if it churns, revert the pin (only the
+# apt step depends on it).
 jobs:
-  check:
+  just:
+    strategy:
+      fail-fast: false # one recipe failing must not cancel the others
+      matrix:
+        recipe: [check, lint, consumer-smoke, test-selfhosted]
+    name: ${{ matrix.recipe }}
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v4
       - uses: mlugg/setup-zig@v2
         with:
           version: 0.16.0
+          # consumer-smoke compiles in $TMPDIR, outside the cached dir.
+          use-cache: ${{ matrix.recipe != 'consumer-smoke' }}
       - uses: extractions/setup-just@v3
-      - run: just check
+      - run: just ${{ matrix.recipe }}
 
-  lint:
-    runs-on: ubuntu-26.04
-    steps:
-      - uses: actions/checkout@v4
-      - uses: mlugg/setup-zig@v2
-        with:
-          version: 0.16.0
-      - uses: extractions/setup-just@v3
-      # Every declaration referenced (dev.md "Coverage"). ~50s cold: zlinter
-      # and its dependencies compile into the zig cache setup-zig keeps.
-      - run: just lint
-
-  consumer-smoke:
-    runs-on: ubuntu-26.04
-    steps:
-      - uses: actions/checkout@v4
-      - uses: mlugg/setup-zig@v2
-        with:
-          version: 0.16.0
-      - uses: extractions/setup-just@v3
-      # The package as shipped through `.paths` (dev.md "Packaging").
-      - run: just consumer-smoke
-
-  test-selfhosted:
-    runs-on: ubuntu-26.04
-    steps:
-      - uses: actions/checkout@v4
-      - uses: mlugg/setup-zig@v2
-        with:
-          version: 0.16.0
-      - uses: extractions/setup-just@v3
-      # See dev.md "Two backends". The LLVM-backend suite runs in `coverage`.
-      - run: just test-selfhosted
-
+  # The LLVM-backend suite, under kcov: `just test-slow` is both.
   coverage:
     runs-on: ubuntu-26.04
     steps:
@@ -90,7 +63,7 @@ jobs:
           enable-cache: false
       - name: Install kcov
         run: sudo apt-get update -qq && sudo apt-get install -y kcov
-      - name: Test (LLVM backend) + coverage gate + exclusion ledger
+      - name: just test-slow
         run: |
           set -euo pipefail
           kcov --version
