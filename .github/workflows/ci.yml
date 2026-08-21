@@ -18,15 +18,8 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# One job per `just ci` recipe, in parallel: wall time is the longest job
-# (lint and coverage, ~80s each) rather than the sum (~3 min). Each job sets
-# up zig itself (~10s). What each recipe does: `just --list`, dev.md.
-#
-# Pinned, not ubuntu-latest (24.04), for `coverage`: apt has no kcov for
-# noble, which would force a slow brew install (dev.md "Dependencies"). Revert
-# to ubuntu-latest once it maps to 26.04 or later — apt kcov stays valid
-# there. 26.04 is a *preview* image; if it churns, revert the pin (only the
-# apt step depends on it).
+# One job per `just ci` recipe, in parallel, so wall time is the slowest
+# recipe rather than the sum. What each recipe does: `just --list`, dev.md.
 jobs:
   just:
     strategy:
@@ -34,23 +27,25 @@ jobs:
       matrix:
         recipe: [check, lint, consumer-smoke, test-selfhosted]
     name: ${{ matrix.recipe }}
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: mlugg/setup-zig@v2
         with:
           version: 0.16.0
-          # Keyed per recipe: setup-zig keys by job id, so without this the
-          # four entries share one cache and each restores whichever saved
-          # last — and every ReleaseFast/ReleaseSafe compile runs cold.
+          # One cache per recipe — setup-zig's default key is the job id,
+          # shared by all four matrix entries.
           cache-key: ${{ matrix.recipe }}
-          # consumer-smoke compiles in $TMPDIR, outside the cached dir.
-          use-cache: ${{ matrix.recipe != 'consumer-smoke' }}
       - uses: extractions/setup-just@v3
       - run: just ${{ matrix.recipe }}
 
-  # The LLVM-backend suite, under kcov: `just test-slow` is both.
+  # `just test-slow`: the LLVM-backend suite under kcov (dev.md "Two backends").
   coverage:
+    # Pinned, not ubuntu-latest (24.04): apt has no kcov for noble, which
+    # would force a slow brew install (dev.md "Dependencies"). Revert to
+    # ubuntu-latest once it maps to 26.04 or later — apt kcov stays valid
+    # there. 26.04 is a *preview* image; if it churns, revert the pin (only
+    # the apt step depends on it).
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v4
