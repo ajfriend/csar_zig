@@ -5,6 +5,8 @@ commit that carries the full detail.
 
 ## [Unreleased]
 
+## [0.4.0]
+
 - **Breaking:** `Outcome` gains `.precision_floor` (the tolerance is below
   the input's f64 floor — loosen `gap_tol`), `.did_not_converge` now means
   the budget ran out, both carry `Uncertified` (was `DidNotConverge`), and
