@@ -30,26 +30,26 @@ pub fn main(init: std.process.Init) !void {
     // Representative subset of the full manifest. Intentionally fewer
     // cases than `cases.all` — bench is for cross-config timing, not
     // completeness; the full case-coverage gate is the test suite.
-    // Resolved at comptime: a misspelt name is a build error, not a
-    // silently shorter table. `max_outer` is per case so the table has
-    // one row per outcome: wide_cap89 at a budget of 1 cannot converge (its
-    // eager certificate fails by construction), so it shows what a DNC row
-    // looks like — iterations, an uncertified ratio.
-    const CASES = comptime blk: {
-        @setEvalBranchQuota(10_000); // 16 names × 63 manifest entries
-        const specs = [_]struct { name: []const u8, max_outer: u32 = 100 }{
-            .{ .name = "hex" },      .{ .name = "np20" },     .{ .name = "np100" },    .{ .name = "np400" },
-            .{ .name = "h3_res05" }, .{ .name = "h3_res09" }, .{ .name = "h3_res12" }, .{ .name = "h3_res15" },
-            .{ .name = "ha_05" },    .{ .name = "ha_08" },    .{ .name = "ha_10" },    .{ .name = "ha_12" },   .{ .name = "ha_14" },
-            .{ .name = "infeas_antipodal" }, .{ .name = "near_collinear" },
-            .{ .name = "wide_cap89", .max_outer = 1 },
-        };
-        var out: [specs.len]struct { name: []const u8, points: []const [3]f64, max_outer: u32 } = undefined;
-        for (specs, 0..) |spec, i| {
-            const case = cases.byName(spec.name) orelse @compileError("unknown case: " ++ spec.name);
-            out[i] = .{ .name = spec.name, .points = case.points, .max_outer = spec.max_outer };
-        }
-        break :blk out;
+    // `max_outer` is per case so the table has one row per outcome:
+    // wide_cap89 at a budget of 1 cannot converge (its eager certificate
+    // fails by construction), so it shows what a DNC row looks like.
+    const CASES = [_]struct { name: []const u8, points: []const [3]f64, max_outer: u32 = 100 }{
+        .{ .name = "hex", .points = cases.hex.points },
+        .{ .name = "np20", .points = cases.np20.points },
+        .{ .name = "np100", .points = cases.np100.points },
+        .{ .name = "np400", .points = cases.np400.points },
+        .{ .name = "h3_res05", .points = cases.h3_res05.points },
+        .{ .name = "h3_res09", .points = cases.h3_res09.points },
+        .{ .name = "h3_res12", .points = cases.h3_res12.points },
+        .{ .name = "h3_res15", .points = cases.h3_res15.points },
+        .{ .name = "ha_05", .points = cases.ha_05.points },
+        .{ .name = "ha_08", .points = cases.ha_08.points },
+        .{ .name = "ha_10", .points = cases.ha_10.points },
+        .{ .name = "ha_12", .points = cases.ha_12.points },
+        .{ .name = "ha_14", .points = cases.ha_14.points },
+        .{ .name = "infeas_antipodal", .points = cases.infeas_antipodal.points },
+        .{ .name = "near_collinear", .points = cases.near_collinear.points },
+        .{ .name = "wide_cap89", .points = cases.wide_cap89.points, .max_outer = 1 },
     };
 
     const io = init.io;

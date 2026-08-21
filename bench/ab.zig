@@ -64,18 +64,11 @@ const cases = @import("cases");
 /// Timing selection: examples spanning the regimes (sub-µs hot path, mid-size,
 /// hard/wide, infeasible). Deliberately NOT a corpus — #19 decides what a
 /// report highlights. Deterministic metrics run over every fixture regardless.
-const TIMING_CASE_NAMES = [_][]const u8{ "hex", "np100", "ha_12", "near_collinear" };
-
-/// Resolved at comptime rather than looked up at runtime: a misspelt name is a
-/// build error here, where `cases.byName` would otherwise return null and the
-/// harness would quietly measure fewer cases than intended.
-const TIMING_CASES = blk: {
-    var out: [TIMING_CASE_NAMES.len]struct { name: []const u8, points: []const [3]f64 } = undefined;
-    for (TIMING_CASE_NAMES, 0..) |name, i| {
-        const case = cases.byName(name) orelse @compileError("unknown timing case: " ++ name);
-        out[i] = .{ .name = name, .points = case.points };
-    }
-    break :blk out;
+const TIMING_CASES = [_]struct { name: []const u8, points: []const [3]f64 }{
+    .{ .name = "hex", .points = cases.hex.points },
+    .{ .name = "np100", .points = cases.np100.points },
+    .{ .name = "ha_12", .points = cases.ha_12.points },
+    .{ .name = "near_collinear", .points = cases.near_collinear.points },
 };
 
 /// Tight enough to push borderline cases off the f64 gap floor, for --inject-tol.
