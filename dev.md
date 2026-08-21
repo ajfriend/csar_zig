@@ -312,14 +312,13 @@ dependents (`bench/`) and is not available to tarball consumers.
 working tree into it — a path fetch packs the tree through
 `.paths`, exactly as a release tarball is filtered — prints what arrived, and
 builds and runs it. A path fetch leaves empty directory skeletons behind, which
-is why the listing is of files. #17 covers the tag-time version against the
-published tarball.
+is why the listing is of files. The tag-time build against the *published*
+tarball is "Releasing" step 6.
 
 ## Releasing
 
-By hand, with one alarm: `release-check.yml` runs on every `v*` tag push
-and fails if the tag does not equal `build.zig.zon`'s `.version` (#17's
-check 1; the tarball build, check 2, is step 6). In order; steps 1 and 5
+By hand, with one alarm: `release-check.yml` fails a `v*` tag push that
+disagrees with `build.zig.zon`'s `.version` (#17). In order; steps 1 and 5
 are PRs, the rest are not commits.
 
 1. PR, the last one before the tag: set `build.zig.zon`'s `.version`, rename
@@ -341,8 +340,9 @@ are PRs, the rest are not commits.
    `zig build --build-file bench/build.zig check`. The harness always measures
    against the last release (the `csar_base` comment in `bench/build.zig.zon`).
 6. ajfriend/csar_py: the same `zig fetch --save=csar <tarball URL>` in its
-   `src/zig/`, plus whatever the release changed in the Python surface. Until
-   #17, this is also the only build against the *published* tarball.
+   `src/zig/`, plus whatever the release changed in the Python surface. This
+   is also the only build against the *published* tarball (#17's check 2 is
+   left to it).
 
 ## A/B benchmarking
 
