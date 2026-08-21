@@ -31,7 +31,7 @@ countries-plot:
 # Full countries pipeline: fetch -> solve -> plot.
 countries-all: countries-gen countries-aspect countries-plot
 
-# Regenerate the batch fixtures cases/batches/*.{ids,zon} (pins: PINS in the script).
+# Regenerate the batch fixtures cases/batches/*.{ids,zon}.
 batches-gen:
     uv run scripts/batches/gen_batches.py
 

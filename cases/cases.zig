@@ -25,8 +25,8 @@ pub const PIN = .{
     .coplanarity_tol = 1e-12,
 };
 
-/// The batch fixtures (cases/batches/*.zon): ~1000-cell DGGS samples
-/// with a pinned convergence count. Nothing but the tests and `bench/`
+/// The batch fixtures (cases/batches/*.zon): ~1000-cell DGGS samples,
+/// every cell of which converges. Nothing but the tests and `bench/`
 /// reference this, so lazy analysis keeps the data out of the examples.
 pub const batches = @import("batches.zig");
 

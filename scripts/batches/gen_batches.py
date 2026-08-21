@@ -14,11 +14,9 @@ vertices as unit vectors (the hot-path shapes: 6-point H3 hexagons,
 one per line, in the library's canonical string form — the portable
 artifact, from which the vertices can be regenerated (verify_batches.py).
 
-Each `.zon`'s `converged_at_least` pin comes from PINS below: the
-converged counts measured under zig's two backends, minus a slack (the
-cells that clear the f64 gap floor are decided at FP-noise level and
-differ between backends — CLAUDE.md). A batch absent from PINS is written
-unpinned (0) for its first measurement. dev.md "Test layout".
+The contract is the same for every batch and lives in the test, not the
+file: every cell converges at `cases.PIN` (tests/batches_test.zig).
+dev.md "Test layout".
 
 Edit the constants below in place — no CLI args by project convention.
 Run with:  uv run scripts/batches/gen_batches.py
@@ -47,20 +45,6 @@ BATCHES = [
     ("a5", 18),
     ("a5", 23),
 ]
-# name -> (converged under LLVM, converged under self-hosted, slack);
-# the pin is min(...) - slack. Measured by tests/batches_test.zig's failure
-# diagnostics on each backend (#36: every batch converged in full on both).
-PINS = {
-    "h3_r9": (1000, 1000, 0),
-    "h3_r15": (1000, 1000, 0),
-    "s2_L15": (1000, 1000, 0),
-    "s2_L19": (1000, 1000, 0),
-    "s2_L23": (1000, 1000, 0),
-    "a5_r14": (1000, 1000, 0),
-    "a5_r18": (1000, 1000, 0),
-    "a5_r23": (1000, 1000, 0),
-}
-
 OUT_DIR = Path(__file__).resolve().parents[2] / "cases" / "batches"
 MAX_DRAW_FACTOR = 20  # give up if N_CELLS distinct cells need more draws than this
 DRAW_BATCH = 10_000
@@ -177,18 +161,11 @@ def batch_name(family, res):
     return f"{family}_{FAMILIES[family].prefix}{res}"
 
 
-def zon_text(name, family, res, cells):
+def zon_text(family, res, cells):
     fam = FAMILIES[family]
-    if name in PINS:
-        llvm, selfhosted, slack = PINS[name]
-        pin = min(llvm, selfhosted) - slack
-        pinned = f"llvm {llvm} / selfhosted {selfhosted}, slack {slack}"
-    else:
-        pin, pinned = 0, "unpinned"
     lines = [
         ".{",
-        f'    .description = "{family.upper()} {fam.prefix}{res}, {len(cells)} cells uniform over the sphere, seed {SEED:#x}; {pinned}",',
-        f"    .converged_at_least = {pin},",
+        f'    .description = "{family.upper()} {fam.prefix}{res}, {len(cells)} cells uniform over the sphere, seed {SEED:#x}",',
         "    .cells = .{",
     ]
     for c in cells:
@@ -204,7 +181,7 @@ def main():
         fam, name = FAMILIES[family], batch_name(family, res)
         cells = sample_distinct(fam, res)
         (OUT_DIR / f"{name}.ids").write_text("".join(fam.to_str(c) + "\n" for c in cells))
-        (OUT_DIR / f"{name}.zon").write_text(zon_text(name, family, res, cells))
+        (OUT_DIR / f"{name}.zon").write_text(zon_text(family, res, cells))
         print(f"  {name}: {len(cells)} cells")
 
 
