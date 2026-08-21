@@ -182,15 +182,6 @@ fn report(comptime Base: type, init: std.process.Init, opts: Opts) !void {
         side_cur.pts = case.points;
         side_base.pts = case.points;
 
-        // Timing a case that errors would measure an error path. The
-        // deterministic pass above already reported it.
-        if (!bc.isOutcome(side_cur.metrics(case.points).status) or
-            !bc.isOutcome(side_base.metrics(case.points).status))
-        { // kcov-excl-start: no timing case errors, even under --inject-tol (h3_r15_pent does, and is not timed)
-            try out.print("  {s:<20} (errored on at least one side)\n", .{case.name});
-            continue;
-        } // kcov-excl-end
-
         bc.warmUp(&side_cur);
         bc.warmUp(&side_base);
 

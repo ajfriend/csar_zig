@@ -173,14 +173,12 @@ kcov invocation:
 - `--exclude-line=kcov-excl`: a trailing `// kcov-excl: <reason>`
   marks a single line; `--exclude-region`'s `// kcov-excl-start:
   <reason>` … `// kcov-excl-end` marks a block. Every marker carries
-  its reason in-source — grep `kcov-excl` for the ledger. `src/` and
-  `tests/` have none: every previously-marked line was eliminated by
-  one of the techniques below. The markers in the tree are in the
-  examples and the harness, on arms no bundled input reaches: the DNC
-  arm of `ex-cases` and `ex-bench` (no fixture DNCs at the default
-  tolerance; `ex-status` shows the variant with a constructed input),
-  and `csar-ab`'s "errored on one side" timing row (no timing case
-  errors, even under `--inject-tol`).
+  its reason in-source — grep `kcov-excl` for the ledger. There is one
+  marker in the tree: the DNC arm of `ex-cases`'s `report`, which no
+  bundled fixture reaches at the default tolerance until #6 lands the
+  #1/#2 repros as DNC fixtures — then it covers itself and the marker
+  goes. Everything else previously excluded was eliminated by one of
+  the techniques below.
 
 Before marking a line, exhaust these — each has an in-tree example. The
 first is a question, not a technique, and it comes first:
@@ -203,7 +201,10 @@ first is a question, not a technique, and it comes first:
   the degenerate g.
 - **Narrow a type so the dead line disappears.**
   `Method.resolved()` returning `Method.Resolved` deleted the
-  `.auto => unreachable` dispatch arm.
+  `.auto => unreachable` dispatch arm; `helpers.resolvedView` returning
+  `?ResolvedView` moved "infeasible has no view" to the callers' `.?`,
+  which executes and is covered, and deleted the last `=> unreachable`
+  arm in `tests/`.
 - **Collapse a trivial branch body onto its condition's line.** The
   polish-bail counters are `if (...) polish_failures += 1;`
   one-liners: the line executes (and is covered) every pass. This
@@ -225,8 +226,7 @@ first is a question, not a technique, and it comes first:
   wide-cap eager certificate fails by construction) so both arms
   execute on every platform.
 
-What remains excluded in `src/` and `tests/` is exactly the
-`=> unreachable` arms (counted in the ledger, never marked). Historical
+Nothing in `src/` or `tests/` is excluded. Historical
 evidence for the polish-bail
 counters staying untriggerable in context: the full fixture library ×
 option grids, ~100 synthetic shape families, direct far-field

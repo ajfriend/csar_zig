@@ -22,7 +22,7 @@ test "budget-limited trust DNC returns a self-consistent certified snapshot" {
     defer o.deinit();
     // Status may be either (converged if the budget suffices on some
     // platform); the invariant under test is snapshot consistency.
-    try helpers.expectOrthonormalQ(helpers.resolvedView(&o).Q);
+    try helpers.expectOrthonormalQ(helpers.resolvedView(&o).?.Q);
 }
 
 test "the no-certificate sentinel never certifies, and absurd gap_tol is rejected" {

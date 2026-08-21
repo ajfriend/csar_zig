@@ -62,6 +62,6 @@ fn report(allocator: std.mem.Allocator, name: []const u8, points: []const [3]f64
         .infeasible => |i| std.debug.print("{s:22}  infeasible  residual={e:.3}  active={d}\n", .{
             name, i.residual, i.cert.indices.len,
         }),
-        .did_not_converge => |p| std.debug.print("{s:22}  DNC  gap={e:.3}  iters={d}\n", .{ name, p.gap, p.diag.totalIters() }), // kcov-excl: no bundled fixture DNCs at the default tolerance (ex-status shows the variant)
+        .did_not_converge => |p| std.debug.print("{s:22}  DNC  gap={e:.3}  iters={d}\n", .{ name, p.gap, p.diag.totalIters() }), // kcov-excl: no bundled fixture DNCs at the default tolerance until #6 lands the #1/#2 repros as DNC fixtures; then this arm covers itself and the marker goes
     }
 }

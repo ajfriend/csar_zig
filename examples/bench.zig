@@ -31,19 +31,23 @@ pub fn main(init: std.process.Init) !void {
     // cases than `cases.all` — bench is for cross-config timing, not
     // completeness; the full case-coverage gate is the test suite.
     // Resolved at comptime: a misspelt name is a build error, not a
-    // silently shorter table.
+    // silently shorter table. `max_outer` is per case so the table has
+    // one row per outcome: wide_cap89 at a budget of 1 cannot converge (its
+    // eager certificate fails by construction), so it shows what a DNC row
+    // looks like — iterations, an uncertified ratio.
     const CASES = comptime blk: {
-        @setEvalBranchQuota(10_000); // 15 names × 63 manifest entries
-        const names = [_][]const u8{
-            "hex",      "np20",     "np100",    "np400",
-            "h3_res05", "h3_res09", "h3_res12", "h3_res15",
-            "ha_05",    "ha_08",    "ha_10",    "ha_12",   "ha_14",
-            "infeas_antipodal", "near_collinear",
+        @setEvalBranchQuota(10_000); // 16 names × 63 manifest entries
+        const specs = [_]struct { name: []const u8, max_outer: u32 = 100 }{
+            .{ .name = "hex" },      .{ .name = "np20" },     .{ .name = "np100" },    .{ .name = "np400" },
+            .{ .name = "h3_res05" }, .{ .name = "h3_res09" }, .{ .name = "h3_res12" }, .{ .name = "h3_res15" },
+            .{ .name = "ha_05" },    .{ .name = "ha_08" },    .{ .name = "ha_10" },    .{ .name = "ha_12" },   .{ .name = "ha_14" },
+            .{ .name = "infeas_antipodal" }, .{ .name = "near_collinear" },
+            .{ .name = "wide_cap89", .max_outer = 1 },
         };
-        var out: [names.len]struct { name: []const u8, points: []const [3]f64 } = undefined;
-        for (names, 0..) |name, i| {
-            const case = cases.byName(name) orelse @compileError("unknown case: " ++ name);
-            out[i] = .{ .name = name, .points = case.points };
+        var out: [specs.len]struct { name: []const u8, points: []const [3]f64, max_outer: u32 } = undefined;
+        for (specs, 0..) |spec, i| {
+            const case = cases.byName(spec.name) orelse @compileError("unknown case: " ++ spec.name);
+            out[i] = .{ .name = spec.name, .points = case.points, .max_outer = spec.max_outer };
         }
         break :blk out;
     };
@@ -65,7 +69,7 @@ pub fn main(init: std.process.Init) !void {
 
         // Warm up.
         for (0..N_WARMUP) |_| {
-            var outcome = try csar.solve(allocator, X, .{ .gap_tol = TOL, .n_hull = 10, .coplanarity_tol = 1e-12 });
+            var outcome = try csar.solve(allocator, X, .{ .gap_tol = TOL, .n_hull = 10, .coplanarity_tol = 1e-12, .max_outer = case.max_outer });
             outcome.deinit();
         }
 
@@ -80,7 +84,7 @@ pub fn main(init: std.process.Init) !void {
         // ratios rather than absolutes.
         for (0..N_RUNS) |r| {
             const t0 = std.Io.Timestamp.now(io, .awake);
-            const outcome = try csar.solve(allocator, X, .{ .gap_tol = TOL, .n_hull = 10, .coplanarity_tol = 1e-12 });
+            const outcome = try csar.solve(allocator, X, .{ .gap_tol = TOL, .n_hull = 10, .coplanarity_tol = 1e-12, .max_outer = case.max_outer });
             const t1 = std.Io.Timestamp.now(io, .awake);
             times[r] = @as(f64, @floatFromInt(t0.durationTo(t1).nanoseconds)) / 1000.0;
             if (last_outcome) |*lo| lo.deinit();
@@ -109,7 +113,6 @@ pub fn main(init: std.process.Init) !void {
                     polish_failures = c.diag.trust.polish_failures;
                     aspect_ratio = c.aspectRatio();
                 },
-                // kcov-excl-start: none of the cases above DNC at TOL; the arm exists for chasing a DNC regression
                 .did_not_converge => |p| {
                     outer_iters = p.diag.totalIters();
                     polish_failures = p.diag.trust.polish_failures;
@@ -118,7 +121,6 @@ pub fn main(init: std.process.Init) !void {
                     // value isn't certified; compute it inline here.
                     aspect_ratio = p.sigma[2] / p.sigma[1];
                 },
-                // kcov-excl-end
                 .infeasible => {},
             }
             try stdout.print("{s:22}  {s:8}  {d:2}  {d:5}  {d:11.2}  {d:14.2}  {d:12.6}  {d:7}\n", .{

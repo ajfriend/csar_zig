@@ -400,10 +400,11 @@ pub fn Side(comptime lib: type) type {
         pub fn measure(self: *Self, count: u32) f64 {
             const t0 = std.Io.Timestamp.now(self.io, .awake);
             for (0..count) |_| {
-                // A solve that fails is skipped, which shortens a *timed*
-                // interval and reports a fast, meaningless µs. Callers only
-                // time cases that `metrics` already reported as an outcome.
-                var o = lib.solve(self.gpa, self.pts, self.opts()) catch continue;
+                // A solve that failed would shorten a *timed* interval and
+                // report a fast, meaningless µs — so it is a harness bug,
+                // not data: the deterministic pass already reported every
+                // fixture's outcome, and only clean ones are timed.
+                var o = lib.solve(self.gpa, self.pts, self.opts()) catch |e| std.debug.panic("timed solve failed: {t}", .{e});
                 o.deinit();
             }
             const t1 = std.Io.Timestamp.now(self.io, .awake);

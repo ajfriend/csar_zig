@@ -148,7 +148,7 @@ test "trust: extreme-anisotropy and arc inputs traverse rejected steps and clipp
         const pts: [][3]f64 = @ptrCast(pts_v);
         var o = try csar.solve(allocator, pts, .{});
         defer o.deinit();
-        const v = helpers.resolvedView(&o);
+        const v = helpers.resolvedView(&o).?;
         total_tr_iters += v.diag.trust.tr_iters;
         if (v.converged) {
             n_converged += 1;
