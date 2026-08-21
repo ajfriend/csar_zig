@@ -5,6 +5,8 @@ commit that carries the full detail.
 
 ## [Unreleased]
 
+## [0.3.0]
+
 - **Breaking:** the original alternating solver is removed — `Method.alternating`,
   `AlternatingDiagnostics`, and `examples/compare.zig` are gone; `.auto` and
   `.trust` are unchanged. Details in [#30](https://github.com/ajfriend/csar_zig/pull/30).
