@@ -10,10 +10,13 @@ run, merged here — then derives the exclusion ledger from a report-only
 pass and cross-checks it against the source markers. Policy, what the
 gate guarantees, and the ledger's meaning: dev.md "Coverage".
 
-Output: quiet on success — the test-run summary line, then the summary
-block (also written to coverage/summary.txt, which CI posts on PRs).
-Every kcov invocation's output lands in zig-out/test-slow.log, in RUNS
-order, dumped only when a run fails.
+Output: the test-run summary line, then one report — the coverage
+line, the exclusion ledger, and on failure the blocks that say why
+(failed runs, ledger mismatch, uncovered lines). The report is also
+written to coverage/summary.txt, which CI posts on the PR green or red,
+and appended to $GITHUB_STEP_SUMMARY when set. Every kcov invocation's
+output lands in zig-out/test-slow.log, in RUNS order, dumped only when
+a run fails.
 
 The runs are independent (one output dir each) and dominate the wall
 time, so they go through a thread pool; each captures its own output
@@ -30,6 +33,7 @@ Run with:  uv run scripts/coverage_gate.py   (after `just test-slow`'s
 two install builds, which use `-Dcoverage=true`).
 """
 
+import os
 import shutil
 import subprocess
 import sys
@@ -61,8 +65,7 @@ RUNS = [
 INSTALL_DIRS = ['zig-out/bin', 'bench/zig-out/bin']  # every binary here must be in RUNS
 LOG = Path('zig-out/test-slow.log')
 OUT = Path('coverage')              # one kcov output dir per run, under here
-SUMMARY = OUT / 'summary.txt'
-SUMMARY_MD = OUT / 'summary.md'     # fenced form; CI puts it in the step summary + PR comment
+SUMMARY = OUT / 'summary.txt'       # the report; CI posts it on the PR
 INCLUDE_PATTERN = 'src/,tests/,cases/,examples/,bench/'
 # The A/B harness compiles the pinned baseline's sources too (unpacked under
 # bench/zig-pkg/); those match `src/` and must not be measured.
@@ -168,11 +171,12 @@ with tempfile.TemporaryDirectory() as tmp, ThreadPoolExecutor() as pool:
     results = list(pool.map(lambda ir: measure(*ir, tmp), enumerate(RUNS)))
 log = ''.join(r[0] for r in results)
 LOG.write_text(log)
-if failed := [f'{b} {" ".join(a)}: exit {rc}, expected {"success" if ok else "failure"}'
-              for (b, a, ok), (_, rc, _, _) in zip(RUNS, results) if (rc == 0) != ok]:
+failed = [f'{" ".join([b, *a])}: exit {rc}, expected {"success" if ok else "failure"}'
+          for (b, a, ok), (_, rc, _, _) in zip(RUNS, results) if (rc == 0) != ok]
+if failed:
     print(log, end='')
-    sys.exit('\n'.join(failed))
-print(next(l for l in reversed(log.splitlines()) if l.startswith('All ') and 'tests passed' in l))
+else:
+    print(next(l for l in reversed(log.splitlines()) if l.startswith('All ') and 'tests passed' in l))
 
 gated = merge([g for _, _, g, _ in results])
 raw = merge([r for _, _, _, r in results if r])
@@ -211,22 +215,31 @@ covered = sum(1 for fl in gated.values() for h in fl.values() if h > 0)
 total = sum(len(fl) for fl in gated.values())
 percent = 100.0 * covered / total if total else 0.0
 
-text = '\n'.join([
-    f'csar coverage: {percent:.2f}%',
-    f'coverage exclusions: {sum(len(ls) for ls in excluded.values())} lines excluded from the gate',
-    *(f'  {rel(f)}: {len(ls)}' for f, ls in sorted(excluded.items())),
-]) + '\n'
-SUMMARY.write_text(text)
-SUMMARY_MD.write_text(f'```\n{text}```\n')
-print(text, end='')
+uncovered = {f: ns for f, fl in gated.items() if (ns := [n for n, h in sorted(fl.items()) if h == 0])}
 
-if problems:
-    print('ledger does not match the source markers:')
-    for pr in problems:
-        print('  ' + pr)
-    sys.exit(1)
-if percent < GATE_PERCENT:
-    for file, fl in sorted(gated.items()):
-        if missed := [str(n) for n, h in sorted(fl.items()) if h == 0]:
-            print(f'  uncovered {rel(file)}: {",".join(missed)}')
-    sys.exit(1)
+
+def block(title, lines):
+    """A titled block of the report; the count in the title, line numbers below."""
+    n = sum(len(ns) for ns in lines.values())
+    return [f'{title}: {n} line{"s" if n != 1 else ""}',
+            *(f'  {rel(f)}: {",".join(map(str, ns))}' for f, ns in sorted(lines.items()))]
+
+
+# One report, whatever happened: the coverage line, the exclusion ledger,
+# then only the blocks that apply. `summary.txt` is what CI posts on the
+# PR, green or red, so it must carry the whole verdict.
+kcov_version = subprocess.run(['kcov', '--version'], capture_output=True, text=True).stdout.strip()
+report = [
+    f'csar coverage: {percent:.2f}%  ({kcov_version})',
+    *block('excluded', excluded),
+    *([f'failed runs: {len(failed)}', *(f'  {f}' for f in failed)] if failed else []),
+    *([f'ledger mismatch: {len(problems)}', *(f'  {p}' for p in problems)] if problems else []),
+    *(block('uncovered', uncovered) if uncovered else []),
+]
+text = '\n'.join(report) + '\n'
+SUMMARY.write_text(text)
+if step_summary := os.environ.get('GITHUB_STEP_SUMMARY'):
+    with open(step_summary, 'a') as f:
+        f.write(f'### Coverage gate\n```\n{text}```\n')
+print(text, end='')
+sys.exit(1 if failed or problems or percent < GATE_PERCENT else 0)

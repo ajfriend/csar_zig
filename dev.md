@@ -216,9 +216,12 @@ the real-world states + countries surveys (227 regions, zero polish
 failures).
 
 **The ledger is tracked over time, and cross-checked.** `just
-test-slow` prints a `coverage exclusions:` summary — the lines the
-exclusion rules removed, per file — and CI posts the same block as a
-comment on every PR, so growth is visible in review. The number is
+test-slow` prints an `excluded:` block — the count in the header, and
+per file the line numbers the exclusion rules removed — and CI posts
+the gate's whole report as a comment on every PR, green or red, so
+growth is visible in review and a reviewer can go look at each marker.
+On a red run the report also says why: `failed runs`, `ledger
+mismatch`, or `uncovered` (line numbers, same shape). The number is
 kcov-native: a second, report-only kcov pass reports without the rules,
 and the excluded lines are the ones present raw and absent gated (only
 that pass's line classification is trustworthy; its hit data is lossy).
