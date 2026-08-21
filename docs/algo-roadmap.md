@@ -401,3 +401,60 @@ regression.
   0–3 iterations); only pursue if survey throughput becomes the metric.
 - **Delete `mveeFwAway`**: kept in-tree after the away-step revert; the
   record in docs/away-step-fw.md suffices.
+
+## Addendum (2026-08-21): the certificate floor, decomposed
+
+#53 measured the floor (item 4's question) rather than probing it: a valid
+certificate's computed gap sits inside `gapFloor = (64·σ_max + κ(M))·ε`, two
+terms with two different causes, and the solver now reports a cell at that
+floor as `.precision_floor`. That closes item 4's *probe* (it became #9
+phase 1, the f128 oracle) and re-ranks the remedies:
+
+### 11. Shift-then-project (#58) — the σ_max·ε term, algebraically
+
+The σ_max·ε term is not the eigenvalue spread of A; it is the cancellation
+in `Qᵀxᵢ` — a dot product of O(1) components that cancels to size θ, so the
+chart coordinates carry relative error ε/θ (≈ 5e-7 on the #1 hexagon). The
+solver already zooms (the rescaled chart) but never translates. Subtraction
+of nearby floats is exact (Sterbenz), so `dᵢ = xᵢ − c` for a reference point
+`c` in the cluster is exact and `Qᵀdᵢ` has relative error ε; `Qᵀc` still
+carries absolute error ε but is a common translation, invisible to the MVEE.
+Three subtractions per point; plain f64; improves the iteration as well as
+the certificate. Expected: the σ_max term drops out of `gapFloor`; the
+`floor` column of `just ab --gap-tol=1e-10` (577 / 571 / 709 on h3_r15 /
+s2_L23 / a5_r23) collapses to the class-A residue. The one claim to measure
+rather than argue is that the common offset enters the gap only at second
+order, (ε/θ)²; #9 phase 1's oracle is the yardstick.
+
+Ranking: above #55 (compensated / double-double arithmetic on the same
+dot products — ~4× per dot, gated to a post-pass, cannot help the
+iteration), which is kept as the fallback for exactly the axis-offset term
+if the oracle shows it first order. Composition with f128 (#9): f128 alone
+does not remove the cancellation (it pays ε₁₂₈/θ, with more digits to
+spare); the shifted form gives relative ε at any precision. So #58 makes
+f64 sufficient for nearly every cell and turns the f128 instantiation into
+the oracle and last resort, not the production path — #9 phase 2 is scoped
+by whatever residue #58 and #54 leave.
+
+Item 7 (the two-component gap) is the natural companion: its `gap_axis`
+split is where the second-order claim shows up as a number, so do it in the
+same pass.
+
+### 12. Class A, the κ(M)·ε term (#54)
+
+Near-coincident points make the chart moment matrix near-singular, and
+`recoverAPerp` forms `M^{-1/2}` explicitly, so `A_perp` is budget-feasible
+only to κ(M)·ε. Two remedies, both on #54: renormalising `A_perp` on
+`max ‖A_perp p‖²` (measured +0.2–4% in every placement tried — the cost of
+a dependency chain behind the sqrt/divide chain, not instruction count), or
+the linear-algebra reformulation — keep the Cholesky factor and evaluate
+`‖L⁻¹p‖` by a triangular solve, √κ·ε instead of κ·ε and cheaper than the
+eigen-based square root. Measure the second before paying for the first.
+The minority of floored cells; low priority.
+
+Order: #9 phase 1 (oracle) → #58 with item 7 → #54's Cholesky form → #9
+phase 2 only if a residue remains. What not to retry from this round, with
+the measurements on #53: an always-on repair in `recoverAPerp` (+1–3%,
+identical instruction count — dependency-chain serialisation), and
+`inline fn certify` (redistributes the detector's ≈1% across rows, removes
+nothing).
