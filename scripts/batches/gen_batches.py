@@ -15,7 +15,7 @@ one per line, in the library's canonical string form — the portable
 artifact, from which the vertices can be regenerated (verify_batches.py).
 
 The contract is the same for every batch and lives in the test, not the
-file: every cell converges at `cases.PIN` (tests/batches_test.zig).
+file: every cell converges at `cases.pin` (tests/batches_test.zig).
 dev.md "Test layout".
 
 Edit the constants below in place — no CLI args by project convention.
@@ -59,15 +59,14 @@ def latlng_to_xyz(lat, lng):
     return (math.cos(la) * math.cos(lo), math.cos(la) * math.sin(lo), math.sin(la))
 
 
-def corners(latlng):
-    """Reduce an open (lat, lng)-degree ring to its corners."""
-    la, lo = np.radians(np.asarray(latlng, dtype=float)).T
-    v = np.column_stack([np.cos(la) * np.cos(lo), np.cos(la) * np.sin(lo), np.sin(la)])
+def corners(xyz):
+    """Reduce an open ring of unit vectors to its corners."""
+    v = np.asarray(xyz, dtype=float)
     e = np.roll(v, -1, axis=0) - v
     e /= np.linalg.norm(e, axis=1, keepdims=True)
     cosang = np.clip(np.einsum("ij,ij->i", np.roll(e, 1, axis=0), e), -1, 1)
     idx = np.nonzero(np.degrees(np.arccos(cosang)) > TURN_DEG)[0]
-    return [latlng[i] for i in idx] if len(idx) >= 3 else latlng
+    return [xyz[i] for i in idx] if len(idx) >= 3 else xyz
 
 
 class H3:
@@ -106,7 +105,7 @@ class S2:
         out = []
         for i in range(4):
             v = cell.get_vertex(i)
-            n = math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2])
+            n = math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2])  # not hypot: last-ulp stability of the committed data
             out.append((v[0] / n, v[1] / n, v[2] / n))
         return out
 
@@ -124,8 +123,8 @@ class A5:
         return a5.hex_to_u64(s)
 
     def vertices(self, c):
-        ring = [(lat, lng) for lng, lat in a5.cell_to_boundary(c)[:-1]]  # drop the closing repeat
-        return [latlng_to_xyz(*ll) for ll in corners(ring)]
+        ring = a5.cell_to_boundary(c)[:-1]  # (lng, lat), closed; drop the repeat
+        return corners([latlng_to_xyz(lat, lng) for lng, lat in ring])
 
 
 FAMILIES = {"h3": H3(), "s2": S2(), "a5": A5()}
@@ -140,20 +139,15 @@ def sample_uniform_latlng(n, rng):
 
 
 def sample_distinct(fam, res):
+    """The first N_CELLS distinct cells hit, in draw order (a dict keeps it)."""
     rng = np.random.default_rng([SEED, res])
-    seen, cells, drawn = set(), [], 0
-    while len(cells) < N_CELLS:
-        if drawn >= MAX_DRAW_FACTOR * N_CELLS:
-            raise RuntimeError(f"{drawn} draws yielded only {len(cells)}/{N_CELLS} distinct cells")
+    cells = {}
+    for _ in range(MAX_DRAW_FACTOR * N_CELLS // DRAW_BATCH):
         pts = sample_uniform_latlng(DRAW_BATCH, rng).tolist()
-        for c in fam.cells_at(res, pts):
-            if c not in seen:
-                seen.add(c)
-                cells.append(c)
-                if len(cells) == N_CELLS:
-                    break
-        drawn += DRAW_BATCH
-    return cells
+        cells.update(dict.fromkeys(fam.cells_at(res, pts)))
+        if len(cells) >= N_CELLS:
+            return list(cells)[:N_CELLS]
+    raise RuntimeError(f"{MAX_DRAW_FACTOR * N_CELLS} draws yielded only {len(cells)}/{N_CELLS} distinct cells")
 
 
 # ---------------------------------------------------------------- output

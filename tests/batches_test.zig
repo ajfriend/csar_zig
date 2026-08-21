@@ -1,10 +1,6 @@
-//! The batch contract: every cell of every batch in `cases.batches`
-//! converges at the corpus pin — the precondition for the batches' real
-//! job, timing (#37): a non-converging cell would time `max_outer`, not
-//! the solver. Tallied through `bc.Side(csar)`, the reduction `csar-ab`
-//! prints, so a failure prints the whole tally and names the batch. A
-//! cell that stops converging is a regression signal (CLAUDE.md), not a
-//! number to bump; see `cases/batches.zig`.
+//! The batch contract (`cases/batches.zig`): every cell of every batch
+//! converges. Tallied through `bc.Side(csar)`, the reduction `csar-ab`
+//! prints, so a failure prints the whole tally and names the batch.
 
 const std = @import("std");
 const csar = @import("../src/root.zig");

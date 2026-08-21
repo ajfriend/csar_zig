@@ -16,24 +16,31 @@
 
 const std = @import("std");
 
-/// The solver options every pin in the corpus — cases and batches — is
-/// taken under. The tests and `bench/core.zig` reference these rather
-/// than carrying their own copies: a pin is meaningless without them.
-pub const PIN = .{
-    .gap_tol = 1e-6,
-    .n_hull = 10,
-    .coplanarity_tol = 1e-12,
-};
+/// The tolerance every pin in the corpus — cases and batches — is taken at.
+pub const GAP_TOL: f64 = 1e-6;
 
-/// The batch fixtures (cases/batches/*.zon): ~1000-cell DGGS samples —
-/// the timing workload for `csar-ab` (#37), every cell of which
-/// converges. Nothing but the tests and `bench/` reference this, so lazy
-/// analysis keeps the data out of the examples.
+/// The solver options every pin is taken under, as a value of the caller's
+/// options type — generic because this module cannot import the solver,
+/// and because `bench/` holds two library versions with distinct
+/// `SolveOptions` types. The field list lives here only; options not named
+/// take that type's defaults.
+pub fn pin(comptime Options: type) Options {
+    return .{
+        .gap_tol = GAP_TOL,
+        .n_hull = 10,
+        .coplanarity_tol = 1e-12,
+    };
+}
+
+/// The batch fixtures (cases/batches/*.zon): the timing workload for
+/// `csar-ab` (#37); contract and rationale in `batches.zig`. Nothing but
+/// the tests and `bench/` reference this, so lazy analysis keeps the
+/// data out of the examples.
 pub const batches = @import("batches.zig");
 
 pub const Expected = union(enum) {
     /// Solver should converge with this aspect ratio (matched within
-    /// the integration test's tolerance, `PIN.gap_tol`).
+    /// the integration test's tolerance, `GAP_TOL`).
     converged: struct { ar: f64 },
     /// Solver should detect infeasibility. Universal sanity checks
     /// (λ ≥ 0, ∑λ ≈ 1, ‖∑ λᵢ xᵢ‖ ≈ residual) live in the test loop;

@@ -20,12 +20,11 @@ from gen_batches import BATCHES, FAMILIES, OUT_DIR, batch_name
 
 CHORD_TOL = 1e-12
 TRIPLE = re.compile(r"\.\{\s*([-+0-9.eE]+),\s*([-+0-9.eE]+),\s*([-+0-9.eE]+)\s*\}")
-CELL = re.compile(r"\.\{((?:\s*\.\{[^{}]*\},?)+)\s*\}")
 
 
 def zon_cells(text):
-    body = text[text.index(".cells = .{") :]
-    return [[tuple(map(float, t)) for t in TRIPLE.findall(m)] for m in CELL.findall(body)]
+    """One cell per line, by gen_batches.zon_text's construction."""
+    return [[tuple(map(float, t)) for t in TRIPLE.findall(line)] for line in text.splitlines() if line.startswith("        .{")]
 
 
 def main():

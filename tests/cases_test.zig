@@ -40,14 +40,10 @@ test "cases.byName: found and not-found" {
 
 test "all cases match expected outcome" {
     const allocator = std.testing.allocator;
-    const tol: f64 = cases.PIN.gap_tol;
+    const tol: f64 = cases.GAP_TOL;
 
     for (cases.all) |entry| {
-        var outcome = try csar.solve(allocator, entry.case.points, .{
-            .gap_tol = tol,
-            .n_hull = cases.PIN.n_hull,
-            .coplanarity_tol = cases.PIN.coplanarity_tol,
-        });
+        var outcome = try csar.solve(allocator, entry.case.points, cases.pin(csar.SolveOptions));
         defer outcome.deinit();
 
         switch (entry.case.expected) {
@@ -96,7 +92,7 @@ test "Shape invariants: Q right-handed orthonormal, sigma paired with columns, A
     const allocator = std.testing.allocator;
     const case = cases.byName("np100").?;
 
-    var outcome = try csar.solve(allocator, case.points, .{ .gap_tol = cases.PIN.gap_tol, .n_hull = cases.PIN.n_hull, .coplanarity_tol = cases.PIN.coplanarity_tol });
+    var outcome = try csar.solve(allocator, case.points, cases.pin(csar.SolveOptions));
     defer outcome.deinit();
 
     try std.testing.expect(std.meta.activeTag(outcome) == .converged);
