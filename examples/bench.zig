@@ -138,8 +138,8 @@ pub fn main(init: std.process.Init) !void {
                 .infeasible => {},
             }
             try stdout.print("{s:22}  {s:8}  {d:2}  {d:5}  {d:11.2}  {d:14.2}  {d:12.6}  {d:7}\n", .{
-                name,        status_str, X.len,
-                outer_iters, t_min,      t_median,
+                name,         status_str,      X.len,
+                outer_iters,  t_min,           t_median,
                 aspect_ratio, polish_failures,
             });
             if (lo == .converged) {
@@ -163,8 +163,9 @@ pub fn main(init: std.process.Init) !void {
     // "Performance & regression monitoring".
     try stdout.print("----------------------  --------  --  -----  -----------  --------------\n", .{});
     try stdout.print("{s:22}  {s:8}  {d:2}  {s:5}  {d:11.2}  {d:14.2}\n", .{
-        "TOTAL (converged only)", "ok", n_converged, "—",
-        total_converged_min, total_converged_median,
+        "TOTAL (converged only)", "ok",                   n_converged,
+        "—",
+        total_converged_min,      total_converged_median,
     });
     try stdout.flush();
 }
