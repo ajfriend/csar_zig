@@ -92,7 +92,10 @@ mode (`RUNS` in the script), each run into its own
 `coverage/NN-<binary>-<args>/` (browse `<binary>/index.html` inside it),
 and merges the runs' line-level reports itself (why not kcov's merge:
 `lines_by_file` in the script). Every installed binary must appear in
-`RUNS`; the script refuses to run otherwise.
+`RUNS`; the script refuses to run otherwise. The A/B harness knows it is
+the gate's binary (`-Dcoverage` reaches it as a `build_options` flag) and
+covers one batch at one rep instead of all of them (`BATCHES` in
+`bench/ab.zig` says why).
 
 Scope is `INCLUDE_PATTERN` in the script: `src/`, `tests/`, `cases/`,
 `examples/`, `bench/`. A file is measured through whichever binary
@@ -276,7 +279,7 @@ re-exporting them through the public API.
 | `tests/solver_test.zig` | Synthetic property/contract tests of `solve` (e.g. the `max_outer` DNC contract). No fixture dependency. |
 | `tests/extreme_aspect_test.zig` | Rotation-invariance, coplanarity, near-degenerate edge-case tests on synthesized inputs. Also hits internal helpers (`acceptBUpdate`, `convexHull2d`) via filesystem imports for branches not reachable through `solve` for all inputs. |
 | `tests/cases_test.zig` | Tests driven by the case manifest: cases.byName lookup, per-case outcome dispatch, Q/sigma shape invariants on np100. |
-| `tests/batches_test.zig` | The batch contract: per batch, tally every cell (`bench/core.zig`'s `Side`/`Tally`) and require all of them converged. A failure prints the tally and names the batch. |
+| `tests/batches_test.zig` | The batch contract: per batch, tally every cell (`bench/core.zig`'s `Side`/`Tally`) and require all of them converged. A failure prints the tally and names the batch. Slow tier (`-Dslow`): 8000 Debug solves guarding a gate property. |
 | `cases/cases.zig` | Comptime manifest over `cases/zon/*.zon` — defines the `Case` schema and the `all` list — plus `GAP_TOL` and `pin(Options)`, the solver options every pin in the corpus is taken under (the tests, `bench/core.zig` and `examples/bench.zig` take them from here rather than carrying copies). Exposed as the `cases` build module; imported by the tests, the examples and `bench/`. Top-level because it is a shared corpus, not test code. |
 | `cases/zon/*.zon` | Per-case fixture: description + tags + points + expected outcome. |
 | `cases/batches.zig`, `cases/batches/*.{zon,ids}` | Batch fixtures: ~1000 distinct cells of one DGGS family at one resolution (H3 r9/r15; S2 and A5 count-matched to H3 r9/r12/r15) — the timing workload for `csar-ab` (#37); the contract (every cell converges) and its rationale are in `batches.zig`'s header. The `.ids` is the portable artifact; `just surveys::batches-gen` regenerates both from `scripts/batches/gen_batches.py` (dggs_compare's sampler and bindings), `just surveys::batches-verify` checks the committed `.zon` against the `.ids` by vertex chord distance — on demand, not in `just ci`, so the family wheels stay out of CI. The batches are plain comptime `@import`s like the cases, measured at +0.25 s cold `zig build test`, +130 MB compiler peak RSS, +2 MB in the two binaries that reference them (test, `csar-ab`), examples unchanged. That scales with the data: at ~10× more cells compiler memory reaches several GB and a runtime loader (`load(allocator)`, callers own the memory) becomes the right shape. |
@@ -343,9 +346,19 @@ are PRs, the rest are not commits.
 `bench/` is a separate zig package that depends on **both** the working tree
 (`.path = ".."`) and a hash-pinned release, and compiles them into one
 binary. `just ab` measures them side by side: a deterministic diff over every
-fixture (status, iterations and aspect ratio; the certified gap is printed but
-deliberately not compared — see `differs` in `bench/core.zig`), a per-side
-outcome tally, then interleaved timing over a handful of cases.
+fixture and every batch cell (status, iterations and aspect ratio; the
+certified gap is printed but deliberately not compared — see `differs` in
+`bench/core.zig`), grouped — the fixtures as one group, each batch as one —
+with a per-side tally and a gap-shift line per group and differing rows
+capped per group; then interleaved timing in one table, µs per solve, over
+the eight batches (the hot path — `cases/batches.zig`) and the fixtures for
+the regimes batches lack (`np100`, `ha_12`, `near_collinear`, and `hex` as
+the many-passes quantization canary). A batch row is a mean over its ~1000
+cells where a fixture row is one cell: less row noise, the same layout bias
+(below). The `solves` column is how many solves each timed interval spanned
+— the calibrated passes for a fixture, the cell count for a batch. A batch
+is timed only if both sides converged every cell (a DNC cell would time
+`max_outer`); otherwise its row says `skipped`.
 
 One binary rather than two processes is the point: a freshly built binary's
 first launch runs 2–5× slow and that survives warm-up and min-over-reps, so a
@@ -374,8 +387,20 @@ near the noise floor as unproven.
   the smallest certified gap among its converged cases — sign included.
   Numbers for a PR body, not gates (#18).
 - `just ab --inject-2x` / `--inject-tol` — self-tests. The first must report
-  ~2.0, the second must produce deterministic diffs. Without them, a tool that
-  always printed "no change" would pass every other check.
+  ~2.0, the second must produce deterministic diffs (and `skipped` batch rows,
+  since the current side then fails to converge most cells). Without them, a
+  tool that always printed "no change" would pass every other check.
+
+Every loop has one lever, each a constant edited in place — no flags:
+
+| loop | cost | lever |
+| --- | --- | --- |
+| `just test` | ~2.5 s | the batch contract test is slow-tier (`-Dslow`), like the stress tests: a gate property, not an inner-loop one |
+| `just test-slow` | the coverage build's `csar-ab` runs | `BATCHES` / `BATCH_REPS` in `bench/ab.zig` (why: their doc comment) |
+| `just ab` | ~1 s | `N_REPS`, `INTERVAL_TARGET_US` in `bench/core.zig`; `BATCH_REPS` and the unit lists in `bench/ab.zig` |
+
+A quick local `just ab`, if ever wanted, is the same `build_options`
+mechanism the coverage build uses.
 
 The baseline pin lives in `bench/build.zig.zon`; resolving it fetches once per
 machine and is then cached (why that's fine, rather than lazy: `bench/build.zig`).

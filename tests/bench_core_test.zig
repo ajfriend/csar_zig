@@ -68,33 +68,33 @@ test "isOutcome separates solver outcomes from error names" {
     try std.testing.expect(!bc.isOutcome("NegativeDualityGap"));
 }
 
-test "batchFor: a slow case is timed one solve at a time" {
-    try std.testing.expectEqual(@as(u32, 1), bc.batchFor(bc.BATCH_TARGET_US));
-    try std.testing.expectEqual(@as(u32, 1), bc.batchFor(bc.BATCH_TARGET_US * 10));
+test "passesFor: a slow unit is timed one pass at a time" {
+    try std.testing.expectEqual(@as(u32, 1), bc.passesFor(bc.INTERVAL_TARGET_US));
+    try std.testing.expectEqual(@as(u32, 1), bc.passesFor(bc.INTERVAL_TARGET_US * 10));
 }
 
-test "batchFor: a fast case is batched to the target" {
-    // 100us target / 2us per solve = 50.
-    try std.testing.expectEqual(@as(u32, 50), bc.batchFor(2.0));
+test "passesFor: a fast unit gets enough passes to reach the target" {
+    // 100us target / 2us per pass = 50.
+    try std.testing.expectEqual(@as(u32, 50), bc.passesFor(2.0));
     // Rounds up rather than down, so the interval always reaches the target.
-    try std.testing.expectEqual(@as(u32, 34), bc.batchFor(3.0));
+    try std.testing.expectEqual(@as(u32, 34), bc.passesFor(3.0));
 }
 
-test "batchFor: clamped, and a useless probe asks for the longest interval" {
-    try std.testing.expectEqual(bc.BATCH_MAX, bc.batchFor(1e-9));
-    // Below clock resolution, or a failed probe: batch as hard as allowed
+test "passesFor: clamped, and a useless probe asks for the longest interval" {
+    try std.testing.expectEqual(bc.PASSES_MAX, bc.passesFor(1e-9));
+    // Below clock resolution, or a failed probe: as many passes as allowed
     // rather than trusting a number that means nothing.
-    try std.testing.expectEqual(bc.BATCH_MAX, bc.batchFor(0));
-    try std.testing.expectEqual(bc.BATCH_MAX, bc.batchFor(-1));
-    try std.testing.expectEqual(bc.BATCH_MAX, bc.batchFor(std.math.nan(f64)));
-    try std.testing.expectEqual(bc.BATCH_MAX, bc.batchFor(std.math.inf(f64)));
+    try std.testing.expectEqual(bc.PASSES_MAX, bc.passesFor(0));
+    try std.testing.expectEqual(bc.PASSES_MAX, bc.passesFor(-1));
+    try std.testing.expectEqual(bc.PASSES_MAX, bc.passesFor(std.math.nan(f64)));
+    try std.testing.expectEqual(bc.PASSES_MAX, bc.passesFor(std.math.inf(f64)));
 }
 
-test "calibrate: the batch comes from the min of the probes" {
-    // A contaminated first probe must not shrink the batch for the whole
-    // case: that is why there are N_PROBE of them and the min is taken.
-    var spiked: Fake = .{ .per_solve_us = 2.0, .spike_at = 1 };
-    try std.testing.expectEqual(bc.batchFor(2.0), bc.calibrate(&spiked));
+test "calibrate: the passes come from the min of the probes" {
+    // A contaminated first probe must not shrink the count for the whole
+    // unit: that is why there are N_PROBE of them and the min is taken.
+    var spiked: Fake = .{ .per_pass_us = 2.0, .spike_at = 1 };
+    try std.testing.expectEqual(bc.passesFor(2.0), bc.calibrate(&spiked));
     try std.testing.expectEqual(bc.N_PROBE, spiked.calls);
 }
 
@@ -120,8 +120,9 @@ test "Tally: min gap is inf when nothing converged" {
 test "GapShift: identical sides count as a row and do not move" {
     // What --aa sees on every row.
     var s: bc.GapShift = .{};
-    s.add("ico_00", converged, converged);
+    s.add(0, converged, converged);
     try std.testing.expectFmt("max |Δgap| 0.00e0 over 1 rows", "{f}", .{s});
+    try std.testing.expectEqual(@as(?usize, null), s.idx);
 }
 
 test "GapShift: the max is over rows the diff does not flag" {
@@ -130,28 +131,30 @@ test "GapShift: the max is over rows the diff does not flag" {
     // Counted: same status/iters/AR, gaps 2e-9 apart.
     var moved = converged;
     moved.gap = 3e-9;
-    s.add("hex", converged, moved);
+    s.add(7, converged, moved);
 
     // Not counted: flagged by `differs` (iters moved) — its gap belongs to
     // that row, however large.
     var flagged = converged;
     flagged.iters = 4;
     flagged.gap = 1.0;
-    s.add("np100", converged, flagged);
+    s.add(8, converged, flagged);
 
     // Not counted: not converged on both sides.
     var dnc = converged;
     dnc.status = "did_not_converge";
     dnc.gap = 1.0;
-    s.add("ha_12", converged, dnc);
+    s.add(9, converged, dnc);
 
-    try std.testing.expectFmt("max |Δgap| 2.00e-9 over 1 rows (hex)", "{f}", .{s});
+    try std.testing.expectFmt("max |Δgap| 2.00e-9 over 1 rows", "{f}", .{s});
+    // The row is reported by index; the caller owns the names.
+    try std.testing.expectEqual(@as(?usize, 7), s.idx);
 }
 
 /// A scripted stand-in for "run `count` solves and report the elapsed µs".
 /// Exact arithmetic, so the loop's own maths is assertable to the ulp.
 const Fake = struct {
-    per_solve_us: f64,
+    per_pass_us: f64,
     calls: u32 = 0,
     last_count: u32 = 0,
     /// Rep index at which to return a contaminated sample; 0 = never.
@@ -160,31 +163,43 @@ const Fake = struct {
     pub fn measure(self: *Fake, count: u32) f64 {
         self.calls += 1;
         self.last_count = count;
-        const elapsed = self.per_solve_us * @as(f64, @floatFromInt(count));
+        const elapsed = self.per_pass_us * @as(f64, @floatFromInt(count));
         return if (self.calls == self.spike_at) elapsed * 50 else elapsed;
     }
 };
 
-fn run(a: *Fake, b: *Fake, batch: u32, cur_mult: u32) bc.Timing {
+fn run(a: *Fake, b: *Fake, passes: u32, cur_mult: u32) bc.Timing {
     var sc: [4]f64 = undefined;
     var sb: [4]f64 = undefined;
-    return bc.pairedRun(a, b, batch, cur_mult, &sc, &sb);
+    return bc.pairedRun(a, b, passes, 1, cur_mult, &sc, &sb);
 }
 
 test "pairedRun: identical sides report 1.0 exactly" {
-    var a: Fake = .{ .per_solve_us = 3.0 };
-    var b: Fake = .{ .per_solve_us = 3.0 };
+    var a: Fake = .{ .per_pass_us = 3.0 };
+    var b: Fake = .{ .per_pass_us = 3.0 };
     const t = run(&a, &b, 10, 1);
     try std.testing.expectEqual(@as(f64, 1.0), t.ratio());
     try std.testing.expectEqual(@as(f64, 3.0), t.cur_us);
     // Passed through, not derived: the report prints it, and nothing else
     // would catch it picking up `cur_mult` on the way.
-    try std.testing.expectEqual(@as(u32, 10), t.batch);
+    try std.testing.expectEqual(@as(u32, 10), t.solves);
 }
 
-test "pairedRun: batching divides out, so per-solve time is batch-independent" {
-    var a: Fake = .{ .per_solve_us = 0.25 };
-    var b: Fake = .{ .per_solve_us = 0.25 };
+test "pairedRun: a multi-cell unit reports per solve, not per pass" {
+    // A pass over a 1000-cell unit taking 4000us is 4us per solve.
+    var a: Fake = .{ .per_pass_us = 4000.0 };
+    var b: Fake = .{ .per_pass_us = 4000.0 };
+    var sc: [4]f64 = undefined;
+    var sb: [4]f64 = undefined;
+    const t = bc.pairedRun(&a, &b, 1, 1000, 1, &sc, &sb);
+    try std.testing.expectEqual(@as(f64, 4.0), t.cur_us);
+    try std.testing.expectEqual(@as(u32, 1000), t.solves);
+    try std.testing.expectEqual(@as(u32, 1), a.last_count);
+}
+
+test "pairedRun: passes divide out, so per-solve time is pass-independent" {
+    var a: Fake = .{ .per_pass_us = 0.25 };
+    var b: Fake = .{ .per_pass_us = 0.25 };
     const big = run(&a, &b, 400, 1);
     try std.testing.expectEqual(@as(u32, 400), a.last_count);
     const small = run(&a, &b, 1, 1);
@@ -194,8 +209,8 @@ test "pairedRun: batching divides out, so per-solve time is batch-independent" {
 test "pairedRun: the 2x injector multiplies solves but not the divisor" {
     // The positive control that keeps "no difference" from being vacuous: a
     // tool hardcoded to report 1.0 fails here.
-    var a: Fake = .{ .per_solve_us = 1.0 };
-    var b: Fake = .{ .per_solve_us = 1.0 };
+    var a: Fake = .{ .per_pass_us = 1.0 };
+    var b: Fake = .{ .per_pass_us = 1.0 };
     const t = run(&a, &b, 7, 2);
     try std.testing.expectEqual(@as(f64, 2.0), t.ratio());
     // 14 solves inside the interval, still divided by 7.
@@ -204,8 +219,8 @@ test "pairedRun: the 2x injector multiplies solves but not the divisor" {
 }
 
 test "pairedRun: both sides are measured once per rep, interleaved" {
-    var a: Fake = .{ .per_solve_us = 1.0 };
-    var b: Fake = .{ .per_solve_us = 1.0 };
+    var a: Fake = .{ .per_pass_us = 1.0 };
+    var b: Fake = .{ .per_pass_us = 1.0 };
     _ = run(&a, &b, 1, 1);
     try std.testing.expectEqual(@as(u32, 4), a.calls);
     try std.testing.expectEqual(@as(u32, 4), b.calls);
@@ -214,8 +229,8 @@ test "pairedRun: both sides are measured once per rep, interleaved" {
 test "pairedRun reduces with the min, so a slow rep cannot inflate the result" {
     // One contaminated rep among clean ones must not move the number: that is
     // the whole reason the statistic is a min.
-    var a: Fake = .{ .per_solve_us = 2.0, .spike_at = 2 };
-    var b: Fake = .{ .per_solve_us = 2.0 };
+    var a: Fake = .{ .per_pass_us = 2.0, .spike_at = 2 };
+    var b: Fake = .{ .per_pass_us = 2.0 };
     const t = run(&a, &b, 3, 1);
     try std.testing.expectEqual(@as(f64, 1.0), t.ratio());
 }
@@ -223,7 +238,7 @@ test "pairedRun reduces with the min, so a slow rep cannot inflate the result" {
 test "writeTiming renders the documented column shape" {
     var buf: [256]u8 = undefined;
     var w = std.Io.Writer.fixed(&buf);
-    try bc.writeTiming(&w, "hex", .{ .cur_us = 0.836, .base_us = 0.834, .batch = 115 });
+    try bc.writeTiming(&w, "hex", .{ .cur_us = 0.836, .base_us = 0.834, .solves = 115 });
     const row = w.buffered();
     try std.testing.expectEqualStrings(
         "  hex                       0.836      0.834    1.002     115\n",
@@ -232,6 +247,13 @@ test "writeTiming renders the documented column shape" {
     // Header and rows are generated from the same widths; this catches it if
     // that ever stops being true.
     try std.testing.expectEqual(bc.timing_header.len, row.len - 1);
+}
+
+test "writeSkipped puts the reason where the numbers would be" {
+    var buf: [256]u8 = undefined;
+    var w = std.Io.Writer.fixed(&buf);
+    try bc.writeSkipped(&w, "a5_r23", "32 cells did not converge");
+    try std.testing.expectEqualStrings("  a5_r23               skipped: 32 cells did not converge\n", w.buffered());
 }
 
 test "writeDiff shows both sides at full precision, with gap for context" {
@@ -263,8 +285,15 @@ test "writeDiff survives an aspect ratio that expands to hundreds of digits" {
 
 const Real = bc.Side(csar);
 
-fn side(pts: []const [3]f64) Real {
-    return .{ .gpa = std.testing.allocator, .io = std.testing.io, .pts = pts };
+fn side(cells: []const []const [3]f64) Real {
+    return .{ .gpa = std.testing.allocator, .io = std.testing.io, .cells = cells };
+}
+
+test "Side.tally reduces a unit's cells to the counts the report prints" {
+    const t = side(&.{}).tally(&.{ helpers.casePoints("hex"), helpers.casePoints("np100"), helpers.casePoints("infeas_antipodal") });
+    try std.testing.expectEqual(@as(u32, 2), t.converged);
+    try std.testing.expectEqual(@as(u32, 1), t.infeasible);
+    try std.testing.expectEqual(@as(u32, 0), t.errored);
 }
 
 test "Side.metrics: a converged outcome carries iters, AR and gap" {
@@ -308,7 +337,7 @@ test "the clock is sane: finite, non-negative, and monotone in the workload" {
     // `pairedRun` trusts `Io.Timestamp` blindly, and clock behaviour is the
     // one thing that varies per OS. The deterministic tests avoid clocks
     // entirely, so they cannot catch a platform where this fails.
-    var s = side(helpers.casePoints("hex"));
+    var s = side(&.{helpers.casePoints("hex")});
     bc.warmUp(&s);
     // The short interval is a min-of-5 so one pre-emption cannot inflate it
     // past the long one; the long one needs no such care — a spike there only
@@ -331,13 +360,13 @@ test "A/A: the harness measures the same code against itself at ~1.0" {
     // Flake policy: if this ever fails on a healthy change, loosen the bound
     // or delete the test. Never wrap it in a retry.
     if (!test_options.slow) return error.SkipZigTest;
-    var a = side(helpers.casePoints("hex"));
-    var b = side(helpers.casePoints("hex"));
+    var a = side(&.{helpers.casePoints("hex")});
+    var b = side(&.{helpers.casePoints("hex")});
     bc.warmUp(&a);
     bc.warmUp(&b);
-    const batch = bc.calibrate(&b);
+    const passes = bc.calibrate(&b);
     var sa: [20]f64 = undefined;
     var sb: [20]f64 = undefined;
-    const t = bc.pairedRun(&a, &b, batch, 1, &sa, &sb);
+    const t = bc.pairedRun(&a, &b, passes, 1, 1, &sa, &sb);
     try std.testing.expect(t.ratio() > 0.8 and t.ratio() < 1.25);
 }

@@ -1,4 +1,4 @@
-//! Benchmarking policy: how many solves go in a timed interval, how samples
+//! Benchmarking policy: how many passes go in a timed interval, how samples
 //! reduce to a statistic, what counts as a difference — and `Side`, the
 //! default adapter from a library version to the numbers the policy consumes.
 //!
@@ -35,53 +35,59 @@ pub const N_WARMUP: u32 = 5;
 pub const N_REPS: usize = 100;
 
 // ---------------------------------------------------------------------------
-// Batching
+// Solves per interval
 //
 // A solve near the clock's resolution cannot be timed individually: `hex` at
 // ~0.8us against a 42ns clock is ~19 quanta, so ~5% granularity on exactly the
 // hot-path cell CLAUDE.md says to protect. Each timed interval therefore spans
-// however many solves it takes to reach BATCH_TARGET_US, calibrated per case
-// from a probe so it adapts to the machine rather than encoding one.
+// however many passes it takes to reach INTERVAL_TARGET_US, calibrated per
+// unit from a probe so it adapts to the machine rather than encoding one.
+//
+// A unit is a list of cells (`Side.cells`); a pass solves each once. A
+// fixture is a one-cell unit, so for it passes and solves coincide. A batch
+// (`cases.batches`) is ~1000 cells, and one pass already dwarfs the clock —
+// `ab.zig` skips the probe for those. ("Batch" is the corpus's word; here
+// the count is `solves`.)
 //
 // This is about quantization, not bias — see "The instrument" below.
 // ---------------------------------------------------------------------------
 
 /// ~2400x the 42ns clock seen on aarch64-macos.
-pub const BATCH_TARGET_US: f64 = 100.0;
+pub const INTERVAL_TARGET_US: f64 = 100.0;
 
 /// Upper bound, so a pathologically fast case cannot spin unboundedly. Also
-/// where a useless probe lands — see `batchFor`.
-pub const BATCH_MAX: u32 = 4096;
+/// where a useless probe lands — see `passesFor`.
+pub const PASSES_MAX: u32 = 4096;
 
-/// Single-solve probes taken before choosing a batch; the min is used. One
-/// probe would let a single contaminated read set the batch for every timed
-/// interval of that case (seen: `ha_12` flipping 2 -> 2 -> 1 across launches).
+/// Single-pass probes taken before choosing the passes; the min is used. One
+/// probe would let a single contaminated read set the count for every timed
+/// interval of that unit (seen: `ha_12` flipping 2 -> 2 -> 1 across launches).
 /// The min of a few is the same statistic the reps use, for the same reason.
 pub const N_PROBE: u32 = 3;
 
-/// Choose the batch for `side`, which must already be warmed up so the probes
-/// measure warm solves.
+/// Choose the passes per interval for `side`, which must already be warmed
+/// up so the probes measure warm solves.
 pub fn calibrate(side: anytype) u32 {
     var probes: [N_PROBE]f64 = undefined;
     for (&probes) |*p| p.* = side.measure(1);
-    return batchFor(std.mem.min(f64, &probes));
+    return passesFor(std.mem.min(f64, &probes));
 }
 
-/// Untimed solves before a side's timed reps — see "Warm-up" above.
+/// Untimed passes before a side's timed reps — see "Warm-up" above.
 pub fn warmUp(side: anytype) void {
     _ = side.measure(N_WARMUP);
 }
 
-/// Solves per timed interval: enough that the interval dwarfs the clock, one
-/// when the case is already slow enough.
-pub fn batchFor(probe_us: f64) u32 {
-    // A non-positive or non-finite probe means the case timed below the
+/// Passes per timed interval: enough that the interval dwarfs the clock, one
+/// when a pass is already slow enough.
+pub fn passesFor(probe_us: f64) u32 {
+    // A non-positive or non-finite probe means the pass timed below the
     // clock's resolution, or the probe failed. Either way the interval wants
     // to be as long as we allow, not as short. (Not reachable on any clock
     // seen so far; the branch is a guard at an API boundary.)
-    if (!std.math.isFinite(probe_us) or probe_us <= 0) return BATCH_MAX;
-    const n = @ceil(BATCH_TARGET_US / probe_us);
-    return @intFromFloat(std.math.clamp(n, 1, @as(f64, BATCH_MAX)));
+    if (!std.math.isFinite(probe_us) or probe_us <= 0) return PASSES_MAX;
+    const n = @ceil(INTERVAL_TARGET_US / probe_us);
+    return @intFromFloat(std.math.clamp(n, 1, @as(f64, PASSES_MAX)));
 }
 
 // ---------------------------------------------------------------------------
@@ -97,16 +103,18 @@ pub fn batchFor(probe_us: f64) u32 {
 // minimum too, and the min will report the contaminated cost without flagging
 // it. `--aa` is the check that the assumption held.
 //
-// With batching this is min-of-batch-means: jitter is averaged within a batch
-// rather than rejected by the min, which is the price of measuring a sub-us
-// case at all.
+// With several solves per interval this is min-of-interval-means: jitter is
+// averaged within an interval rather than rejected by the min, which is the
+// price of measuring a sub-us case at all. A batch row is the same statistic
+// with the averaging done over its ~1000 cells instead.
 // ---------------------------------------------------------------------------
 
-/// A timing comparison for one case.
+/// A timing comparison for one unit: µs per solve on each side, and how many
+/// solves each timed interval spanned (the divisor).
 pub const Timing = struct {
     cur_us: f64,
     base_us: f64,
-    batch: u32,
+    solves: u32,
 
     pub fn ratio(self: Timing) f64 {
         return self.cur_us / self.base_us;
@@ -132,37 +140,40 @@ pub const Timing = struct {
 /// `cur` and `base` are anything exposing `fn measure(self: *Self, count: u32)
 /// f64` — a `Side` each in `ab.zig`, a scripted fake in the tests.
 ///
-/// Both sides use the SAME batch, so the comparison stays like-for-like.
-/// `cur_mult` is the injector: it multiplies how many solves the current side
-/// performs inside its interval, but never the divisor, so the reported
-/// per-solve time scales by exactly that factor. That is the whole mechanism
-/// behind `--inject-2x`.
+/// Both sides use the SAME passes per interval, so the comparison stays
+/// like-for-like; `solves_per_pass` (the unit's cell count) makes the result
+/// per solve whatever the unit. `cur_mult` is the injector:
+/// it multiplies how many passes the current side performs inside its
+/// interval, but never the divisor, so the reported per-solve time scales by
+/// exactly that factor. That is the whole mechanism behind `--inject-2x`.
 ///
 /// Scratch buffers are caller-provided, so this allocates nothing; their
 /// length is the rep count.
 pub fn pairedRun(
     cur: anytype,
     base: anytype,
-    batch: u32,
+    passes: u32,
+    solves_per_pass: u32,
     cur_mult: u32,
     scratch_cur: []f64,
     scratch_base: []f64,
 ) Timing {
     std.debug.assert(scratch_cur.len > 0);
     std.debug.assert(scratch_cur.len == scratch_base.len);
-    const divisor: f64 = @floatFromInt(batch);
+    const solves = passes * solves_per_pass;
+    const divisor: f64 = @floatFromInt(solves);
     for (0..scratch_cur.len) |r| {
         // Order within a rep is fixed (current, then baseline) rather than
         // alternating. `--aa` is what would expose a bias from that — see
         // ab.zig, "The check", which owns that measurement and names the host
         // it was taken on.
-        scratch_cur[r] = cur.measure(batch * cur_mult) / divisor;
-        scratch_base[r] = base.measure(batch) / divisor;
+        scratch_cur[r] = cur.measure(passes * cur_mult) / divisor;
+        scratch_base[r] = base.measure(passes) / divisor;
     }
     return .{
         .cur_us = std.mem.min(f64, scratch_cur),
         .base_us = std.mem.min(f64, scratch_base),
-        .batch = batch,
+        .solves = solves,
     };
 }
 
@@ -218,7 +229,7 @@ pub const Metrics = struct {
 ///
 /// Over whatever set the caller feeds it: the whole fixture corpus in
 /// `csar-ab`'s report, one batch at a time in `tests/batches_test.zig`
-/// (and in #37's per-batch rows).
+/// (each batch is its own group there).
 pub const Tally = struct {
     converged: u32 = 0,
     did_not_converge: u32 = 0,
@@ -265,25 +276,27 @@ pub const Tally = struct {
 /// not a gate (#18). `--aa` reads zero.
 pub const GapShift = struct {
     max: f64 = 0,
-    name: []const u8 = "",
+    /// Index of the row holding the max, for the caller to name — it knows
+    /// the rows; this does not. Null while the max is zero.
+    idx: ?usize = null,
     /// Rows considered, so "0 over 3 rows" and "0 over 60 rows" read differently.
     rows: u32 = 0,
 
-    pub fn add(self: *GapShift, name: []const u8, a: Metrics, b: Metrics) void {
+    pub fn add(self: *GapShift, idx: usize, a: Metrics, b: Metrics) void {
         // `differs` false implies equal statuses, so one side's tag decides.
         if (differs(a, b) or !isConverged(a)) return;
         self.rows += 1;
         const d = @abs(a.gap - b.gap);
         if (d > self.max) {
             self.max = d;
-            self.name = name;
+            self.idx = idx;
         }
     }
 
-    /// zig's `{f}` formatting hook.
+    /// zig's `{f}` formatting hook. The row's name, if any, is the caller's
+    /// to append.
     pub fn format(self: GapShift, w: *std.Io.Writer) std.Io.Writer.Error!void {
         try w.print("max |Δgap| {e:.2} over {d} rows", .{ self.max, self.rows });
-        if (self.max > 0) try w.print(" ({s})", .{self.name});
     }
 };
 
@@ -317,22 +330,22 @@ pub fn differs(a: Metrics, b: Metrics) bool {
 const w_name = 20;
 const w_time = 10;
 const w_ratio = 8;
-const w_batch = 7;
+const w_solves = 7;
 
 /// Left-aligned names, right-aligned numbers — explicit, because zig's default
 /// string alignment is right and a column of right-aligned names reads badly.
 const header_fmt = std.fmt.comptimePrint(
     "  {{s:<{d}}} {{s:>{d}}} {{s:>{d}}} {{s:>{d}}} {{s:>{d}}}",
-    .{ w_name, w_time, w_time, w_ratio, w_batch },
+    .{ w_name, w_time, w_time, w_ratio, w_solves },
 );
 const row_fmt = std.fmt.comptimePrint(
     "  {{s:<{d}}} {{d:>{d}.3}} {{d:>{d}.3}} {{d:>{d}.3}} {{d:>{d}}}",
-    .{ w_name, w_time, w_time, w_ratio, w_batch },
+    .{ w_name, w_time, w_time, w_ratio, w_solves },
 );
 
 pub const timing_header = std.fmt.comptimePrint(
     header_fmt,
-    .{ "case", "cur", "base", "ratio", "batch" },
+    .{ "unit", "cur", "base", "ratio", "solves" },
 );
 
 /// One timing row. Rendered here rather than at the call site so the output
@@ -343,7 +356,12 @@ pub const timing_header = std.fmt.comptimePrint(
 /// integer part (309 digits at floatMax). Any fixed row buffer is a cliff, and
 /// one row overflowing would abort the report rather than print one bad line.
 pub fn writeTiming(w: *std.Io.Writer, name: []const u8, t: Timing) std.Io.Writer.Error!void {
-    try w.print(row_fmt ++ "\n", .{ name, t.cur_us, t.base_us, t.ratio(), t.batch });
+    try w.print(row_fmt ++ "\n", .{ name, t.cur_us, t.base_us, t.ratio(), t.solves });
+}
+
+/// A timing row that was not measured, with the reason in the number columns.
+pub fn writeSkipped(w: *std.Io.Writer, name: []const u8, reason: []const u8) std.Io.Writer.Error!void {
+    try w.print(std.fmt.comptimePrint("  {{s:<{d}}} skipped: {{s}}\n", .{w_name}), .{ name, reason });
 }
 
 /// One deterministic-diff row, printed only for cases that differ. `gap` rides
@@ -368,8 +386,8 @@ pub fn writeDiff(w: *std.Io.Writer, name: []const u8, a: Metrics, b: Metrics) st
 // (42ns on aarch64-macos, the 24MHz timebase) and the cost of a read (tens of
 // ns). Both reads sit INSIDE the measured interval, so their cost is charged
 // to the solve — but identically on both sides, so it is common-mode and
-// cancels in a ratio. Resolution does not cancel, which is what batching is
-// for.
+// cancels in a ratio. Resolution does not cancel, which is what the passes
+// per interval are for.
 // ---------------------------------------------------------------------------
 
 /// The tolerance the corpus is pinned at, so a report is comparable to what
@@ -389,7 +407,9 @@ pub fn Side(comptime lib: type) type {
 
         gpa: std.mem.Allocator,
         io: std.Io,
-        pts: []const [3]f64 = &.{},
+        /// The unit `measure` times: one pass solves each cell once. A
+        /// fixture is one cell; a batch (`cases.batches`) is ~1000.
+        cells: []const []const [3]f64 = &.{},
         gap_tol: f64 = GAP_TOL,
 
         /// Returns `lib.SolveOptions`, not any one version's — the two
@@ -443,18 +463,29 @@ pub fn Side(comptime lib: type) type {
             };
         }
 
-        /// The timed interval: run `count` solves on `pts`, return the
+        /// `metrics` over every cell, reduced to a tally — the deterministic
+        /// side of a batch, and what `tests/batches_test.zig` asserts on.
+        pub fn tally(self: Self, cells: []const []const [3]f64) Tally {
+            var t: Tally = .{};
+            for (cells) |c| t.add(self.metrics(c));
+            return t;
+        }
+
+        /// The timed interval: run `passes` passes over `cells`, return the
         /// elapsed microseconds. What every policy loop (`warmUp`,
         /// `calibrate`, `pairedRun`) consumes, and the only place in the
         /// harness a clock is read.
-        pub fn measure(self: *Self, count: u32) f64 {
+        pub fn measure(self: *Self, passes: u32) f64 {
             const t0 = std.Io.Timestamp.now(self.io, .awake);
-            for (0..count) |_| {
-                // A solve that failed would shorten a *timed* interval and
-                // report a meaningless µs. The timing cases are fixtures
-                // that solve, so a failure here is a harness bug: panic.
-                var o = lib.solve(self.gpa, self.pts, self.opts()) catch |e| std.debug.panic("timed solve failed: {t}", .{e});
-                o.deinit();
+            for (0..passes) |_| {
+                for (self.cells) |pts| {
+                    // A solve that failed would shorten a *timed* interval
+                    // and report a meaningless µs. Timed units are fixtures
+                    // and batches that solve (`ab.zig` checks a batch's
+                    // tally first), so a failure here is a harness bug: panic.
+                    var o = lib.solve(self.gpa, pts, self.opts()) catch |e| std.debug.panic("timed solve failed: {t}", .{e});
+                    o.deinit();
+                }
             }
             const t1 = std.Io.Timestamp.now(self.io, .awake);
             return @as(f64, @floatFromInt(t0.durationTo(t1).nanoseconds)) / 1000.0;
