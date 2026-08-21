@@ -64,10 +64,23 @@ const cases = @import("cases");
 /// Timing selection: examples spanning the regimes (sub-µs hot path, mid-size,
 /// hard/wide, infeasible). Deliberately NOT a corpus — #19 decides what a
 /// report highlights. Deterministic metrics run over every fixture regardless.
-const TIMING_CASES = [_]TimingCase{ timing("hex"), timing("np100"), timing("ha_12"), timing("near_collinear") };
-const TimingCase = struct { name: []const u8, points: []const [3]f64 };
+const TIMING_CASES = [_]TimingCase{
+    timing("hex"),
+    timing("np100"),
+    timing("ha_12"),
+    timing("near_collinear"),
+};
+
+const TimingCase = struct {
+    name: []const u8,
+    points: []const [3]f64,
+};
+
 fn timing(comptime name: []const u8) TimingCase {
-    return .{ .name = name, .points = cases.get(name).points };
+    return .{
+        .name = name,
+        .points = cases.get(name).points,
+    };
 }
 
 /// Tight enough to push borderline cases off the f64 gap floor, for --inject-tol.

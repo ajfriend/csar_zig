@@ -17,9 +17,18 @@ const N_WARMUP: u32 = 5;
 const N_RUNS: u32 = 100;
 const TOL: f64 = 1e-6;
 
-const Row = struct { name: []const u8, points: []const [3]f64, max_outer: u32 };
+const Row = struct {
+    name: []const u8,
+    points: []const [3]f64,
+    max_outer: u32,
+};
+
 fn row(comptime name: []const u8, max_outer: u32) Row {
-    return .{ .name = name, .points = cases.get(name).points, .max_outer = max_outer };
+    return .{
+        .name = name,
+        .points = cases.get(name).points,
+        .max_outer = max_outer,
+    };
 }
 
 fn cmpF64(_: void, a: f64, b: f64) bool {
@@ -39,10 +48,21 @@ pub fn main(init: std.process.Init) !void {
     // wide_cap89 at a budget of 1 cannot converge (its eager certificate
     // fails by construction), so it shows what a DNC row looks like.
     const CASES = [_]Row{
-        row("hex", 100),      row("np20", 100),     row("np100", 100),    row("np400", 100),
-        row("h3_res05", 100), row("h3_res09", 100), row("h3_res12", 100), row("h3_res15", 100),
-        row("ha_05", 100),    row("ha_08", 100),    row("ha_10", 100),    row("ha_12", 100),   row("ha_14", 100),
-        row("infeas_antipodal", 100), row("near_collinear", 100),
+        row("hex", 100),
+        row("np20", 100),
+        row("np100", 100),
+        row("np400", 100),
+        row("h3_res05", 100),
+        row("h3_res09", 100),
+        row("h3_res12", 100),
+        row("h3_res15", 100),
+        row("ha_05", 100),
+        row("ha_08", 100),
+        row("ha_10", 100),
+        row("ha_12", 100),
+        row("ha_14", 100),
+        row("infeas_antipodal", 100),
+        row("near_collinear", 100),
         row("wide_cap89", 1),
     };
 
