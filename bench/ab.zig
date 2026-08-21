@@ -35,7 +35,10 @@
 //! misses by is that run's noise floor, and no A/B difference smaller than
 //! that means anything. It is the only check that catches bias in the harness
 //! rather than in the solver, so read it first. Measured on aarch64-macos:
-//! ~0.3% on the smallest case, ~0.1% elsewhere, stable across launches.
+//! ~0.3% on the smallest case, ~0.1% elsewhere, stable across launches; the
+//! batch rows ≤0.3% at their 30 reps (1.2% at 10, which is why 30). The
+//! floor is per run and per row, not a constant — a single row at 0.995 is
+//! inside it; eight batch rows all at 0.97–0.99 are not.
 //!
 //! ### Known residual bias: code layout
 //!
