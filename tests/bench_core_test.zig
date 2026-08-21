@@ -117,25 +117,35 @@ test "Tally: min gap is inf when nothing converged" {
     try std.testing.expectFmt("0 converged / 0 DNC / 1 infeasible / 0 errored / min gap inf", "{f}", .{t});
 }
 
-test "GapShift: the largest move among rows the diff does not flag" {
+test "GapShift: identical sides count as a row and do not move" {
+    // What --aa sees on every row.
     var s: bc.GapShift = .{};
-    try std.testing.expectFmt("no rows converged on both sides", "{f}", .{s});
+    s.add("ico_00", converged, converged);
+    try std.testing.expectFmt("max |Δgap| 0.00e0 over 1 rows", "{f}", .{s});
+}
 
-    // Identical sides (what --aa sees): counted, but nothing moved.
-    s.add("ico_00", null, converged, converged);
-    try std.testing.expectFmt("none over 1 rows", "{f}", .{s});
+test "GapShift: the max is over rows the diff does not flag" {
+    var s: bc.GapShift = .{};
 
-    // Counted: both converged, same status/iters/AR, gaps apart by 2e-9.
-    s.add("hex", null, converged, .{ .status = "converged", .iters = 3, .ar = 1.5, .gap = 3e-9 });
-    // Not counted: flagged by `differs` (iters moved) — its gap belongs to the row.
-    s.add("np100", null, converged, .{ .status = "converged", .iters = 4, .ar = 1.5, .gap = 1.0 });
-    // Not counted: one side did not converge.
-    s.add("ha_12", null, converged, .{ .status = "did_not_converge", .iters = 3, .ar = 1.5, .gap = 1.0 });
-    try std.testing.expectFmt("max |Δgap| 2.00e-9 on hex (2 rows)", "{f}", .{s});
+    // Counted: same status/iters/AR, gaps 2e-9 apart.
+    var moved = converged;
+    moved.gap = 3e-9;
+    s.add("hex", converged, moved);
 
-    // A batch cell (#37) names its index.
-    s.add("h3_r9", 417, converged, .{ .status = "converged", .iters = 3, .ar = 1.5, .gap = 1e-9 + 5e-9 });
-    try std.testing.expectFmt("max |Δgap| 5.00e-9 on h3_r9[417] (3 rows)", "{f}", .{s});
+    // Not counted: flagged by `differs` (iters moved) — its gap belongs to
+    // that row, however large.
+    var flagged = converged;
+    flagged.iters = 4;
+    flagged.gap = 1.0;
+    s.add("np100", converged, flagged);
+
+    // Not counted: not converged on both sides.
+    var dnc = converged;
+    dnc.status = "did_not_converge";
+    dnc.gap = 1.0;
+    s.add("ha_12", converged, dnc);
+
+    try std.testing.expectFmt("max |Δgap| 2.00e-9 over 1 rows (hex)", "{f}", .{s});
 }
 
 /// A scripted stand-in for "run `count` solves and report the elapsed µs".

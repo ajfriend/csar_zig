@@ -92,9 +92,10 @@ const Opts = struct {
     inject_2x: bool = false,
     inject_tol: bool = false,
     /// `--gap-tol=X`: both sides solve at X instead of `bc.GAP_TOL`, and the
-    /// report is the deterministic pass only — the tallies' pins hold at the
-    /// default, and timing a cell that errors at a tighter tolerance (the
-    /// #2 class at 1e-9, until #6) would panic `measure`.
+    /// report is the deterministic pass only. The fixtures' pins hold at the
+    /// default, so timing at another tolerance has no baseline to read
+    /// against; and a cell that errors there — the #2 class at 1e-9, once
+    /// #6 adds those repros as fixtures — would panic `measure`.
     gap_tol: ?f64 = null,
 };
 
@@ -144,15 +145,16 @@ fn report(comptime Base: type, init: std.process.Init, opts: Opts) !void {
     // "truncated, exit 0" would be worse than the failure this softens.
     defer out.flush() catch {};
 
-    // `--inject-tol` overrides the current side regardless of `--gap-tol`.
-    const base_tol: f64 = opts.gap_tol orelse bc.GAP_TOL;
-    const cur_tol: f64 = if (opts.inject_tol) INJECT_GAP_TOL else base_tol;
+    // Both sides solve at `tol`; `--inject-tol` overrides the current side
+    // regardless of `--gap-tol`.
+    const tol: f64 = opts.gap_tol orelse bc.GAP_TOL;
+    const cur_tol: f64 = if (opts.inject_tol) INJECT_GAP_TOL else tol;
     const cur_mult: u32 = if (opts.inject_2x) 2 else 1;
 
     const Cur = bc.Side(cur);
 
     var side_cur = Cur{ .gpa = gpa, .io = io, .gap_tol = cur_tol };
-    var side_base = Base{ .gpa = gpa, .io = io, .gap_tol = base_tol };
+    var side_base = Base{ .gpa = gpa, .io = io, .gap_tol = tol };
 
     // Self-describing: a local report and a CI report must be comparable, and
     // the invariant that travels between machines is the ratio, not the µs.
@@ -181,7 +183,7 @@ fn report(comptime Base: type, init: std.process.Init, opts: Opts) !void {
         const b = side_base.metrics(entry.case.points);
         tally_cur.add(a);
         tally_base.add(b);
-        shift.add(entry.name, null, a, b);
+        shift.add(entry.name, a, b);
         if (!bc.differs(a, b)) continue;
         n_diff += 1;
         try bc.writeDiff(out, entry.name, a, b);
@@ -196,13 +198,19 @@ fn report(comptime Base: type, init: std.process.Init, opts: Opts) !void {
     try out.print("  gap shift : {f}\n", .{shift});
     try out.print("\n", .{});
 
-    if (opts.gap_tol != null) {
+    if (opts.gap_tol == null) {
+        try timingSection(out, &side_cur, &side_base, cur_mult);
+    } else {
         try out.print("timing: skipped under --gap-tol (see the header)\n", .{});
-        try out.flush();
-        return;
     }
 
-    // ---- timing, paired and interleaved ---------------------------------
+    // Not redundant with the `defer` above: this is the one that reports a
+    // write failure instead of swallowing it.
+    try out.flush();
+}
+
+/// The timing section: paired and interleaved, over `TIMING_CASES`.
+fn timingSection(out: *std.Io.Writer, side_cur: anytype, side_base: anytype, cur_mult: u32) !void {
     try out.print("timing (min of {d} reps, µs per solve)\n", .{bc.N_REPS});
     try out.print("{s}\n", .{bc.timing_header});
 
@@ -212,18 +220,14 @@ fn report(comptime Base: type, init: std.process.Init, opts: Opts) !void {
         side_cur.pts = case.points;
         side_base.pts = case.points;
 
-        bc.warmUp(&side_cur);
-        bc.warmUp(&side_base);
+        bc.warmUp(side_cur);
+        bc.warmUp(side_base);
 
         // Calibrated AFTER warm-up, so the probes measure warm solves, and
         // from the baseline side so both sides use the same batch.
-        const batch = bc.calibrate(&side_base);
+        const batch = bc.calibrate(side_base);
 
-        const t = bc.pairedRun(&side_cur, &side_base, batch, cur_mult, &samples_cur, &samples_base);
+        const t = bc.pairedRun(side_cur, side_base, batch, cur_mult, &samples_cur, &samples_base);
         try bc.writeTiming(out, case.name, t);
     }
-
-    // Not redundant with the `defer` above: this is the one that reports a
-    // write failure instead of swallowing it.
-    try out.flush();
 }

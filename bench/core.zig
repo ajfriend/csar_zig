@@ -180,8 +180,19 @@ pub fn pairedRun(
 /// cannot drift apart without a test or compile failure.
 pub const OutcomeTag = enum { converged, infeasible, did_not_converge };
 
+/// The one place a status string becomes an `OutcomeTag`; `null` is an
+/// `@errorName` from a failed solve. `isOutcome`, `Tally.add` and
+/// `isConverged` all go through it, so they cannot disagree.
+fn tagOf(status: []const u8) ?OutcomeTag {
+    return std.meta.stringToEnum(OutcomeTag, status);
+}
+
 pub fn isOutcome(status: []const u8) bool {
-    return std.meta.stringToEnum(OutcomeTag, status) != null;
+    return tagOf(status) != null;
+}
+
+fn isConverged(m: Metrics) bool {
+    return tagOf(m.status) == .converged;
 }
 
 /// One side's result for one case. `status` carries an `@errorName` when
@@ -218,10 +229,9 @@ pub const Tally = struct {
     min_gap: f64 = std.math.inf(f64),
 
     pub fn add(self: *Tally, m: Metrics) void {
-        // Anything `OutcomeTag` does not name is an @errorName from a failed
-        // solve. A new solver outcome cannot land here silently: the test
+        // A new solver outcome cannot land in `errored` silently: the test
         // that pins `OutcomeTag` to the real union fails first (see there).
-        const tag = std.meta.stringToEnum(OutcomeTag, m.status) orelse {
+        const tag = tagOf(m.status) orelse {
             self.errored += 1;
             return;
         };
@@ -252,39 +262,29 @@ pub const Tally = struct {
 /// on purpose (it moves without meaning a behavioural change), so this is
 /// where "the gaps shifted by at most X" becomes a number — for the PR body,
 /// not a gate (#18). `--aa` reads zero.
-///
-/// `idx` names a cell inside a batch (#37); `null` for a fixture.
 pub const GapShift = struct {
     max: f64 = 0,
     name: []const u8 = "",
-    idx: ?usize = null,
-    /// Rows considered, so "0 on nothing" and "0 on 60 rows" read differently.
+    /// Rows considered, so "0 over 3 rows" and "0 over 60 rows" read differently.
     rows: u32 = 0,
 
-    pub fn add(self: *GapShift, name: []const u8, idx: ?usize, a: Metrics, b: Metrics) void {
-        if (!isConverged(a) or !isConverged(b) or differs(a, b)) return;
+    pub fn add(self: *GapShift, name: []const u8, a: Metrics, b: Metrics) void {
+        // `differs` false implies equal statuses, so one side's tag decides.
+        if (differs(a, b) or !isConverged(a)) return;
         self.rows += 1;
         const d = @abs(a.gap - b.gap);
         if (d > self.max) {
             self.max = d;
             self.name = name;
-            self.idx = idx;
         }
     }
 
     /// zig's `{f}` formatting hook.
     pub fn format(self: GapShift, w: *std.Io.Writer) std.Io.Writer.Error!void {
-        if (self.rows == 0) return w.print("no rows converged on both sides", .{});
-        if (self.max == 0) return w.print("none over {d} rows", .{self.rows});
-        try w.print("max |Δgap| {e:.2} on {s}", .{ self.max, self.name });
-        if (self.idx) |i| try w.print("[{d}]", .{i});
-        try w.print(" ({d} rows)", .{self.rows});
+        try w.print("max |Δgap| {e:.2} over {d} rows", .{ self.max, self.rows });
+        if (self.max > 0) try w.print(" ({s})", .{self.name});
     }
 };
-
-fn isConverged(m: Metrics) bool {
-    return std.meta.stringToEnum(OutcomeTag, m.status) == .converged;
-}
 
 /// The deterministic-diff predicate: the tool's contract, consumed by #5, #6
 /// and #9 as "an empty deterministic diff".
