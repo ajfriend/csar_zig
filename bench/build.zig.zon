@@ -14,8 +14,8 @@
         // archive): zig dedupes identical pins into one module, which would
         // make a layout-faithful A/A measure one copy against itself. See #22.
         .csar_base = .{
-            .url = "https://github.com/ajfriend/csar_zig/archive/refs/tags/v0.3.0.tar.gz",
-            .hash = "csar-0.3.0-bkw2IYyhAgCoRYjmp9P0BKU6f7XmBux79WHiC5v3H9Dw",
+            .url = "https://github.com/ajfriend/csar_zig/archive/refs/tags/v0.4.0.tar.gz",
+            .hash = "csar-0.4.0-bkw2IcKxAgDO23w2nSTr23k_ooyPbwf3-X15tSbD6rOG",
         },
     },
     .paths = .{ "build.zig", "build.zig.zon", "ab.zig", "core.zig" },
