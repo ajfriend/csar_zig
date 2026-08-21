@@ -279,7 +279,7 @@ re-exporting them through the public API.
 | `tests/solver_test.zig` | Synthetic property/contract tests of `solve` (e.g. the `max_outer` DNC contract). No fixture dependency. |
 | `tests/extreme_aspect_test.zig` | Rotation-invariance, coplanarity, near-degenerate edge-case tests on synthesized inputs. Also hits internal helpers (`acceptBUpdate`, `convexHull2d`) via filesystem imports for branches not reachable through `solve` for all inputs. |
 | `tests/cases_test.zig` | Tests driven by the case manifest: cases.byName lookup, per-case outcome dispatch, Q/sigma shape invariants on np100. |
-| `tests/batches_test.zig` | The batch contract: per batch, tally every cell (`bench/core.zig`'s `Side`/`Tally`) and require all of them converged. A failure prints the tally and names the batch. |
+| `tests/batches_test.zig` | The batch contract: per batch, tally every cell (`bench/core.zig`'s `Side`/`Tally`) and require all of them converged. A failure prints the tally and names the batch. Slow tier (`-Dslow`): 8000 Debug solves guarding a gate property. |
 | `cases/cases.zig` | Comptime manifest over `cases/zon/*.zon` — defines the `Case` schema and the `all` list — plus `GAP_TOL` and `pin(Options)`, the solver options every pin in the corpus is taken under (the tests, `bench/core.zig` and `examples/bench.zig` take them from here rather than carrying copies). Exposed as the `cases` build module; imported by the tests, the examples and `bench/`. Top-level because it is a shared corpus, not test code. |
 | `cases/zon/*.zon` | Per-case fixture: description + tags + points + expected outcome. |
 | `cases/batches.zig`, `cases/batches/*.{zon,ids}` | Batch fixtures: ~1000 distinct cells of one DGGS family at one resolution (H3 r9/r15; S2 and A5 count-matched to H3 r9/r12/r15) — the timing workload for `csar-ab` (#37); the contract (every cell converges) and its rationale are in `batches.zig`'s header. The `.ids` is the portable artifact; `just surveys::batches-gen` regenerates both from `scripts/batches/gen_batches.py` (dggs_compare's sampler and bindings), `just surveys::batches-verify` checks the committed `.zon` against the `.ids` by vertex chord distance — on demand, not in `just ci`, so the family wheels stay out of CI. The batches are plain comptime `@import`s like the cases, measured at +0.25 s cold `zig build test`, +130 MB compiler peak RSS, +2 MB in the two binaries that reference them (test, `csar-ab`), examples unchanged. That scales with the data: at ~10× more cells compiler memory reaches several GB and a runtime loader (`load(allocator)`, callers own the memory) becomes the right shape. |
@@ -395,7 +395,7 @@ Every loop has one lever, each a constant edited in place — no flags:
 
 | loop | cost | lever |
 | --- | --- | --- |
-| `just test` | the batch test's 8000 Debug solves | its tier — behind `-Dslow` if it ever grates |
+| `just test` | ~2.5 s | the batch contract test is slow-tier (`-Dslow`), like the stress tests: a gate property, not an inner-loop one |
 | `just test-slow` | the coverage build's `csar-ab` runs | `BATCHES` / `BATCH_REPS` in `bench/ab.zig` (why: their doc comment) |
 | `just ab` | ~1 s | `N_REPS`, `INTERVAL_TARGET_US` in `bench/core.zig`; `BATCH_REPS` and the unit lists in `bench/ab.zig` |
 
