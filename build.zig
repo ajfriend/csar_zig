@@ -74,8 +74,8 @@ pub fn build(b: *std.Build) void {
     install_coverage_step.dependOn(&b.addInstallArtifact(tests, .{}).step);
 
     // `zig build check`: compile every executable (library, examples,
-    // survey execs) WITHOUT running anything — the CI Build step and
-    // `just check`. Run steps only compile their exe when invoked, so
+    // survey execs) WITHOUT running anything — `just check` and its CI
+    // job. Run steps only compile their exe when invoked, so
     // without this, toolchain churn in examples/scripts is invisible
     // to CI.
     const check_step = b.step("check", "Compile the library and every executable without running");

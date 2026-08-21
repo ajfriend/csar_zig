@@ -26,12 +26,12 @@
 
 | Command | What it does |
 | --- | --- |
-| `just ci` | Everything CI checks that can run on this machine, in the order the `ci` recipe lists. Run before pushing a PR. |
+| `just ci` | Everything CI checks that can run on this machine, in the order the `ci` recipe lists (CI runs each recipe as its own job, in parallel). Run before pushing a PR. |
 | `just test` | Fast test loop — skips long-running randomized stress tests, no coverage gate. Sub-second; the inner-loop iteration command. |
 | `just test-slow` | Full suite + the 100% line-coverage gate under `kcov` over every binary (tests, examples, the A/B harness), built with `-Dcoverage=true` and `-Dslow=true`. ~20s; the pre-commit / CI check. |
 | `just test-selfhosted` | Full suite under zig's self-hosted backend (`-Dllvm=false`). See "Two backends" below. |
-| `just check` | Compile the library and every executable, running nothing (CI's Build step). |
-| `just lint` | Every declaration is referenced (zlinter `no_unused`, its own package under `lint/`) — the check coverage cannot make; see "Coverage". ~5s warm, ~30s the first time (it builds the linter). |
+| `just check` | Compile the library and every executable, running nothing (CI's `check` job). |
+| `just lint` | Every declaration is referenced (zlinter `no_unused`, its own package under `lint/`) — the check coverage cannot make; see "Coverage". The first run builds the linter. |
 | `just consumer-smoke` | Build `scripts/consumer_smoke/` against the tree as a consumer receives it, and print the shipped file list. The only check of the published package rather than the working tree; see "Packaging". |
 | `just bench` | Run the benchmark suite (release-built `ex-bench`) — single-version timing. |
 | `just ab` | A/B the working tree against the pinned baseline, both in one binary. `just ab --aa` calibrates. See "A/B benchmarking" below. |
