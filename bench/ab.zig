@@ -54,7 +54,9 @@
 //! `--aa` cannot see it either: one module against itself shares layout by
 //! construction. The re-pin after each release is the one run with two copies
 //! of the same commit in two layouts; the samples are recorded on #22 (so
-//! far: inside the A/A floor), which also owns a repeatable measure. Treat an
+//! far: inside the A/A floor), which also owns a repeatable measure. Before
+//! attributing a small stable shift to layout, diff the disassembly (dev.md
+//! "Reading a small stable shift" — #52's was a spill, not layout). Treat an
 //! A/B difference near the noise floor as unproven, and prefer a change that
 //! shows up across several cases over one that moves a single case slightly.
 

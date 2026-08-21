@@ -415,6 +415,33 @@ dependency — consumers can't inherit it, and nothing under `bench/` ships
 (see "Packaging"). Reports are for pasting into a PR;
 nothing is written to disk.
 
+### Reading a small stable shift
+
+A ratio shift of ≈1% that is stable across runs, moves several rows the
+same way, and comes with an empty deterministic diff is a change in
+*machine code*, not in the algorithm — and the machine code is available
+to read. Before attributing it to layout (`bench/ab.zig` "Known residual
+bias", #22), diff the disassembly:
+
+1. If the PR has several commits, bisect first: check out each commit's
+   `src/` in turn and re-run `just ab`; the shift usually belongs to one.
+2. Build the ReleaseFast binary at both commits — `git worktree add` each,
+   then `zig build install-coverage -Doptimize=ReleaseFast` (or the bench
+   binary). The build is deterministic, so this reproduces the exact code
+   the report measured.
+3. `nm --size-sort` on both: functions whose size moved are the suspects.
+   `solveTrust` inlines into `_csar.solve`; `acceptBUpdate`, `mveeFw`,
+   `newtonPolish` and `certifyAt` stay out of line.
+4. `objdump -d` the suspect and read the changed loop. A new
+   `ldr`/`str` to `[sp, …]` inside a loop is a spilled loop-carried value:
+   ~4–5 cycles of store-forwarding per iteration, which at 6–10 points × 2
+   cycles is the ~20 ns a 1% batch-row shift represents. Values kept in
+   callee-saved registers across the solver calls are what evict it.
+
+Only if the machine code is identical does layout become the explanation.
+First use: #52, where a collapsed damping struct left `1.0` and a norm
+live across calls and spilled the inlined `computeMoments` accumulator.
+
 ## Examples
 
 Four single-file programs under `examples/`, each wired into
