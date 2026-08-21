@@ -2,7 +2,7 @@ const std = @import("std");
 
 /// The pin, read from the manifest rather than copied into a second
 /// constant, so the report header cannot name a baseline other than the one
-/// the binary measures. The hash carries the version ("csar-0.2.0-...").
+/// the binary measures. The hash carries the version ("csar-X.Y.Z-...").
 const BASELINE_HASH = @import("build.zig.zon").dependencies.csar_base.hash;
 
 pub fn build(b: *std.Build) void {
