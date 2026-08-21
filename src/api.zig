@@ -20,9 +20,9 @@
 //!
 //!   - `Outcome` is a tagged union over what the algorithm *found* on
 //!     the input. Callers switch on it to dispatch — use the certificate,
-//!     ask the user to fix the input, loosen `gap_tol` or raise
-//!     `max_outer` (see `DidNotConverge` for which remedy fits which
-//!     stop mode), etc.
+//!     ask the user to fix the input, loosen `gap_tol`
+//!     (`.precision_floor`) or raise `max_outer` (`.did_not_converge`),
+//!     etc.
 //!     Each variant carries only the data meaningful for it; the type
 //!     system prevents reading `aspectRatio()` etc. on a non-converged
 //!     outcome (you have to switch first and reach it through the
@@ -43,18 +43,10 @@ const Mat3 = linalg.Mat3;
 /// rejects rank-deficient inputs as `InputError.CoplanarInput` even
 /// when the tunable check is disabled, so a `SolveError` is the
 /// library's fault, not the caller's.)
-/// All three variants share the same tolerance-band shape: ulp-level
-/// negatives on PSD-invariant values are float noise and silently
-/// clipped; anything beyond `tol.NEG_GAP` / `tol.PSD_NEG_REL`
-/// propagates as a typed error.
+/// The PSD variants share one tolerance-band shape: ulp-level negatives
+/// on PSD-invariant values are float noise and silently clipped;
+/// anything beyond `tol.PSD_NEG_REL` propagates as a typed error.
 pub const SolveError = error{
-    /// The duality-gap computation produced a meaningfully negative
-    /// value — either the dual certificate is not actually feasible,
-    /// or the log-det was computed on ill-conditioned input. Weak
-    /// duality (`gap ≥ 0`) is a theorem, so this signals a bug.
-    /// ulp-level negatives are float noise and silently ignored;
-    /// anything beyond that propagates as this error.
-    NegativeDualityGap,
     /// `eig2(A_perp)` produced a smaller eigenvalue below the
     /// PSD-noise threshold. A_perp is PSD by construction (it's the
     /// perpendicular block of the dual ellipsoid), so a meaningfully
@@ -115,7 +107,7 @@ pub const SolveOptions = struct {
     /// O(κ(A)·ε) ≈ O(σ_max·ε). For well-conditioned inputs this is far
     /// below the 1e-6 default. But very small, far-from-origin scatters
     /// (e.g. sub-meter DGGS cells at finest resolution, where σ_max ~ 1e9)
-    /// floor at ~1e-4–1e-3, and many will return `.did_not_converge`
+    /// floor at ~1e-4–1e-3, and many will return `.precision_floor`
     /// at the default — correctly, since f64 cannot certify a tighter
     /// bound (the optimal cone axis is a sub-ulp rotation away). WHICH
     /// cells sit above vs below the floor at a tolerance near it is
@@ -124,7 +116,8 @@ pub const SolveOptions = struct {
     /// ratios agree to ~1e-7 regardless).
     /// Raising `max_outer` does NOT help at the floor; pass a looser
     /// `gap_tol` (e.g. 1e-3) for such inputs — the aspect ratio is
-    /// input-precision-limited and accurate regardless of the gap.
+    /// input-precision-limited and accurate regardless of the gap. The
+    /// floor itself is reported on `Uncertified.gap_floor`.
     gap_tol: f64 = 1e-6,
 
     /// Convex-hull preprocessing threshold. If `X.len > n_hull`,
@@ -148,7 +141,8 @@ pub const SolveOptions = struct {
     /// budget counts opening rounds, trust-region iterations (each a
     /// full-precision inner-oracle evaluation) and re-certification
     /// attempts. The solver can also stop BELOW the cap when its merit
-    /// function is stationary — see `DidNotConverge`.
+    /// function is stationary — `.precision_floor` if that is at the
+    /// input's floor, `.did_not_converge` otherwise.
     max_outer: u32 = 100,
 
     /// Solver path selection.
@@ -235,6 +229,11 @@ pub const TrustDiagnostics = struct {
     recert_attempts: u32,
     /// Oracle evaluations where Newton polish bailed.
     polish_failures: u32,
+    /// Certifications whose gap fell below the floating-point error model
+    /// (the one behind `Uncertified.gap_floor`) — impossible for a valid
+    /// certificate, so this reads 0 on every input; nonzero is a bug in
+    /// the duality code, please report it.
+    gaps_below_model: u32,
 };
 
 /// Active-set certificate. `indices` / `lambdas` are paired arrays:
@@ -324,11 +323,12 @@ pub const Infeasible = struct {
     }
 };
 
-/// Solver hit `max_outer` without closing the gap. Last iterate is
-/// available for warm-start / inspection; not a certified cone, so no
-/// `aspectRatio`/`b`/`A` methods. Raw `Q`, `sigma`, `gap`, and
-/// iteration counters are exposed for diagnostics.
-pub const DidNotConverge = struct {
+/// Payload of the two uncertified outcomes, `.did_not_converge` and
+/// `.precision_floor`: the solver stopped without a certificate at
+/// `gap_tol`. Last iterate is available for warm-start / inspection;
+/// not a certified cone, so no `aspectRatio`/`b`/`A` methods. Raw `Q`,
+/// `sigma`, `gap`, and iteration counters are exposed for diagnostics.
+pub const Uncertified = struct {
     /// Q/sigma/gap/cert are one consistent snapshot: the LAST iterate
     /// at which a certificate was computed (the solver may have taken
     /// further uncertified steps before giving up; those are not
@@ -347,6 +347,11 @@ pub const DidNotConverge = struct {
     /// `cert` is empty and Q/sigma carry no information. It is not a
     /// measured gap and can never satisfy any legal `gap_tol`.
     gap: f64,
+    /// The smallest gap this solver's certificate can reach at f64 for
+    /// this input's geometry, from a measured error model (≈ 64·σ_max·ε
+    /// + κ·ε; ~1e-6 for a cell 1e-10 rad across, ~1e-9 for the finest
+    /// DGGS cells). A `gap_tol` below it cannot be met — see `gap_tol`.
+    gap_floor: f64,
     /// Algorithm-specific diagnostics; the tag records which solver
     /// path produced this outcome.
     diag: Diagnostics,
@@ -355,7 +360,7 @@ pub const DidNotConverge = struct {
     cert: Cert,
     allocator: std.mem.Allocator,
 
-    pub fn deinit(self: *DidNotConverge) void {
+    pub fn deinit(self: *Uncertified) void {
         self.allocator.free(self.cert.indices);
         self.allocator.free(self.cert.lambdas);
     }
@@ -374,19 +379,26 @@ pub const Outcome = union(enum) {
     /// points, or the deepest hemisphere's margin is below ~1e-8
     /// (bounded by `Infeasible.residual`; see that doc).
     infeasible: Infeasible,
-    /// The gap did not close, either because the iteration budget
-    /// (`max_outer`) ran out or because the solver reached a stationary point whose certificate stays
-    /// above `gap_tol` (the f64 gap floor; retrying with a larger
-    /// `max_outer` changes nothing there — loosen `gap_tol` instead,
-    /// see its doc). Last certified iterate is available for
-    /// inspection; no certified cone.
-    did_not_converge: DidNotConverge,
+    /// The solver stopped with the gap still above the input's
+    /// `gap_floor`: the iteration budget (`max_outer`) ran out, or the
+    /// trust region went stationary short of the floor. A property of
+    /// the algorithm on this input, not of the precision — raise
+    /// `max_outer`, or inspect `diag`. Last certified iterate is
+    /// available for inspection; no certified cone.
+    did_not_converge: Uncertified,
+    /// `gap_tol` is below what this solver can certify at f64 for this
+    /// input (`Uncertified.gap_floor`), and the iterate is at that
+    /// floor. The cone is as accurate as the input allows; only the
+    /// certificate is missing. Raising `max_outer` changes nothing —
+    /// loosen `gap_tol` (see its doc). Same payload as
+    /// `did_not_converge`.
+    precision_floor: Uncertified,
 
     pub fn deinit(self: *Outcome) void {
         switch (self.*) {
             .converged => |*c| c.deinit(),
             .infeasible => |*i| i.deinit(),
-            .did_not_converge => |*p| p.deinit(),
+            .did_not_converge, .precision_floor => |*p| p.deinit(),
         }
     }
 };

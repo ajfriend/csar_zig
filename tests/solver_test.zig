@@ -5,7 +5,7 @@
 const std = @import("std");
 const csar = @import("../src/root.zig");
 
-test "max_outer cap forces DidNotConverge on any input" {
+test "max_outer cap forces did_not_converge on any input" {
     // Deterministic DNC: an unattainably tight gap_tol with max_outer
     // = 1 guarantees the outer loop hits its cap without closing the
     // gap, regardless of input geometry. Pins the contract that solve

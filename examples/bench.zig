@@ -115,9 +115,9 @@ pub fn main(init: std.process.Init) !void {
             const status_str = switch (lo) {
                 .converged => "ok",
                 .infeasible => "infeas",
-                .did_not_converge => "DNC",
+                .did_not_converge, .precision_floor => @tagName(lo),
             };
-            // Per-variant: only Converged/DidNotConverge carry iteration
+            // Per-variant: only Converged/Uncertified carry iteration
             // counters; Infeasible bails in halfspaceCheck before iterating.
             // Aspect ratio is only meaningful on Converged.
             var outer_iters: u32 = 0;
@@ -129,10 +129,10 @@ pub fn main(init: std.process.Init) !void {
                     polish_failures = c.diag.trust.polish_failures;
                     aspect_ratio = c.aspectRatio();
                 },
-                .did_not_converge => |p| {
+                .did_not_converge, .precision_floor => |p| {
                     outer_iters = p.diag.totalIters();
                     polish_failures = p.diag.trust.polish_failures;
-                    // Uncertified ratio from the last iterate. `DidNotConverge`
+                    // Uncertified ratio from the last iterate. `Uncertified`
                     // intentionally omits an `aspectRatio()` method since the
                     // value isn't certified; compute it inline here.
                     aspect_ratio = p.sigma[2] / p.sigma[1];

@@ -8,6 +8,13 @@
 /// Not tunable — it's geometry, not a knob.
 pub const SIGMA_0: f64 = 1.0 / @sqrt(3.0);
 
+/// Gate for tripwire assertions on invariants the solver checks at
+/// runtime (today: the duality-gap error model, `trust.certify`). Debug
+/// only — what the test suite and the coverage gate run. A bare
+/// `std.debug.assert` would compile to `unreachable` in ReleaseFast, so
+/// every tripwire goes behind this gate.
+pub const debug_checks = @import("builtin").mode == .Debug;
+
 /// Algorithm tuning parameters — internal knobs tuned together for the
 /// solver to converge cleanly. Not exposed to callers because they
 /// interact subtly: changing one without coordinated changes to others
@@ -267,8 +274,10 @@ pub const tol = struct {
     /// block), so a factorization failure signals extreme scaling,
     /// not a routine state.
     pub const NEWTON_RANGE_PIVOT_MIN: f64 = 1e-14;
-    /// Hard floor for SolveError.NegativeDualityGap (FP noise below, bug above).
-    pub const NEG_GAP: f64 = 1e-10;
+    /// Coefficient of the σ_max·ε (evaluation-noise) term of the gap's
+    /// error model — see `csar.gapFloor` for the model and its
+    /// measurements.
+    pub const NEG_GAP_SIGMA: f64 = 64.0;
     /// FW inner loops: minimum w_i to participate in the pairwise-swap candidate set.
     /// Distinct from (and looser than) algo.ACTIVE_THRESH, which is the *cert* cutoff.
     pub const WEIGHT_ACTIVE: f64 = 1e-14;
@@ -304,13 +313,13 @@ pub const tol = struct {
     /// NOT a measured gap: gapConverged never accepts it (regardless
     /// of gap_tol), gap_tol validation rejects tolerances at or above
     /// it, and outcomes carrying it have an empty cert and
-    /// uninformative Q/sigma (documented on DidNotConverge.gap).
+    /// uninformative Q/sigma (documented on Uncertified.gap).
     pub const GAP_UNCERTIFIED: f64 = 1e30;
     /// Underflow floor: pivot / scale / log argument.
     pub const UNDERFLOW: f64 = 1e-300;
     /// Relative cutoff for "FP noise" vs. "theorem violation" on values
     /// that should be ≥ 0 by PSD invariant (eigenvalues of A_perp,
     /// det of Minv). Below the threshold ⇒ silent clip; above ⇒ loud
-    /// SolveError. Mirrors NEG_GAP's role for the gap.
+    /// SolveError.
     pub const PSD_NEG_REL: f64 = 1e-12;
 };

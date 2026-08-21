@@ -4,11 +4,12 @@
 //! Run with:
 //!   zig build ex-status
 //!
-//! `solve` returns three distinct outcomes; only `.converged` produces
-//! a usable cone. `.infeasible` and `.did_not_converge` are still
-//! valid library responses — the caller dispatches on the union tag
-//! to decide what to do. Structural input problems (too few points,
-//! rank-deficient X) propagate as `InputError` via `try`.
+//! `solve` returns four distinct outcomes; only `.converged` produces
+//! a certified cone. `.infeasible`, `.did_not_converge` and
+//! `.precision_floor` are still valid library responses — the caller
+//! dispatches on the union tag to decide what to do. Structural input
+//! problems (too few points, rank-deficient X) propagate as `InputError`
+//! via `try`.
 
 const std = @import("std");
 const csar = @import("csar");
@@ -25,9 +26,21 @@ pub fn main(init: std.process.Init) !void {
     //    all, so the Farkas check reports infeasibility before iterating.
     // 3. An irregular triple with an iteration budget of one and a
     //    tolerance below the f64 floor: the budget runs out first.
+    // 4. A hexagon ~4e-10 rad across (an H3 r15-scale cell far from the
+    //    origin): its certificate's f64 floor is ~1e-6, above the default
+    //    tolerance, so the cone is found but cannot be certified. (The
+    //    same points are `HEX1` in tests/neg_gap_test.zig.)
     const octant = [_][3]f64{ .{ 1, 0, 0 }, .{ 0, 1, 0 }, .{ 0, 0, 1 } };
     const antipodal = [_][3]f64{ .{ 1, 0, 0 }, .{ -1, 0, 0 }, .{ 0, 1, 0 } };
     const irregular = [_][3]f64{ .{ 1, 0, 0 }, .{ 0.1, 0.97, 0.2 }, .{ -0.2, 0.3, 0.93 } };
+    const tiny_hex = [_][3]f64{
+        .{ 0.6746833027403286, 0.7369617968776201, -0.04110658032859652 },
+        .{ 0.674683302801862, 0.7369617968319514, -0.04110658013740184 },
+        .{ 0.6746833029130066, 0.736961796730196, -0.04110658013746045 },
+        .{ 0.674683302962618, 0.7369617966741094, -0.04110658032871372 },
+        .{ 0.6746833029010845, 0.7369617967197781, -0.041106580519908585 },
+        .{ 0.6746833027899399, 0.7369617968215336, -0.04110658051984987 },
+    };
 
     // Solve with default options. Pass `.{}` for sensible defaults;
     // override individual fields with named-field syntax:
@@ -42,6 +55,7 @@ pub fn main(init: std.process.Init) !void {
     try report(allocator, &octant, .{});
     try report(allocator, &antipodal, .{});
     try report(allocator, &irregular, .{ .max_outer = 1, .gap_tol = 1e-20 });
+    try report(allocator, &tiny_hex, .{});
 }
 
 fn report(allocator: std.mem.Allocator, points: []const [3]f64, opts: csar.SolveOptions) !void {
@@ -73,8 +87,18 @@ fn report(allocator: std.mem.Allocator, points: []const [3]f64, opts: csar.Solve
             // last iterate is in p.Q / p.sigma but isn't a verified
             // certificate; p.gap holds the last computed gap (not
             // certified to be ≤ `gap_tol`, unlike `Converged.gap`).
+            // Remedy: raise `max_outer`.
             std.debug.print("did_not_converge: hit max iterations ({d})\n", .{p.diag.totalIters()});
             std.debug.print("  last gap = {e:.3}\n", .{p.gap});
+        },
+        .precision_floor => |p| {
+            // The iterate is at the f64 floor for this input: the gap
+            // cannot be certified below p.gap_floor, and `gap_tol` asked
+            // for less. Same payload as `.did_not_converge`; the aspect
+            // ratio from p.sigma is as accurate as the input allows.
+            // Remedy: loosen `gap_tol` (raising `max_outer` does nothing).
+            std.debug.print("precision_floor: gap_tol {e:.0} is below this input's floor {e:.1}\n", .{ opts.gap_tol, p.gap_floor });
+            std.debug.print("  last gap = {e:.3}, uncertified aspect ratio = {d:.6}\n", .{ p.gap, p.sigma[2] / p.sigma[1] });
         },
     }
 }

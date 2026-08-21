@@ -57,7 +57,7 @@ pub const ResolvedView = struct { converged: bool, Q: csar.Mat3, diag: csar.Diag
 pub fn resolvedView(o: *const csar.Outcome) ?ResolvedView {
     return switch (o.*) {
         .converged => |c| .{ .converged = true, .Q = c.Q, .diag = c.diag },
-        .did_not_converge => |d| .{ .converged = false, .Q = d.Q, .diag = d.diag },
+        .did_not_converge, .precision_floor => |d| .{ .converged = false, .Q = d.Q, .diag = d.diag },
         .infeasible => null,
     };
 }

@@ -5,6 +5,12 @@ commit that carries the full detail.
 
 ## [Unreleased]
 
+- **Breaking:** `Outcome` gains `.precision_floor` (the tolerance is below
+  the input's f64 floor — loosen `gap_tol`), `.did_not_converge` now means
+  the budget ran out, both carry `Uncertified` (was `DidNotConverge`), and
+  `SolveError.NegativeDualityGap` is removed. Details in
+  [#53](https://github.com/ajfriend/csar_zig/pull/53).
+
 ## [0.3.0]
 
 - **Breaking:** the original alternating solver is removed — `Method.alternating`,

@@ -18,4 +18,5 @@ comptime {
     _ = @import("newton_polish_test.zig");
     _ = @import("halfspace_margin_test.zig");
     _ = @import("outcome_consistency_test.zig");
+    _ = @import("neg_gap_test.zig");
 }
