@@ -339,6 +339,9 @@ are PRs, the rest are not commits.
    rewrites the URL and hash in place (the comment block survives), then
    `zig build --build-file bench/build.zig check`. The harness always measures
    against the last release (the `csar_base` comment in `bench/build.zig.zon`).
+   Before anything touching `src/` merges after the tag: run `just ab` and
+   `just ab --aa`, attach both to the PR, and record the ratios on #22 — the
+   A/B is then a layout-bias sample (`bench/ab.zig` "Known residual bias").
 6. ajfriend/csar_py: the same `zig fetch --save=csar <tarball URL>` in its
    `src/zig/`, plus whatever the release changed in the Python surface. This
    is also the only build against the *published* tarball (#17's check 2 is
