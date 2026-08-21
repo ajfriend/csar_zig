@@ -51,12 +51,15 @@
 //! the number of runs*, and there layout effects swamped the difference
 //! between -O2 and -O3.
 //!
-//! `--aa` cannot see it either: identical pins dedupe to one module, so A/A
-//! compares one copy against itself and shares layout by construction.
-//! Measuring it needs two distinct copies of the *same* commit — two pins that
-//! hash differently — tracked in #22. Until then, treat an A/B difference near
-//! the noise floor as unproven, and prefer a change that shows up across
-//! several cases over one that moves a single case slightly.
+//! `--aa` cannot see it either: it runs one module against itself and shares
+//! layout by construction. Measuring it needs two distinct copies of the
+//! *same* commit, which the re-pin after each release provides for one run:
+//! the path dependency and the fresh tarball are the same code in two
+//! layouts. One sample so far — at the v0.3.0 re-pin, every row read
+//! 0.995–1.002, inside the A/A floor on this host. A repeatable mechanism
+//! (a second pin slot) and whether one sample is enough are #22's. Treat an
+//! A/B difference near the noise floor as unproven, and prefer a change that
+//! shows up across several cases over one that moves a single case slightly.
 
 const std = @import("std");
 const bc = @import("core.zig");
@@ -64,6 +67,14 @@ const build_options = @import("build_options");
 const cur = @import("cur");
 const base = @import("base");
 const cases = @import("cases");
+
+// Two copies, not one: if zig ever resolved the path dependency and the
+// pinned tarball to a single module, every A/B would measure one copy
+// against itself (the dedupe `build.zig.zon` warns about) and read 1.000
+// by construction. Distinct modules declare distinct types.
+comptime {
+    std.debug.assert(cur.Outcome != base.Outcome);
+}
 
 /// What the report works on: a named list of cells. The deterministic pass
 /// diffs a unit as one group (one tally per side, one gap-shift line, the
