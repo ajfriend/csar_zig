@@ -414,9 +414,9 @@ pub const GAP_TOL = cases.GAP_TOL;
 /// This is the *default* adapter, for when both versions share an API.
 /// Anything with the same two methods can stand in for a side — which is how
 /// a baseline with a different API gets shimmed, in `ab.zig`, without touching
-/// this module (a single field the baseline lacks is cheaper to read with a
-/// `@hasField` fallback here — `belowModel`). Either is dead once the pin
-/// moves past the change.
+/// this module (or, for a single missing field or variant, a `@hasField` /
+/// `inline else` fallback here — the 0.3.0→0.4.0 pin used both). Either is
+/// dead once the pin moves past the change.
 pub fn Side(comptime lib: type) type {
     return struct {
         const Self = @This();
@@ -457,11 +457,10 @@ pub fn Side(comptime lib: type) type {
                 return .{ .status = @errorName(e) };
             };
             defer o.deinit();
-            // @tagName, not a literal: the status is the library's own
-            // spelling, which the suite pins `OutcomeTag` to. The uncertified
-            // variants are an `inline else` prong rather than named because
-            // the pinned baseline predates `.precision_floor` — the same
-            // skew `belowModel` absorbs; both go at the same re-pin.
+            // @tagName, not a literal: this switch is exhaustive over the real
+            // union, so a new outcome variant is a compile error HERE, and the
+            // status it produces is the library's own spelling — which the
+            // suite pins `OutcomeTag` to.
             const status = @tagName(o);
             return switch (o) {
                 .converged => |c| .{
@@ -472,7 +471,7 @@ pub fn Side(comptime lib: type) type {
                     .below_model = belowModel(c.diag),
                 },
                 .infeasible => .{ .status = status },
-                inline else => |p| .{
+                .did_not_converge, .precision_floor => |p| .{
                     .status = status,
                     .iters = p.diag.totalIters(),
                     .ar = p.sigma[2] / p.sigma[1],
@@ -482,12 +481,9 @@ pub fn Side(comptime lib: type) type {
             };
         }
 
-        /// `TrustDiagnostics.gaps_below_model`, or 0 for a library version
-        /// that predates it. Drop the `@hasField` once the pin moves past
-        /// v0.4.0.
-        fn belowModel(diag: anytype) u32 {
+        fn belowModel(diag: lib.Diagnostics) u32 {
             return switch (diag) {
-                .trust => |d| if (@hasField(@TypeOf(d), "gaps_below_model")) d.gaps_below_model else 0,
+                .trust => |d| d.gaps_below_model,
             };
         }
 
