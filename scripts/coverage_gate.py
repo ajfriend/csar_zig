@@ -44,6 +44,8 @@ RUNS = [
     ('bench/zig-out/bin/csar-ab', ['--aa'], True),
     ('bench/zig-out/bin/csar-ab', ['--inject-2x'], True),
     ('bench/zig-out/bin/csar-ab', ['--inject-tol'], True),
+    ('bench/zig-out/bin/csar-ab', ['--gap-tol=1e-9'], True),
+    ('bench/zig-out/bin/csar-ab', ['--gap-tol=abc'], False),
     ('bench/zig-out/bin/csar-ab', ['--no-such-flag'], False),
 ]
 INSTALL_DIRS = ['zig-out/bin', 'bench/zig-out/bin']  # every binary here must be in RUNS

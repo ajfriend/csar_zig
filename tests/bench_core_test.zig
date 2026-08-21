@@ -100,14 +100,52 @@ test "calibrate: the batch comes from the min of the probes" {
 
 test "Tally counts each outcome, and anything unrecognised as an error" {
     var t: bc.Tally = .{};
-    t.add(.{ .status = "converged" });
-    t.add(.{ .status = "converged" });
+    t.add(.{ .status = "converged", .gap = 3e-8 });
+    t.add(.{ .status = "converged", .gap = -1e-9 });
     t.add(.{ .status = "infeasible" });
-    t.add(.{ .status = "did_not_converge" });
+    t.add(.{ .status = "did_not_converge", .gap = -5.0 }); // not converged: does not count
     // An @errorName from a failed solve — the reason `status` is a string.
     t.add(.{ .status = "NegativeDualityGap" });
 
-    try std.testing.expectFmt("2 converged / 1 DNC / 1 infeasible / 1 errored", "{f}", .{t});
+    // min gap is over converged entries only, and keeps its sign.
+    try std.testing.expectFmt("2 converged / 1 DNC / 1 infeasible / 1 errored / min gap -1.00e-9", "{f}", .{t});
+}
+
+test "Tally: min gap is inf when nothing converged" {
+    var t: bc.Tally = .{};
+    t.add(.{ .status = "infeasible" });
+    try std.testing.expectFmt("0 converged / 0 DNC / 1 infeasible / 0 errored / min gap inf", "{f}", .{t});
+}
+
+test "GapShift: identical sides count as a row and do not move" {
+    // What --aa sees on every row.
+    var s: bc.GapShift = .{};
+    s.add("ico_00", converged, converged);
+    try std.testing.expectFmt("max |Δgap| 0.00e0 over 1 rows", "{f}", .{s});
+}
+
+test "GapShift: the max is over rows the diff does not flag" {
+    var s: bc.GapShift = .{};
+
+    // Counted: same status/iters/AR, gaps 2e-9 apart.
+    var moved = converged;
+    moved.gap = 3e-9;
+    s.add("hex", converged, moved);
+
+    // Not counted: flagged by `differs` (iters moved) — its gap belongs to
+    // that row, however large.
+    var flagged = converged;
+    flagged.iters = 4;
+    flagged.gap = 1.0;
+    s.add("np100", converged, flagged);
+
+    // Not counted: not converged on both sides.
+    var dnc = converged;
+    dnc.status = "did_not_converge";
+    dnc.gap = 1.0;
+    s.add("ha_12", converged, dnc);
+
+    try std.testing.expectFmt("max |Δgap| 2.00e-9 over 1 rows (hex)", "{f}", .{s});
 }
 
 /// A scripted stand-in for "run `count` solves and report the elapsed µs".
