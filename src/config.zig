@@ -19,12 +19,10 @@ pub const algo = struct {
     /// Newton polish + gap check.
     pub const FW_PER_NEWTON: u32 = 2;
 
-    /// Damping curve for the b-update: shrink alpha when |c| grew,
-    /// grow when |c| shrank, bounded in [DAMP_MIN, DAMP_MAX].
+    /// The opening loop's axis step is halved when |c| grew since the
+    /// previous cycle (trust.zig; it ticks twice, so this is the whole
+    /// damping story).
     pub const DAMP_SHRINK: f64 = 0.5;
-    pub const DAMP_GROW: f64 = 1.2;
-    pub const DAMP_MIN: f64 = 0.05;
-    pub const DAMP_MAX: f64 = 1.0;
 
     /// Support-set membership cutoff: a point counts as active (kept in
     /// the `Info.cert`, in the constructed dual `Z`, and — load-bearing —
@@ -71,7 +69,6 @@ pub const algo = struct {
     pub const FEAS_MARGIN: f64 = 1e-8;
     pub const MAX_BACKTRACKS: u32 = 30;
 
-
     /// Sparse Frank-Wolfe weight initialization, gated on input size.
     ///
     /// The MVEE inner solve starts from a weight vector and lets FW move mass
@@ -106,7 +103,6 @@ pub const algo = struct {
     /// weights to exactly zero could remove the regime split entirely.
     pub const SEED_SPARSE_MIN_POINTS: usize = 16;
     pub const SEED_SPARSE_K: usize = 5;
-
 };
 
 /// Tuning for the trust solver (`src/trust.zig`, what `SolveOptions.method`

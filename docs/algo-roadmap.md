@@ -359,13 +359,11 @@ zero algorithmic risk; the cost is a major-version API change.
   same release.
 - Changelog entry + major version bump; note the escape hatch (the test
   oracle) for anyone who was selecting `.alternating` deliberately.
-- Follow-up deletions this unlocks (verify unused first): `DampState`,
-  `quasiNewtonAxisDirection`, PRECOND_COND_MIN, AXIS_WARMUP — but the
-  trust path's opening cadence DOES route through them (`trust.zig`
-  constructs a `DampState` and calls `quasiNewtonAxisDirection`, which
-  reads both gates), so these likely stay; check call sites before
-  deleting. (An earlier version of this note claimed the cadence uses
-  the plain damped axis step — it does not.)
+- Follow-up deletions this unlocked: `DampState` and the `DAMP_GROW` /
+  `DAMP_MIN` / `DAMP_MAX` knobs went in #31 — the trust path's opening
+  cadence ticks the controller exactly twice, so a two-line rule
+  reproduces it bit for bit (`quasiNewtonAxisDirection`,
+  PRECOND_COND_MIN and AXIS_WARMUP had already gone with the path).
 
 ### 10. Unify the eager/OPEN_ROUNDS and RECERT phases
 

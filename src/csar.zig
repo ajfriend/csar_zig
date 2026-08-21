@@ -29,7 +29,6 @@ const algo = config.algo;
 const tol = config.tol;
 const SIGMA_0 = config.SIGMA_0;
 
-
 const linalg = @import("linalg.zig");
 const Vec2 = linalg.Vec2;
 const Vec3 = linalg.Vec3;
@@ -96,25 +95,6 @@ pub inline fn computeMoments(Ps: []const [2]f64, w: []const f64, s_scale: f64) M
     }
     return .{ .center = center_s.scale(s_scale), .M = M_s.scale(s_scale * s_scale) };
 }
-
-/// Damping controller for the axis update. Shrinks the step when |c|
-/// grew, grows it when |c| shrank, bounded in [algo.DAMP_MIN, algo.DAMP_MAX].
-/// (`pub`: used by `trust.zig`'s opening rounds.)
-pub const DampState = struct {
-    alpha: f64 = 1.0,
-    prev_c_norm: f64 = 1e30,
-
-    pub inline fn tick(self: *DampState, c_norm: f64) void {
-        if (c_norm > self.prev_c_norm) {
-            self.alpha *= algo.DAMP_SHRINK;
-            if (self.alpha < algo.DAMP_MIN) self.alpha = algo.DAMP_MIN;
-        } else {
-            self.alpha *= algo.DAMP_GROW;
-            if (self.alpha > algo.DAMP_MAX) self.alpha = algo.DAMP_MAX;
-        }
-        self.prev_c_norm = c_norm;
-    }
-};
 
 /// Feasibility-safeguarded b update, fused with the projection that the
 /// next cycle will consume. The raw step b + α·Q·u can walk b out of the
@@ -1036,4 +1016,3 @@ pub fn solve(
         .trust => return trust.solveTrust(allocator, scratch_alloc, prep, opts),
     }
 }
-
