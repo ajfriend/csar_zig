@@ -20,6 +20,8 @@ pub fn build(b: *std.Build) void {
 
     const options = b.addOptions();
     options.addOption([]const u8, "baseline", BASELINE_HASH);
+    // The gate's binary times one batch at one rep (ab.zig, `N_TIMED_BATCHES`).
+    options.addOption(bool, "coverage", coverage);
 
     // Resolved eagerly, so every step here fetches the baseline the first time
     // on a machine: 172 KB, then cached in zig's global cache.

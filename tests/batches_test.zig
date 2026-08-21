@@ -18,9 +18,7 @@ fn checkBatch(name: []const u8, tally: bc.Tally, n_cells: usize) !void {
 test "batches: every cell converges" {
     const side: bc.Side(csar) = .{ .gpa = std.testing.allocator, .io = std.testing.io };
     for (cases.batches.all) |entry| {
-        var tally = bc.Tally{};
-        for (entry.batch.cells) |cell| tally.add(side.metrics(cell));
-        try checkBatch(entry.name, tally, entry.batch.cells.len);
+        try checkBatch(entry.name, side.tally(entry.batch.cells), entry.batch.cells.len);
     }
 }
 

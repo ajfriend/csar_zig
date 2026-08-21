@@ -92,7 +92,11 @@ mode (`RUNS` in the script), each run into its own
 `coverage/NN-<binary>-<args>/` (browse `<binary>/index.html` inside it),
 and merges the runs' line-level reports itself (why not kcov's merge:
 `lines_by_file` in the script). Every installed binary must appear in
-`RUNS`; the script refuses to run otherwise.
+`RUNS`; the script refuses to run otherwise. The A/B harness knows it is
+the gate's binary (`-Dcoverage` reaches it as a `build_options` flag) and
+covers one batch at one rep instead of eight at a hundred: a Debug pass
+over a batch is ~0.4 s, and the gate needs each line once (`N_BATCHES`
+in `bench/ab.zig`; "A/B benchmarking" has the knobs table).
 
 Scope is `INCLUDE_PATTERN` in the script: `src/`, `tests/`, `cases/`,
 `examples/`, `bench/`. A file is measured through whichever binary
@@ -343,9 +347,19 @@ are PRs, the rest are not commits.
 `bench/` is a separate zig package that depends on **both** the working tree
 (`.path = ".."`) and a hash-pinned release, and compiles them into one
 binary. `just ab` measures them side by side: a deterministic diff over every
-fixture (status, iterations and aspect ratio; the certified gap is printed but
-deliberately not compared — see `differs` in `bench/core.zig`), a per-side
-outcome tally, then interleaved timing over a handful of cases.
+fixture and every batch cell (status, iterations and aspect ratio; the
+certified gap is printed but deliberately not compared — see `differs` in
+`bench/core.zig`), grouped — the fixtures as one group, each batch as one —
+with a per-side tally and a gap-shift line per group and differing rows
+capped per group; then interleaved timing in one table, µs per solve, over
+the eight batches (the hot path — `cases/batches.zig`) and the fixtures for
+the regimes batches lack (`np100`, `ha_12`, `near_collinear`, and `hex` as
+the many-passes quantization canary). A batch row is a mean over its ~1000
+cells where a fixture row is one cell: less row noise, the same layout bias
+(below). The `solves` column is how many solves each timed interval spanned
+— the calibrated passes for a fixture, the cell count for a batch. A batch
+is timed only if both sides converged every cell (a DNC cell would time
+`max_outer`); otherwise its row says `skipped`.
 
 One binary rather than two processes is the point: a freshly built binary's
 first launch runs 2–5× slow and that survives warm-up and min-over-reps, so a
@@ -374,8 +388,20 @@ near the noise floor as unproven.
   the smallest certified gap among its converged cases — sign included.
   Numbers for a PR body, not gates (#18).
 - `just ab --inject-2x` / `--inject-tol` — self-tests. The first must report
-  ~2.0, the second must produce deterministic diffs. Without them, a tool that
-  always printed "no change" would pass every other check.
+  ~2.0, the second must produce deterministic diffs (and `skipped` batch rows,
+  since the current side then fails to converge most cells). Without them, a
+  tool that always printed "no change" would pass every other check.
+
+Every loop has one lever, each a constant edited in place — no flags:
+
+| loop | cost | lever |
+| --- | --- | --- |
+| `just test` | the batch test's 8000 Debug solves | its tier — behind `-Dslow` if it ever grates |
+| `just test-slow` | the coverage build's `csar-ab` runs | `N_BATCHES` / `BATCH_REPS` in `bench/ab.zig` (one batch, diffed and timed at one rep, under `-Dcoverage`; a Debug pass over a batch is ~0.4 s) |
+| `just ab` | ~3 s | `N_REPS`, `INTERVAL_TARGET_US` in `bench/core.zig`; the unit lists in `bench/ab.zig` |
+
+If a quick local `just ab` is ever wanted, the `-Dcoverage` `build_options`
+mechanism gives a `-Dquick` for free; not built until someone needs it.
 
 The baseline pin lives in `bench/build.zig.zon`; resolving it fetches once per
 machine and is then cached (why that's fine, rather than lazy: `bench/build.zig`).
