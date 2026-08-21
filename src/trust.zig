@@ -533,7 +533,7 @@ pub fn solveTrust(
         // axis step is always full, the second halves if ‖center‖ grew.
         // That is the whole damping rule only at two cycles — the assert
         // reopens the question the moment either knob moves.
-        comptime std.debug.assert(tc.OPEN_ROUNDS * algo.FW_PER_NEWTON == 2);
+        if (tc.OPEN_ROUNDS * algo.FW_PER_NEWTON != 2) @compileError("the opening loop's damping is collapsed to a two-cycle rule (trust.zig); OPEN_ROUNDS * FW_PER_NEWTON moved off 2");
         var prev_norm: f64 = std.math.inf(f64);
         const max_rounds = @min(tc.OPEN_ROUNDS, opts.max_outer);
         var cycle: u32 = 0;

@@ -57,11 +57,9 @@ cells) — which solve in ~1–2 outer iterations and a few µs. Protect them:
   times slower than steady state, and `bench.zig`'s in-process warm-up does not
   cover it — the penalty survives min-over-reps. Comparing a first launch
   against a warm one invents small-cell regressions that aren't there.
-- **A small, stable ratio shift is not yet a finding.** ≈1%, same direction
-  across rows, results bit-identical: that can be a register-allocation or
-  inlining change as easily as layout noise. Before reasoning about it, diff
-  the disassembly — dev.md "Reading a small stable shift". #52's +1% was a
-  spilled loop accumulator, found that way in under an hour.
+- **A small, stable ratio shift (≈1%, same sign across rows, diff empty) is
+  not yet a finding.** Diff the disassembly before reasoning about it —
+  dev.md "Reading a small stable shift".
 
 When changing the solver, the full check is: `just ci` green (suite + coverage
 gate + both backends where supported) + **`just ab`**, which measures the

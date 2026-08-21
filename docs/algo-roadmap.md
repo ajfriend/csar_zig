@@ -360,7 +360,8 @@ zero algorithmic risk; the cost is a major-version API change.
 - Changelog entry + major version bump; note the escape hatch (the test
   oracle) for anyone who was selecting `.alternating` deliberately.
 - Follow-up deletions: done — `DampState` and the `DAMP_GROW` / `DAMP_MIN` /
-  `DAMP_MAX` knobs in #31; the rest went with the path.
+  `DAMP_MAX` knobs in #52 (closing #31; `DAMP_SHRINK` stays, under
+  `config.trust`); the rest went with the path.
 
 ### 10. Unify the eager/OPEN_ROUNDS and RECERT phases
 

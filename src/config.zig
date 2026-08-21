@@ -109,7 +109,8 @@ pub const algo = struct {
 pub const trust = struct {
     /// Opening rounds after the eager iteration-0 certificate, before
     /// any trust-region work. Each round: FW_PER_NEWTON cheap FW cycles
-    /// with a damped axis step along the centroid, Newton polish +
+    /// with an axis step along the centroid (halved only if ‖c‖ grew —
+    /// DAMP_SHRINK below), Newton polish +
     /// certificate on the last, warm-started from the eager phase's
     /// weights. Motivation: mid-size DGGS cells (H3 r9 class, common A5
     /// cells) certify in 1–2 of these, while the full trust apparatus
