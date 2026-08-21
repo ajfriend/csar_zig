@@ -1,0 +1,29 @@
+name: release-check
+
+# A pushed `v*` tag must equal `build.zig.zon`'s `.version`. It runs after the
+# tag exists, so it is an alarm, not a gate — procedure: dev.md "Releasing".
+# `workflow_dispatch` exists because a tag-triggered workflow cannot be
+# exercised by the PR that adds it: it checks the given tag name against the
+# dispatched ref's `.version`.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag name to check against this ref's .version, e.g. v0.3.0"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  tag-matches-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          tag="${{ inputs.tag || github.ref_name }}"
+          version="$(sed -nE 's/.*\.version = "([^"]+)".*/\1/p' build.zig.zon)"
+          echo "tag $tag, .version $version"
+          test "$tag" = "v$version"
