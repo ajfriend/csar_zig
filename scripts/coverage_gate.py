@@ -11,12 +11,11 @@ pass and cross-checks it against the source markers. Policy, what the
 gate guarantees, and the ledger's meaning: dev.md "Coverage".
 
 Output: the test-run summary line, then one report — the coverage
-line, the exclusion ledger, and on failure the blocks that say why
-(failed runs, ledger mismatch, uncovered lines). The report is also
-written to coverage/summary.txt, which CI posts on the PR green or red,
-and appended to $GITHUB_STEP_SUMMARY when set. Every kcov invocation's
-output lands in zig-out/test-slow.log, in RUNS order, dumped only when
-a run fails.
+line, the exclusion ledger, and on failure the sections that say why
+(failed runs, ledger mismatches, uncovered lines). The report is also
+written to coverage/summary.txt, which CI posts on the PR green or red.
+Every kcov invocation's output lands in zig-out/test-slow.log, in RUNS
+order, dumped only when a run fails.
 
 The runs are independent (one output dir each) and dominate the wall
 time, so they go through a thread pool; each captures its own output
@@ -33,7 +32,6 @@ Run with:  uv run scripts/coverage_gate.py   (after `just test-slow`'s
 two install builds, which use `-Dcoverage=true`).
 """
 
-import os
 import shutil
 import subprocess
 import sys
@@ -78,7 +76,7 @@ EXCLUDE_PATTERN = 'zig-pkg/'
 # future toolchain flags an uncovered doc-comment line, add `///`
 # here with that justification.)
 EXCLUDE_LINE = '=> unreachable,kcov-excl'
-GATE_PERCENT = 100.0
+# The gate is exactly 100%: any uncovered line fails it (dev.md "Coverage exclusions").
 ROOT = str(Path.cwd()) + '/'
 
 
@@ -218,28 +216,24 @@ percent = 100.0 * covered / total if total else 0.0
 uncovered = {f: ns for f, fl in gated.items() if (ns := [n for n, h in sorted(fl.items()) if h == 0])}
 
 
-def block(title, lines):
-    """A titled block of the report; the count in the title, line numbers below."""
-    n = sum(len(ns) for ns in lines.values())
-    return [f'{title}: {n} line{"s" if n != 1 else ""}',
-            *(f'  {rel(f)}: {",".join(map(str, ns))}' for f, ns in sorted(lines.items()))]
+def section(title, rows, count=None):
+    """`title: count`, then the indented rows; nothing when there are none."""
+    return [f'{title}: {len(rows) if count is None else count}', *(f'  {r}' for r in rows)] if rows else []
 
 
-# One report, whatever happened: the coverage line, the exclusion ledger,
-# then only the blocks that apply. `summary.txt` is what CI posts on the
-# PR, green or red, so it must carry the whole verdict.
-kcov_version = subprocess.run(['kcov', '--version'], capture_output=True, text=True).stdout.strip()
+def per_file(lines):
+    return [f'{rel(f)}: {",".join(map(str, ns))}' for f, ns in sorted(lines.items())]
+
+
+kcov_version = run(['kcov', '--version'])[1].splitlines()[-1]
 report = [
     f'csar coverage: {percent:.2f}%  ({kcov_version})',
-    *block('excluded', excluded),
-    *([f'failed runs: {len(failed)}', *(f'  {f}' for f in failed)] if failed else []),
-    *([f'ledger mismatch: {len(problems)}', *(f'  {p}' for p in problems)] if problems else []),
-    *(block('uncovered', uncovered) if uncovered else []),
+    *section('excluded lines', per_file(excluded), sum(map(len, excluded.values()))),
+    *section('failed runs', failed),
+    *section('ledger mismatches', problems),
+    *section('uncovered lines', per_file(uncovered), sum(map(len, uncovered.values()))),
 ]
 text = '\n'.join(report) + '\n'
 SUMMARY.write_text(text)
-if step_summary := os.environ.get('GITHUB_STEP_SUMMARY'):
-    with open(step_summary, 'a') as f:
-        f.write(f'### Coverage gate\n```\n{text}```\n')
 print(text, end='')
-sys.exit(1 if failed or problems or percent < GATE_PERCENT else 0)
+sys.exit(1 if failed or problems or uncovered else 0)

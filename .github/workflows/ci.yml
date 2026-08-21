@@ -62,7 +62,6 @@ jobs:
           enable-cache: false
       - name: Install kcov
         run: sudo apt-get update -qq && sudo apt-get install -y kcov
-      # The gate writes its report to the step summary itself.
       - run: just test-slow
       - name: Upload the gate's log
         # Every kcov invocation's output — for when CI's ledger disagrees
@@ -71,24 +70,24 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: coverage-gate-log
-          path: |
-            zig-out/test-slow.log
-            coverage/summary.txt
+          path: zig-out/test-slow.log
           if-no-files-found: ignore
-      - name: Post the gate's report on the PR
-        # Green or red — a failing gate is when the report matters most. No
-        # report means the build died before the gate ran; then the previous
-        # comment stands (stale, but the job is red).
-        if: always() && github.event_name == 'pull_request' && hashFiles('coverage/summary.txt') != ''
+      - name: Post the gate's report
+        # To the step summary, and on a PR as a comment — green or red, since
+        # a failing gate is when the report matters most. No report means the
+        # gate never measured (build failure, or its own precondition check);
+        # then the previous comment stands, stale, but the job is red.
+        if: always() && hashFiles('coverage/summary.txt') != ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Name the image: the ledger is derived from kcov's line
-          # classification (the report names the kcov build), so if a
-          # runner-image change ever moves it, that shows up here next to
-          # the ledger it changed.
+          # The report names the kcov build; name the image too, the other
+          # thing that can move kcov's line classification and so the ledger.
           { printf '**Coverage gate** (%s; see dev.md "Coverage"):\n```\n' "${ImageOS:-ubuntu}"
             cat coverage/summary.txt
             printf '```\n'
-          } > gate-comment.md
-          gh pr comment "${{ github.event.pull_request.number }}" --edit-last --create-if-none --body-file gate-comment.md
+          } > gate-report.md
+          cat gate-report.md >> "$GITHUB_STEP_SUMMARY"
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            gh pr comment "${{ github.event.pull_request.number }}" --edit-last --create-if-none --body-file gate-report.md
+          fi
