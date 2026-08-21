@@ -20,6 +20,7 @@ const config = @import("config.zig");
 const Vec3 = linalg.Vec3;
 const Mat3 = linalg.Mat3;
 const LU = linalg.LU;
+const algo = config.algo;
 const tol = config.tol;
 
 /// Scratch for `newtonPolish` + `solveBorderedKkt` (active-set Newton's
@@ -196,7 +197,15 @@ fn solveKktRangeSpace(Y: []const Vec3, g: []const f64, delta_w: []f64) bool {
 /// reduced active set (the drop rule below) — so unlike the historical
 /// behavior, weights CAN reach exactly 0 during polish.
 /// Returns false on failure (<3 active, Cholesky breakdown, or KKT singular).
-pub fn newtonPolish(Ql: []const Vec3, w: []f64, active_thresh: f64, max_iter: u32, inner_tol: f64, s: *NewtonScratch) bool {
+///
+/// The active-set cutoff, iteration budget and inner tolerance are the
+/// solver-wide constants (`algo.ACTIVE_THRESH`, `algo.POLISH_MAX_ITER`,
+/// `tol.NEWTON_INNER`): every call site passed exactly those, so they are
+/// read here rather than threaded through each caller.
+pub fn newtonPolish(Ql: []const Vec3, w: []f64, s: *NewtonScratch) bool {
+    const active_thresh = algo.ACTIVE_THRESH;
+    const max_iter = algo.POLISH_MAX_ITER;
+    const inner_tol = tol.NEWTON_INNER;
     const active_idx = s.active_idx;
     var k: usize = 0;
     for (w, 0..) |wi, i| {

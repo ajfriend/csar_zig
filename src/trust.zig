@@ -206,7 +206,7 @@ pub fn evalH(
         if (chk.h >= h_prev - tc.INNER_STALL_REL * (1.0 + @abs(chk.h))) break;
         h_prev = chk.h;
     }
-    const polished = newtonPolish(wb.Ql, wb.w, algo.ACTIVE_THRESH, algo.POLISH_MAX_ITER, tol.NEWTON_INNER, &wb.newton_scratch);
+    const polished = newtonPolish(wb.Ql, wb.w, &wb.newton_scratch);
 
     const ds = designState(wb.Ql, wb.w, s_scale) orelse return null;
     const L = ds.L;
@@ -515,7 +515,7 @@ pub fn solveTrust(
         var s_scale = core.rescaleP(wb.P_buf, wb.Ps);
         core.initWeights(wb.Ps, wb.w);
         core.mveeFw(wb.Ps, algo.FW_PER_NEWTON, 0.0, wb.Ql, wb.w);
-        if (!newtonPolish(wb.Ql, wb.w, algo.ACTIVE_THRESH, algo.POLISH_MAX_ITER, tol.NEWTON_INNER, &wb.newton_scratch)) polish_failures += 1;
+        if (!newtonPolish(wb.Ql, wb.w, &wb.newton_scratch)) polish_failures += 1;
         var m = core.computeMoments(wb.Ps, wb.w, s_scale);
         last_gap = try certifyAt(m.M, Q, b, Xw, &wb);
         b_cert = b;
@@ -551,7 +551,7 @@ pub fn solveTrust(
             core.mveeFw(wb.Ps, 1, 0.0, wb.Ql, wb.w);
             const is_full = (cycle % algo.FW_PER_NEWTON == algo.FW_PER_NEWTON - 1);
             if (is_full) {
-                if (!newtonPolish(wb.Ql, wb.w, algo.ACTIVE_THRESH, algo.POLISH_MAX_ITER, tol.NEWTON_INNER, &wb.newton_scratch)) polish_failures += 1;
+                if (!newtonPolish(wb.Ql, wb.w, &wb.newton_scratch)) polish_failures += 1;
             }
             m = core.computeMoments(wb.Ps, wb.w, s_scale);
             if (is_full) {
@@ -661,7 +661,7 @@ pub fn solveTrust(
         while (recert_attempts < tc.RECERT_MAX and open_iters + tr_iters + recert_attempts < opts.max_outer) {
             recert_attempts += 1;
             core.mveeFw(wb.Ps, 1, 0.0, wb.Ql, wb.w);
-            if (!newtonPolish(wb.Ql, wb.w, algo.ACTIVE_THRESH, algo.POLISH_MAX_ITER, tol.NEWTON_INNER, &wb.newton_scratch)) polish_failures += 1;
+            if (!newtonPolish(wb.Ql, wb.w, &wb.newton_scratch)) polish_failures += 1;
             const m = core.computeMoments(wb.Ps, wb.w, s_scale);
             last_gap = try certifyAt(m.M, Q, b, Xw, &wb);
             b_cert = b;
