@@ -61,8 +61,9 @@ test "a negative gap is the symptom of an infeasible certificate, and the model 
     // Weak duality holds for a feasible pair, so the only way to a gap
     // below the error model is a primal certificate that violates its
     // budget — what `gaps_below_model` counts and Debug asserts on.
-    // Construct one: a regular hexagon, uniform weights (its optimal
-    // design by symmetry), a budget-tight A_perp from `recoverAPerp`, then
+    // Construct one: a regular hexagon, the solver's uniform seed weights
+    // (its optimal design by symmetry), a budget-tight A_perp from
+    // `recoverAPerp`, then
     // that A_perp inflated by (1 + δ). Inflating A shrinks the cone the
     // certificate claims, so −log det A understates the feasible value by
     // 2·log(1+δ) and the gap drops by that much — ~10⁴× the model at
@@ -74,13 +75,13 @@ test "a negative gap is the symptom of an infeasible certificate, and the model 
     const pts = helpers.casePoints("hex");
     const X: []const Vec3 = @ptrCast(pts);
     var b = Vec3.zero;
-    for (X) |x| b = Vec3.lincomb(1.0, b, 1.0, x);
+    for (X) |x| b = b.add(x);
     b = b.normalize();
     const Q = b.orthoBasis();
     const P = try a.alloc([2]f64, X.len);
     try std.testing.expect(halfspace.projectGnomonic(X, b, Q, P, 0.0));
     const w = try a.alloc(f64, X.len);
-    @memset(w, 1.0 / @as(f64, @floatFromInt(X.len)));
+    core.initWeights(P, w); // uniform for ≤ SEED_SPARSE_MIN_POINTS points
     const M = core.computeMoments(P, w, 1.0).M;
     const A_perp = try core.recoverAPerp(P, M);
 

@@ -123,6 +123,8 @@ pub const SolveOptions = struct {
     /// Raising `max_outer` does NOT help at the floor; pass a looser
     /// `gap_tol` (e.g. 1e-3) for such inputs — the aspect ratio is
     /// input-precision-limited and accurate regardless of the gap.
+    /// `DidNotConverge.reason` / `.gap_floor` report the floor per
+    /// input.
     gap_tol: f64 = 1e-6,
 
     /// Convex-hull preprocessing threshold. If `X.len > n_hull`,
@@ -236,8 +238,7 @@ pub const TrustDiagnostics = struct {
     /// Certifications whose gap fell below the floating-point error model
     /// (`csar.gapFloor`). Weak duality makes that impossible for a valid
     /// certificate, so this should read 0 on every input; a nonzero value
-    /// is a bug in the duality code — please report it. Debug builds
-    /// assert on it; the A/B harness sums it over every cell.
+    /// is a bug in the duality code — please report it.
     gaps_below_model: u32,
 };
 
@@ -328,7 +329,9 @@ pub const Infeasible = struct {
     }
 };
 
-/// Solver hit `max_outer` without closing the gap. Last iterate is
+/// The solver stopped without a certificate at `gap_tol` — `reason`
+/// says whether the tolerance is below what this precision can certify
+/// for the input, or the iteration budget ran out. Last iterate is
 /// available for warm-start / inspection; not a certified cone, so no
 /// `aspectRatio`/`b`/`A` methods. Raw `Q`, `sigma`, `gap`, and
 /// iteration counters are exposed for diagnostics.
@@ -351,18 +354,16 @@ pub const DidNotConverge = struct {
     /// `cert` is empty and Q/sigma carry no information. It is not a
     /// measured gap and can never satisfy any legal `gap_tol`.
     gap: f64,
-    /// The smallest gap this precision can certify for this input's
-    /// geometry — the error model in `csar.gapFloor` (≈ 64·σ_max·ε plus
-    /// κ(M)·ε; ~1e-6 for a cell 1e-10 rad across, ~1e-9 for the finest
-    /// DGGS cells). A `gap_tol` below it cannot be met at f64.
+    /// The smallest gap f64 can certify for this input's geometry
+    /// (`csar.gapFloor`; ~1e-6 for a cell 1e-10 rad across, ~1e-9 for
+    /// the finest DGGS cells). A `gap_tol` below it cannot be met.
     gap_floor: f64,
     /// Why the solve stopped, so the remedy is clear:
-    ///   - `.precision_floor`: `gap_tol < gap_floor` — the tolerance asks
-    ///     for more than f64 can certify here. Loosen `gap_tol` (the
-    ///     iterate is typically converged to the floor), or use a higher
-    ///     precision instantiation when one exists (#9).
-    ///   - `.iteration_limit`: the floor was reachable but `max_outer`
-    ///     ran out — raise it, or inspect `diag`.
+    ///   - `.precision_floor`: `gap_tol < gap_floor` and the iterate is
+    ///     at the floor — loosen `gap_tol`; the aspect ratio is already
+    ///     as accurate as the input allows.
+    ///   - `.iteration_limit`: `max_outer` ran out — raise it, or
+    ///     inspect `diag`.
     reason: Reason,
     /// Algorithm-specific diagnostics; the tag records which solver
     /// path produced this outcome.

@@ -938,7 +938,8 @@ pub fn gapConverged(gap: f64, gap_tol: f64) bool {
 /// `tests/neg_gap_test.zig`). Below the bound the solver reports
 /// `did_not_converge` with `reason = .precision_floor`; beyond it the
 /// Debug tripwire fires and `TrustDiagnostics.gaps_below_model` counts.
-/// Written in ε so #9's f128 instantiation inherits it unchanged.
+/// The coefficients are in units of ε; a higher-precision instantiation
+/// (#9) supplies its own `floatEps` and κ.
 pub fn gapFloor(sigma_max: f64, M: Mat2) f64 {
     const e = eig2(M.m).vals;
     const kappa = e[1] / e[0];
@@ -947,10 +948,10 @@ pub fn gapFloor(sigma_max: f64, M: Mat2) f64 {
 
 /// The bug detector: true when a certificate's gap is negative beyond
 /// both the tolerance and the error model — impossible for a valid
-/// certificate. The model is evaluated only on the rare
-/// negative-beyond-tolerance branch, so the certification hot path is
-/// unchanged.
+/// certificate.
 pub fn gapBelowModel(r: GapResult, M: Mat2, gap_tol: f64) bool {
+    // The common path ends here; the model's eig2 runs only on the rare
+    // negative-beyond-tolerance branch.
     if (r.gap >= -gap_tol) return false;
     return r.gap < -gapFloor(r.sigma[1], M);
 }
@@ -962,8 +963,9 @@ pub fn gapBelowModel(r: GapResult, M: Mat2, gap_tol: f64) bool {
 /// and wrap as Converged / DidNotConverge.
 /// `b` MUST be the axis at which `last_gap` was computed: Q's
 /// orthonormality (and the meaning of gap/sigma) depends on v1/v2
-/// being tangent to this exact axis. Callers track a `b_cert`
-/// alongside `last_gap` for this reason.
+/// being tangent to this exact axis. Callers keep the axis and
+/// `last_gap` as one snapshot for this reason; `last_M` is the moment
+/// matrix that certificate was built from, for the error model.
 pub fn buildOutcome(
     allocator: std.mem.Allocator,
     converged: bool,
@@ -973,7 +975,7 @@ pub fn buildOutcome(
     cert_active: []const usize,
     cert_lambdas: []const f64,
     work_to_orig: ?[]const u32,
-    gap_floor: f64,
+    last_M: Mat2,
     gap_tol: f64,
 ) !Outcome {
     const cert = try buildPrimalCert(allocator, cert_active, cert_lambdas, last_gap.cert_n, work_to_orig);
@@ -994,12 +996,19 @@ pub fn buildOutcome(
             .allocator = allocator,
         } };
     } else {
+        // Evaluated here, off the converged path. `.precision_floor`
+        // needs both halves: the tolerance is below the floor AND the
+        // iterate actually reached the floor — a solve that ran out of
+        // budget far from optimum (or never built a certificate: the
+        // sentinel) is an iteration limit whatever the tolerance.
+        const gap_floor = gapFloor(last_gap.sigma[1], last_M);
+        const at_floor = gap_tol < gap_floor and @abs(last_gap.gap) <= gap_floor;
         return .{ .did_not_converge = .{
             .Q = Qmat,
             .sigma = sigma,
             .gap = last_gap.gap,
             .gap_floor = gap_floor,
-            .reason = if (gap_tol < gap_floor) .precision_floor else .iteration_limit,
+            .reason = if (at_floor) .precision_floor else .iteration_limit,
             .diag = diag,
             .cert = cert,
             .allocator = allocator,

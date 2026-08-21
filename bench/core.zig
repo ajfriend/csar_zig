@@ -408,7 +408,9 @@ pub const GAP_TOL = cases.GAP_TOL;
 /// This is the *default* adapter, for when both versions share an API.
 /// Anything with the same two methods can stand in for a side — which is how
 /// a baseline with a different API gets shimmed, in `ab.zig`, without touching
-/// this module. Such a shim is dead once the pin moves past the change.
+/// this module (a single field the baseline lacks is cheaper to read with a
+/// `@hasField` fallback here — `belowModel`). Either is dead once the pin
+/// moves past the change.
 pub fn Side(comptime lib: type) type {
     return struct {
         const Self = @This();
@@ -474,7 +476,8 @@ pub fn Side(comptime lib: type) type {
         }
 
         /// `TrustDiagnostics.gaps_below_model`, or 0 for a library version
-        /// that predates it (the pinned baseline until the next re-pin).
+        /// that predates it. Drop the `@hasField` once the pin moves past
+        /// v0.3.1.
         fn belowModel(diag: anytype) u32 {
             return switch (diag) {
                 .trust => |d| if (@hasField(@TypeOf(d), "gaps_below_model")) d.gaps_below_model else 0,

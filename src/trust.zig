@@ -108,31 +108,46 @@ pub const Buffers = struct {
     }
 };
 
+/// The last certificate, as one consistent snapshot: the gap, the chart
+/// moment matrix it was built from (the error model's κ input), and the
+/// axis (see buildOutcome's contract — TR-loop certification is gated on
+/// pred and the RECERT loop can be budget-skipped, so on DNC the final
+/// axis may be several accepted steps past this one).
+const LastCert = struct { gap: GapResult, M: Mat2, b: Vec3 };
+
 /// Certify a structured iterate: recover the budget-tight A_perp from
-/// the chart moment matrix and run the shared constructed-dual gap.
-/// One recipe for all four certification sites (eager, initial, TR
+/// the chart moment matrix, run the shared constructed-dual gap, record
+/// the snapshot, and return whether it certifies at `gap_tol`. One
+/// recipe for all five certification sites (eager, opening, initial, TR
 /// accept, RECERT); reads the chart buffers (`P_buf`, `w`) that the
 /// preceding oracle/moments computation left in place.
-fn certifyAt(
+///
+/// Also the duality-code bug detector: `core.gapBelowModel` hits are
+/// counted into `TrustDiagnostics.gaps_below_model` and asserted against
+/// in Debug builds — what the test suite and the coverage gate run.
+/// Release builds only count, so a user build returns an Outcome on
+/// every valid input (#6). Those two lines are branch-free so both
+/// execute on every pass (dev.md "Coverage exclusions": collapse, don't
+/// exclude).
+fn certify(
+    last: *LastCert,
+    below_model: *u32,
+    gap_tol: f64,
     M: Mat2,
     Q: Mat3x2,
     b: Vec3,
     Xw: []const Vec3,
     wb: *Buffers,
-) SolveError!GapResult {
+) SolveError!bool {
     const A_perp = try core.recoverAPerp(wb.P_buf, M);
-    return core.dualityGapConstructed(wb.w, b, Xw, A_perp, Q, &wb.gap_scratch, wb.cert_active, wb.cert_lambdas);
-}
-
-/// Run after every certification: count `core.gapBelowModel` hits into
-/// `TrustDiagnostics.gaps_below_model`, and assert none in Debug builds —
-/// what the test suite and the coverage gate run. Release builds only
-/// count: a user build returns an Outcome on every valid input (#6).
-/// Branch-free so both lines execute on every pass (dev.md "Coverage
-/// exclusions": collapse, don't exclude).
-fn noteGap(r: GapResult, M: Mat2, gap_tol: f64, below_model: *u32) void {
-    below_model.* += @intFromBool(core.gapBelowModel(r, M, gap_tol));
-    if (@import("builtin").mode == .Debug) std.debug.assert(below_model.* == 0);
+    last.* = .{
+        .gap = try core.dualityGapConstructed(wb.w, b, Xw, A_perp, Q, &wb.gap_scratch, wb.cert_active, wb.cert_lambdas),
+        .M = M,
+        .b = b,
+    };
+    below_model.* += @intFromBool(core.gapBelowModel(last.gap, M, gap_tol));
+    if (config.debug_checks) std.debug.assert(below_model.* == 0);
+    return core.gapConverged(last.gap.gap, gap_tol);
 }
 
 /// One h-oracle evaluation at a trial axis. `evalH` returns null when
@@ -496,16 +511,9 @@ pub fn solveTrust(
     var recert_attempts: u32 = 0;
     var polish_failures: u32 = 0;
     var gaps_below_model: u32 = 0;
-    var last_M: Mat2 = undefined; // set beside every `last_gap`
     var converged = false;
     var eager_certified = false;
-
-    var last_gap: GapResult = undefined;
-    // Axis at which last_gap was computed (see buildOutcome's contract):
-    // TR-loop certification is gated on pred, and the RECERT loop can be
-    // budget-skipped, so on DNC the final b may be several accepted
-    // steps past the last certificate.
-    var b_cert = b;
+    var last: LastCert = undefined;
 
     // Eager first certificate — two FW steps, one polish, certify —
     // BEFORE any full-precision
@@ -529,11 +537,7 @@ pub fn solveTrust(
         core.mveeFw(wb.Ps, algo.FW_PER_NEWTON, 0.0, wb.Ql, wb.w);
         if (!newtonPolish(wb.Ql, wb.w, &wb.newton_scratch)) polish_failures += 1;
         var m = core.computeMoments(wb.Ps, wb.w, s_scale);
-        last_gap = try certifyAt(m.M, Q, b, Xw, &wb);
-        last_M = m.M;
-        noteGap(last_gap, last_M, opts.gap_tol, &gaps_below_model);
-        b_cert = b;
-        if (core.gapConverged(last_gap.gap, opts.gap_tol)) {
+        if (try certify(&last, &gaps_below_model, opts.gap_tol, m.M, Q, b, Xw, &wb)) {
             converged = true;
             eager_certified = true;
         }
@@ -569,11 +573,7 @@ pub fn solveTrust(
             m = core.computeMoments(wb.Ps, wb.w, s_scale);
             if (is_full) {
                 open_iters += 1;
-                last_gap = try certifyAt(m.M, Q, b, Xw, &wb);
-                last_M = m.M;
-                noteGap(last_gap, last_M, opts.gap_tol, &gaps_below_model);
-                b_cert = b;
-                if (core.gapConverged(last_gap.gap, opts.gap_tol)) converged = true;
+                if (try certify(&last, &gaps_below_model, opts.gap_tol, m.M, Q, b, Xw, &wb)) converged = true;
             }
         }
     }
@@ -589,11 +589,7 @@ pub fn solveTrust(
         cur = evalH(b, Xw, &wb, -std.math.inf(f64)) orelse return SolveError.SingularMoment;
         if (cur.polish_failed) polish_failures += 1;
 
-        last_gap = try certifyAt(cur.moments.M, cur.Q, b, Xw, &wb);
-        last_M = cur.moments.M;
-        noteGap(last_gap, last_M, opts.gap_tol, &gaps_below_model);
-        b_cert = b;
-        converged = core.gapConverged(last_gap.gap, opts.gap_tol);
+        converged = try certify(&last, &gaps_below_model, opts.gap_tol, cur.moments.M, cur.Q, b, Xw, &wb);
     }
 
     // Trust-region state. The model Hessian is per-evaluation (the
@@ -643,11 +639,7 @@ pub fn solveTrust(
         // ≫ gap_tol of remaining descent no certificate can pass. See
         // config.trust.CERT_PRED_FACTOR.
         if (step.pred <= tc.CERT_PRED_FACTOR * opts.gap_tol) {
-            last_gap = try certifyAt(cur.moments.M, cur.Q, b, Xw, &wb);
-            last_M = cur.moments.M;
-            noteGap(last_gap, last_M, opts.gap_tol, &gaps_below_model);
-            b_cert = b;
-            if (core.gapConverged(last_gap.gap, opts.gap_tol)) {
+            if (try certify(&last, &gaps_below_model, opts.gap_tol, cur.moments.M, cur.Q, b, Xw, &wb)) {
                 converged = true;
                 break;
             }
@@ -682,11 +674,7 @@ pub fn solveTrust(
             core.mveeFw(wb.Ps, 1, 0.0, wb.Ql, wb.w);
             if (!newtonPolish(wb.Ql, wb.w, &wb.newton_scratch)) polish_failures += 1;
             const m = core.computeMoments(wb.Ps, wb.w, s_scale);
-            last_gap = try certifyAt(m.M, Q, b, Xw, &wb);
-            last_M = m.M;
-            noteGap(last_gap, last_M, opts.gap_tol, &gaps_below_model);
-            b_cert = b;
-            if (core.gapConverged(last_gap.gap, opts.gap_tol)) {
+            if (try certify(&last, &gaps_below_model, opts.gap_tol, m.M, Q, b, Xw, &wb)) {
                 converged = true;
                 break;
             }
@@ -703,8 +691,8 @@ pub fn solveTrust(
     return core.buildOutcome(
         allocator,
         converged,
-        b_cert,
-        last_gap,
+        last.b,
+        last.gap,
         .{ .trust = .{
             .eager_certified = eager_certified,
             .open_iters = open_iters,
@@ -716,7 +704,7 @@ pub fn solveTrust(
         wb.cert_active,
         wb.cert_lambdas,
         prep.work_to_orig,
-        core.gapFloor(last_gap.sigma[1], last_M),
+        last.M,
         opts.gap_tol,
     );
 }
