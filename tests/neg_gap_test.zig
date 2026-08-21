@@ -1,7 +1,7 @@
 //! The #1 / #2 repros (#6): inputs whose certificate gap goes negative at
 //! the certification boundary. `solve` returns an `Outcome` for them —
-//! `did_not_converge` with `reason = .precision_floor` when the requested
-//! tolerance is below what f64 can certify for that geometry — and the
+//! `.precision_floor` when the requested tolerance is below what f64 can
+//! certify for that geometry — and the
 //! error model behind that verdict (`csar.gapFloor`) is pinned to the
 //! inputs that motivated it. The batches at `gap_tol = 1e-9` cover the #2
 //! class at scale (`just ab --gap-tol=1e-9`); these are the named originals.
@@ -33,11 +33,10 @@ const PAIR: []const [3]f64 = &.{
     .{ 0.44837395964677834, -0.775982462532212, 0.44363499653782196 },
 };
 
-test "#1 hexagon: did_not_converge at the precision floor, gap inside the error model" {
+test "#1 hexagon: precision_floor at the default, gap inside the error model" {
     var o = try csar.solve(std.testing.allocator, HEX1, .{});
     defer o.deinit();
-    const d = o.did_not_converge;
-    try std.testing.expectEqual(d.reason, .precision_floor);
+    const d = o.precision_floor;
     try std.testing.expect(d.gap_floor > 1e-6); // the default tolerance is below it
     try std.testing.expect(d.gap > -d.gap_floor);
     try std.testing.expectEqual(@as(u32, 0), d.diag.trust.gaps_below_model);
@@ -51,8 +50,7 @@ test "#2 close pair: converges at 1e-9 where it used to raise, precision-floored
     try std.testing.expectEqual(std.meta.activeTag(a), .converged);
     var b = try csar.solve(std.testing.allocator, PAIR, .{ .gap_tol = 1e-10 });
     defer b.deinit();
-    const d = b.did_not_converge;
-    try std.testing.expectEqual(d.reason, .precision_floor);
+    const d = b.precision_floor;
     try std.testing.expect(d.gap > -d.gap_floor);
     try std.testing.expectEqual(@as(u32, 0), d.diag.trust.gaps_below_model);
 }

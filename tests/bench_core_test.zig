@@ -65,7 +65,8 @@ test "isOutcome separates solver outcomes from error names" {
     try std.testing.expect(bc.isOutcome("converged"));
     try std.testing.expect(bc.isOutcome("infeasible"));
     try std.testing.expect(bc.isOutcome("did_not_converge"));
-    try std.testing.expect(!bc.isOutcome("NegativeDualityGap"));
+    try std.testing.expect(bc.isOutcome("precision_floor"));
+    try std.testing.expect(!bc.isOutcome("SingularMoment"));
 }
 
 test "passesFor: a slow unit is timed one pass at a time" {
@@ -104,17 +105,18 @@ test "Tally counts each outcome, and anything unrecognised as an error" {
     t.add(.{ .status = "converged", .gap = -1e-9 });
     t.add(.{ .status = "infeasible" });
     t.add(.{ .status = "did_not_converge", .gap = -5.0 }); // not converged: does not count
+    t.add(.{ .status = "precision_floor", .gap = -2e-7 }); // nor this
     // An @errorName from a failed solve — the reason `status` is a string.
-    t.add(.{ .status = "NegativeDualityGap" });
+    t.add(.{ .status = "SingularMoment" });
 
     // min gap is over converged entries only, and keeps its sign.
-    try std.testing.expectFmt("2 converged / 1 DNC / 1 infeasible / 1 errored / min gap -1.00e-9", "{f}", .{t});
+    try std.testing.expectFmt("2 converged / 1 DNC / 1 floor / 1 infeasible / 1 errored / min gap -1.00e-9", "{f}", .{t});
 }
 
 test "Tally: min gap is inf when nothing converged" {
     var t: bc.Tally = .{};
     t.add(.{ .status = "infeasible" });
-    try std.testing.expectFmt("0 converged / 0 DNC / 1 infeasible / 0 errored / min gap inf", "{f}", .{t});
+    try std.testing.expectFmt("0 converged / 0 DNC / 0 floor / 1 infeasible / 0 errored / min gap inf", "{f}", .{t});
 }
 
 test "GapShift: identical sides count as a row and do not move" {

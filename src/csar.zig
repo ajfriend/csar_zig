@@ -913,7 +913,7 @@ fn preprocess(
 
 /// Classify a freshly computed certificate gap: true when the solve is
 /// converged at `gap_tol`, false for "no certificate this time" — the
-/// caller iterates on or reports `did_not_converge`. A negative gap is
+/// caller iterates on or reports an uncertified outcome. A negative gap is
 /// never an error here: weak duality holds in exact arithmetic, so a
 /// negative value is floating-point error (`gapFloor`), and the accept
 /// test runs first so a converged-at-noise gap (−5e-9 on H3 r15 cells)
@@ -936,7 +936,7 @@ pub fn gapConverged(gap: f64, gap_tol: f64) bool {
 /// A logic error in the duality code violates this by orders of
 /// magnitude (inflating A by 0.1% moves the gap ~10⁴× the bound:
 /// `tests/neg_gap_test.zig`). Below the bound the solver reports
-/// `did_not_converge` with `reason = .precision_floor`; beyond it the
+/// `.precision_floor`; beyond it the
 /// Debug tripwire fires and `TrustDiagnostics.gaps_below_model` counts.
 /// The coefficients are in units of ε; a higher-precision instantiation
 /// (#9) supplies its own `floatEps` and κ.
@@ -960,7 +960,7 @@ pub fn gapBelowModel(r: GapResult, M: Mat2, gap_tol: f64) bool {
 /// caller indices, bundle the full
 /// eigendecomposition (Q's columns are (b, v1, v2) with eigenvalues
 /// (SIGMA_0, sigma[0], sigma[1]); v2 flipped if needed so det Q = +1),
-/// and wrap as Converged / DidNotConverge.
+/// and wrap as `converged`, or `did_not_converge` / `precision_floor`.
 /// `b` MUST be the axis at which `last_gap` was computed: Q's
 /// orthonormality (and the meaning of gap/sigma) depends on v1/v2
 /// being tangent to this exact axis. Callers keep the axis and
@@ -1000,26 +1000,27 @@ pub fn buildOutcome(
         // needs both halves: the tolerance is below the floor AND the
         // iterate actually reached the floor — a solve that ran out of
         // budget far from optimum (or never built a certificate: the
-        // sentinel) is an iteration limit whatever the tolerance.
+        // sentinel) is `.did_not_converge` whatever the tolerance.
         const gap_floor = gapFloor(last_gap.sigma[1], last_M);
         const at_floor = gap_tol < gap_floor and @abs(last_gap.gap) <= gap_floor;
-        return .{ .did_not_converge = .{
+        const payload: api.Uncertified = .{
             .Q = Qmat,
             .sigma = sigma,
             .gap = last_gap.gap,
             .gap_floor = gap_floor,
-            .reason = if (at_floor) .precision_floor else .iteration_limit,
             .diag = diag,
             .cert = cert,
             .allocator = allocator,
-        } };
+        };
+        return if (at_floor) .{ .precision_floor = payload } else .{ .did_not_converge = payload };
     }
 }
 
 /// Main solver. Returns an `Outcome` tagged union — switch on the tag
 /// to dispatch (`converged` carries the cone's eigendecomposition +
 /// primal certificate; `infeasible` carries the Farkas certificate;
-/// `did_not_converge` carries the last iterate for diagnostics).
+/// `did_not_converge` / `precision_floor` carry the last iterate for
+/// diagnostics).
 /// Structural input problems (too few points, bad tolerance,
 /// rank-deficient X) propagate as `InputError` via `try`. `opts`
 /// controls convergence, preprocessing, validation, and solver-path
@@ -1037,7 +1038,7 @@ pub fn solve(
     // Arena for all transient scratch allocations in this solve call.
     // Single backing alloc (bumped) + single free-all on deinit — vastly
     // cheaper than per-buffer alloc/free. The returned cert (for the
-    // Converged / Infeasible / DidNotConverge variants) lives on the
+    // Converged / Infeasible / Uncertified variants) lives on the
     // parent `allocator` so it outlives the arena.
     var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();

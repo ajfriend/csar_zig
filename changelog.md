@@ -5,13 +5,13 @@ commit that carries the full detail.
 
 ## [Unreleased]
 
-- `solve` returns an `Outcome` on every valid input: a negative certificate
-  gap is floating-point error, reported as `did_not_converge` instead of
-  raising `SolveError.NegativeDualityGap` (the variant stays, unraised, until
-  0.4.0). `DidNotConverge` gains `reason` (`.precision_floor` vs
-  `.iteration_limit`) and `gap_floor`, the smallest gap f64 can certify for
-  that input; `TrustDiagnostics.gaps_below_model` counts certifications the
-  error model rules out — a bug detector that should read 0. Fixes #1, #2.
+- **Breaking:** `Outcome` gains `.precision_floor` — `gap_tol` is below what
+  f64 can certify for the input and the iterate is at that floor (loosen
+  `gap_tol`); `.did_not_converge` now means only that `max_outer` ran out.
+  Both carry the `Uncertified` payload (was `DidNotConverge`), which gains
+  `gap_floor`. `SolveError.NegativeDualityGap` is removed: a negative gap at
+  the floor is evaluation noise, not a theorem violation; the bug detector is
+  now `TrustDiagnostics.gaps_below_model` (should read 0). Fixes #1, #2.
 
 ## [0.3.0]
 

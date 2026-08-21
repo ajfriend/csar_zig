@@ -190,7 +190,7 @@ pub fn pairedRun(
 /// union's tags, and `Side.metrics` below builds every status with `@tagName`
 /// over a switch that is exhaustive on that union — so the two vocabularies
 /// cannot drift apart without a test or compile failure.
-pub const OutcomeTag = enum { converged, infeasible, did_not_converge };
+pub const OutcomeTag = enum { converged, infeasible, did_not_converge, precision_floor };
 
 /// The one place a status string becomes an `OutcomeTag`; `null` is an
 /// `@errorName` from a failed solve. `isOutcome`, `Tally.add` and
@@ -236,6 +236,10 @@ pub const Metrics = struct {
 pub const Tally = struct {
     converged: u32 = 0,
     did_not_converge: u32 = 0,
+    /// Counted apart from `did_not_converge` on purpose: the floor is a
+    /// property of the precision and should recede at f128 (#9), the
+    /// budget limit a property of the algorithm and should not.
+    precision_floor: u32 = 0,
     infeasible: u32 = 0,
     errored: u32 = 0,
     /// Smallest certified gap among the converged entries; `inf` when there
@@ -260,14 +264,16 @@ pub const Tally = struct {
             },
             .infeasible => self.infeasible += 1,
             .did_not_converge => self.did_not_converge += 1,
+            .precision_floor => self.precision_floor += 1,
         }
     }
 
     /// zig's `{f}` formatting hook.
     pub fn format(self: Tally, w: *std.Io.Writer) std.Io.Writer.Error!void {
-        try w.print("{d} converged / {d} DNC / {d} infeasible / {d} errored / min gap {e:.2}", .{
+        try w.print("{d} converged / {d} DNC / {d} floor / {d} infeasible / {d} errored / min gap {e:.2}", .{
             self.converged,
             self.did_not_converge,
+            self.precision_floor,
             self.infeasible,
             self.errored,
             self.min_gap,
@@ -451,10 +457,13 @@ pub fn Side(comptime lib: type) type {
                 return .{ .status = @errorName(e) };
             };
             defer o.deinit();
-            // @tagName, not a literal: this switch is exhaustive over the real
-            // union, so a new outcome variant is a compile error HERE, and the
-            // status it produces is the library's own spelling — which the
-            // suite pins `OutcomeTag` to.
+            // @tagName, not a literal: the status is the library's own
+            // spelling, which the suite pins `OutcomeTag` to. The uncertified
+            // variants are an `inline else` prong rather than named: the
+            // pinned baseline's union predates `.precision_floor` (drop the
+            // `inline else` for the two names once the pin moves past
+            // v0.4.0). A new variant without the `Uncertified` fields still
+            // fails to compile here.
             const status = @tagName(o);
             return switch (o) {
                 .converged => |c| .{
@@ -465,7 +474,7 @@ pub fn Side(comptime lib: type) type {
                     .below_model = belowModel(c.diag),
                 },
                 .infeasible => .{ .status = status },
-                .did_not_converge => |p| .{
+                inline else => |p| .{
                     .status = status,
                     .iters = p.diag.totalIters(),
                     .ar = p.sigma[2] / p.sigma[1],
@@ -477,7 +486,7 @@ pub fn Side(comptime lib: type) type {
 
         /// `TrustDiagnostics.gaps_below_model`, or 0 for a library version
         /// that predates it. Drop the `@hasField` once the pin moves past
-        /// v0.3.1.
+        /// v0.4.0.
         fn belowModel(diag: anytype) u32 {
             return switch (diag) {
                 .trust => |d| if (@hasField(@TypeOf(d), "gaps_below_model")) d.gaps_below_model else 0,

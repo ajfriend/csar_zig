@@ -32,7 +32,9 @@ switch (outcome) {
         const aspect = c.aspectRatio();
         // ...
     },
-    .infeasible, .did_not_converge => { /* ... */ },
+    .infeasible => { /* no hemisphere holds the points */ },
+    .did_not_converge => { /* budget ran out: raise max_outer */ },
+    .precision_floor => { /* gap_tol below the f64 floor: loosen it */ },
 }
 ```
 

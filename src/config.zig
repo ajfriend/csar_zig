@@ -312,7 +312,7 @@ pub const tol = struct {
     /// NOT a measured gap: gapConverged never accepts it (regardless
     /// of gap_tol), gap_tol validation rejects tolerances at or above
     /// it, and outcomes carrying it have an empty cert and
-    /// uninformative Q/sigma (documented on DidNotConverge.gap).
+    /// uninformative Q/sigma (documented on Uncertified.gap).
     pub const GAP_UNCERTIFIED: f64 = 1e30;
     /// Underflow floor: pivot / scale / log argument.
     pub const UNDERFLOW: f64 = 1e-300;

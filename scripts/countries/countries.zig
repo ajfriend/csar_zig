@@ -141,9 +141,9 @@ fn processCountries(
                 counts.infeasible += 1;
                 std.debug.print("  skip [{s}]: infeasible (exceeds a hemisphere)\n", .{country.name});
             },
-            .did_not_converge => {
+            .did_not_converge, .precision_floor => {
                 counts.did_not_converge += 1;
-                std.debug.print("  skip [{s}]: did_not_converge\n", .{country.name});
+                std.debug.print("  skip [{s}]: {s}\n", .{ country.name, @tagName(outcome) });
             },
         }
     }

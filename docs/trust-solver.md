@@ -249,8 +249,8 @@ converged-at-noise gap can be slightly negative (−5e-9 on H3 r15
 cells), so the acceptance check must run before the negative-gap
 check, mirroring the alternating path's break-before-guard ordering.
 (Since #6 that check no longer raises: a negative gap is evaluation
-noise ≈ σ_max·ε, reported as `did_not_converge`, with a Debug-only
-tripwire at `tol.NEG_GAP_SIGMA` times that for construction defects.)
+noise ≈ σ_max·ε, reported as `.precision_floor`, with a Debug-only
+tripwire — the error model `csar.gapFloor` — for construction defects.)
 
 Tried and reverted (history note on `config.trust.INNER_*`): a
 rounds/burst/patience oracle that alternated short FW bursts with

@@ -116,9 +116,9 @@ fn processStates(
                 counts.infeasible += 1;
                 std.debug.print("  infeasible [{s}]\n", .{state.name});
             },
-            .did_not_converge => {
+            .did_not_converge, .precision_floor => {
                 counts.did_not_converge += 1;
-                std.debug.print("  did_not_converge [{s}]\n", .{state.name});
+                std.debug.print("  {s} [{s}]\n", .{ @tagName(outcome), state.name });
             },
         }
     }
