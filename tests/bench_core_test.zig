@@ -266,13 +266,6 @@ test "Side.metrics: a solve error becomes a status, not a crash" {
     try std.testing.expect(!bc.isOutcome(m.status));
 }
 
-test "Side.measure: a failing solve is skipped, not propagated" {
-    // The branch `measure` documents as one callers must not reach: it still
-    // has to be total, because the clock reads bracket it.
-    var s = side(&.{});
-    try std.testing.expect(s.measure(2) >= 0);
-}
-
 test "the clock is sane: finite, non-negative, and monotone in the workload" {
     // `pairedRun` trusts `Io.Timestamp` blindly, and clock behaviour is the
     // one thing that varies per OS. The deterministic tests avoid clocks

@@ -48,15 +48,17 @@ pub fn casePoints(name: []const u8) []const [3]f64 {
 
 /// The parts of a resolvable (converged / DNC) outcome that tolerant
 /// tests read without caring which way a platform-sensitive solve
-/// landed. Both arms are pinned by the coverage test below (see
-/// dev.md "Coverage exclusions", the deterministic-sibling technique).
+/// landed; `null` for an infeasible outcome, which has no iterate. Both
+/// resolvable arms are pinned by the coverage test below (see dev.md
+/// "Coverage exclusions", the deterministic-sibling technique); callers
+/// that know their input is feasible unwrap with `.?`.
 pub const ResolvedView = struct { converged: bool, Q: csar.Mat3, diag: csar.Diagnostics };
 
-pub fn resolvedView(o: *const csar.Outcome) ResolvedView {
+pub fn resolvedView(o: *const csar.Outcome) ?ResolvedView {
     return switch (o.*) {
         .converged => |c| .{ .converged = true, .Q = c.Q, .diag = c.diag },
         .did_not_converge => |d| .{ .converged = false, .Q = d.Q, .diag = d.diag },
-        .infeasible => unreachable, // no helper caller feeds an infeasible input; a solver bug panics
+        .infeasible => null,
     };
 }
 
@@ -86,14 +88,19 @@ test "resolvedView: both arms, deterministic on all platforms; snapshot Q orthon
     const hex_pts = casePoints("hex");
     var conv = try csar.solve(allocator, hex_pts, .{ .method = .trust });
     defer conv.deinit();
-    const cv = resolvedView(&conv);
+    const cv = resolvedView(&conv).?;
     try std.testing.expect(cv.converged);
     try expectOrthonormalQ(cv.Q);
 
     // DNC arm.
     var dnc = try solveClampedWideCapDnc(allocator);
     defer dnc.deinit();
-    const dv = resolvedView(&dnc);
+    const dv = resolvedView(&dnc).?;
     try std.testing.expect(!dv.converged);
     try expectOrthonormalQ(dv.Q);
+
+    // And the arm with no view: an infeasible input, by construction.
+    var inf = try csar.solve(std.testing.allocator, casePoints("infeas_antipodal"), .{});
+    defer inf.deinit();
+    try std.testing.expect(resolvedView(&inf) == null);
 }

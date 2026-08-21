@@ -28,9 +28,10 @@
 | --- | --- |
 | `just ci` | Everything CI checks that can run on this machine, in the order the `ci` recipe lists. Run before pushing a PR. |
 | `just test` | Fast test loop — skips long-running randomized stress tests, no coverage gate. Sub-second; the inner-loop iteration command. |
-| `just test-slow` | Full suite + 100% line coverage gate under `kcov`. Builds with `-Dslow=true` so randomized stress tests run. ~10s; the pre-commit / CI check. |
+| `just test-slow` | Full suite + the 100% line-coverage gate under `kcov` over every binary (tests, examples, the A/B harness), built with `-Dcoverage=true` and `-Dslow=true`. ~20s; the pre-commit / CI check. |
 | `just test-selfhosted` | Full suite under zig's self-hosted backend (`-Dllvm=false`). See "Two backends" below. |
 | `just check` | Compile the library and every executable, running nothing (CI's Build step). |
+| `just lint` | Every declaration is referenced (zlinter `no_unused`, its own package under `lint/`) — the check coverage cannot make; see "Coverage". ~5s warm, ~30s the first time (it builds the linter). |
 | `just consumer-smoke` | Build `scripts/consumer_smoke/` against the tree as a consumer receives it, and print the shipped file list. The only check of the published package rather than the working tree; see "Packaging". |
 | `just bench` | Run the benchmark suite (release-built `ex-bench`) — single-version timing. |
 | `just ab` | A/B the working tree against the pinned baseline, both in one binary. `just ab --aa` calibrates. See "A/B benchmarking" below. |
@@ -72,51 +73,71 @@ Zig has two code generators (LLVM, and its own self-hosted backend —
 the Debug default on x86_64-linux), and their FP code paths can
 differ, which matters for this solver's κ-limited cells. Policy: the
 **suite — including the deterministic iteration-ceiling bounds — must
-pass under both backends**; CI runs both on every push. The test
-binary defaults to LLVM (`-Dllvm=false` selects self-hosted) because
-the kcov gate can only read LLVM-emitted DWARF, so coverage is
-measured on the LLVM binary alone. Backend support is per-target:
+pass under both backends**; CI runs both on every push. kcov reads
+only LLVM-emitted DWARF, so every binary the coverage gate runs is
+built with LLVM (`-Dcoverage=true` forces it; the test binary's
+`-Dllvm=false` selects self-hosted for the other suite run) and
+coverage is measured on LLVM binaries alone. Backend support is per-target:
 the self-hosted backend crashes compiling the suite on
 aarch64-macos (0.15.2 and 0.16.0), so run `just test-selfhosted` where it is supported
 (x86_64-linux; CI covers it).
 
 ## Coverage
 
-`kcov` runs the test binary as a black box: it instruments the binary
-with traps at each source line and records which lines execute. It
-writes two directories under `coverage/`:
+The gate enforces **100% line coverage over every binary we ship or
+run**: the test suite, each example, and the A/B harness. `kcov` runs
+a binary as a black box — traps at each source line, recording which
+execute — so `scripts/coverage_gate.py` runs it once per binary and per
+mode (`RUNS` in the script), each run into its own
+`coverage/NN-<binary>-<args>/` (browse `<binary>/index.html` inside it),
+and merges the runs' line-level reports itself (why not kcov's merge:
+`lines_by_file` in the script). Every installed binary must appear in
+`RUNS`; the script refuses to run otherwise.
 
-- `coverage/csar-test/` — the **merged** HTML report; open
-  `coverage/csar-test/index.html` to browse covered lines.
-- `coverage/csar-test.<hash>/` — the **per-binary** report containing
-  the `coverage.json` summary that `scripts/coverage_gate.py` parses
-  to enforce the threshold and derive the exclusion ledger.
+Scope is `INCLUDE_PATTERN` in the script: `src/`, `tests/`, `cases/`,
+`examples/`, `bench/`. A file is measured through whichever binary
+compiles it — `bench/core.zig` counts via the test binary's copy, not
+`csar-ab`'s; they are the same pure functions. `EXCLUDE_PATTERN` keeps
+the pinned baseline's sources (unpacked under `bench/zig-pkg/`, compiled
+into `csar-ab`) out. Out of scope, and why: `scripts/{states,countries}`
+need downloaded survey data; `scripts/consumer_smoke/build.zig` is a
+build script, not a runtime binary; the `.zon` fixtures are comptime
+data with no line table.
 
-Both contain the same aggregate percentages today (one binary, one
-run). If you're debugging a gate failure, the JSON is in the
-hash-suffixed sibling, not the merged dir.
-
-The gate enforces **100% line coverage** over `src/`, `tests/`, `cases/` and
-`bench/core.zig` (`INCLUDE_PATTERN` in `scripts/coverage_gate.py`) —
-production code, the tests, the case manifest, and the benchmarking policy. kcov instruments one binary, so a file is in scope only
-if the test binary compiles it; widening the pattern alone reaches nothing
-new (#25).
-Test code isn't exempt — dead test helpers are dead code too. The
-gate runs under `just test-slow`, not `just test` — slow-tier tests
-(currently cap_test) exercise lines that the fast tier doesn't reach.
+The gate's binaries are built with `-Dcoverage=true`: Debug (line
+coverage of an optimized binary is unreliable — it overrides the
+ReleaseFast forced on `ex-bench` and `csar-ab`) and LLVM (see "Two
+backends"). Test code isn't exempt — dead test helpers are dead code
+too. The gate runs under `just test-slow`, not `just test` — slow-tier
+tests (currently cap_test) exercise lines the fast tier doesn't reach.
 
 What "100% line coverage" buys you:
 
-- Every line in every shipped function is reached by some test.
+- Every line in every compiled function is reached by some run — tests,
+  and for the examples and the harness, an end-to-end execution on every
+  CI run. An example with code that doesn't run isn't a good example;
+  this makes the #12 class of rot (examples silently breaking) impossible
+  rather than merely caught by `just check`.
 - `comptime` branches that aren't realized at runtime don't appear in
   the binary, so they don't show as uncovered — Zig's comptime is
   naturally well-suited to line coverage.
 
-What 100% line coverage **doesn't** buy you:
+What it **doesn't** buy you:
 
 - **Branch coverage.** A one-line `if (a) x() else y()` counts as one
   line. Both sides being executed isn't measured. Discipline plus code
   review fill the gap; explicit tests for both branches are the norm.
+- **"Nothing is dead."** Zig's analysis is lazy: a declaration nothing
+  references is never compiled, has no line entries, and is invisible
+  to the gate — it does not even enter the denominator. That is how
+  `WorkBuffers` outlived its only caller in #30. The gate's guarantee
+  is "every compiled line runs"; the complementary question — is every
+  *written* declaration referenced — is `just lint` (zlinter's
+  `no_unused`, a parse, in `just ci` and CI). Its
+  known blind spot is #32: a declaration referenced only from inside
+  its own body. For the library's *pub* surface, `test_root.zig` also
+  forces every declaration through analysis (`refAllDeclsRecursive`),
+  so a dead pub decl lands in the line table and fails the gate.
 
 ### Coverage exclusions
 
@@ -135,13 +156,10 @@ kcov invocation:
   type removes it instead — `Method.resolved()` returning
   `Method.Resolved` is the in-tree example.
 - `--exclude-line=kcov-excl`: a trailing `// kcov-excl: <reason>`
-  marks a single line. Every marker must carry its reason in-source —
-  grep `kcov-excl` for the ledger. **There are currently zero markers
-  in the tree**: every previously-marked line was eliminated by one of
-  the techniques below. The mechanism stays wired for the case that
-  genuinely survives all of them. (kcov also supports
-  `--exclude-region` start/stop markers for blocks; add that flag back
-  with its first user if one ever appears.)
+  marks a single line. Every marker carries its reason in-source —
+  grep `kcov-excl` for the ledger. (kcov also supports
+  `--exclude-region` start/stop markers for blocks; add that flag with
+  its first user if one ever appears.)
 
 Before marking a line, exhaust these — each has an in-tree example. The
 first is a question, not a technique, and it comes first:
@@ -164,7 +182,10 @@ first is a question, not a technique, and it comes first:
   the degenerate g.
 - **Narrow a type so the dead line disappears.**
   `Method.resolved()` returning `Method.Resolved` deleted the
-  `.auto => unreachable` dispatch arm.
+  `.auto => unreachable` dispatch arm; `helpers.resolvedView` returning
+  `?ResolvedView` moved "infeasible has no view" to the callers' `.?`,
+  which executes and is covered, and deleted the last `=> unreachable`
+  arm in `tests/`.
 - **Collapse a trivial branch body onto its condition's line.** The
   polish-bail counters are `if (...) polish_failures += 1;`
   one-liners: the line executes (and is covered) every pass. This
@@ -172,9 +193,8 @@ first is a question, not a technique, and it comes first:
   for bodies trivially correct by inspection.
 - **Cover a failure path with an expectError self-test.** A failure
   diagnostic lives in a helper, and a self-test drives it with fake
-  inputs, asserting the expected error (`expectArAgreement` in
-  methods_test; `checkRotationInvariance`'s three self-tests in
-  extreme_aspect_test). Such self-tests set
+  inputs, asserting the expected error (`checkRotationInvariance`'s
+  three self-tests in extreme_aspect_test). Such self-tests set
   `helpers.quiet_diagnostics` (with a `defer` restore) so the
   deliberately-driven diagnostic stays out of passing-run output; the
   fake inputs are labeled `case=diagnostic-selftest` so the line is
@@ -187,25 +207,28 @@ first is a question, not a technique, and it comes first:
   wide-cap eager certificate fails by construction) so both arms
   execute on every platform.
 
-What remains excluded is exactly the `=> unreachable` arms (counted
-in the ledger, never marked). Historical evidence for the polish-bail
+Nothing in `src/` or `tests/` is excluded. Historical
+evidence for the polish-bail
 counters staying untriggerable in context: the full fixture library ×
 option grids, ~100 synthetic shape families, direct far-field
 `solveTrust` seams (lldb breakpoint counts confirming zero hits), and
 the real-world states + countries surveys (227 regions, zero polish
 failures).
 
-**The ledger is tracked over time.** `just test-slow` prints a
-`coverage exclusions:` summary — the total number of lines the
-exclusion rules remove from the gate, with a per-file breakdown — and
-CI posts the same block as a comment on every PR, so growth is visible
-in review. The number is kcov-native, not a source grep: the gate run
-reports with the exclusion flags, a second `--report-only` pass on a
-copy of the same collected data reports without them, and the ledger
-is the per-file difference in `total_lines`. (Only the line
-classification of the report-only pass is trustworthy; its hit data is
-lossy — kcov's stored database does not faithfully round-trip covered
-lines — so the ledger never uses it.)
+**The ledger is tracked over time, and cross-checked.** `just
+test-slow` prints a `coverage exclusions:` summary — the lines the
+exclusion rules removed, per file — and CI posts the same block as a
+comment on every PR, so growth is visible in review. The number is
+kcov-native: a second, report-only kcov pass reports without the rules,
+and the excluded lines are the ones present raw and absent gated (only
+that pass's line classification is trustworthy; its hit data is lossy).
+The script then checks the ledger against the source both ways — every
+excluded line must sit on a marker or a `=> unreachable` arm, and every
+marker must have excluded something — and a disagreement fails the
+gate, so a rule kcov silently ignored, or a marker that no longer sits
+on an executable line, cannot pass as a smaller number. What it cannot
+catch: a marker on a line that *would* have been covered — kcov
+excludes before measuring. That one is what the PR comment is for.
 
 ### Why kcov and not LLVM source-based coverage?
 
@@ -245,7 +268,7 @@ re-exporting them through the public API.
 
 | File | Role |
 | --- | --- |
-| `test_root.zig` | Test-target root at the repo level. One `test {}` block that pulls in `tests/all.zig`. |
+| `test_root.zig` | Test-target root at the repo level: pulls in `tests/all.zig` and forces the library's pub declarations through analysis so the gate sees them. |
 | `tests/all.zig` | Aggregator: `comptime { _ = @import(...); }` for each test file. |
 | `tests/solver_test.zig` | Synthetic property/contract tests of `solve` (e.g. the `max_outer` DNC contract). No fixture dependency. |
 | `tests/extreme_aspect_test.zig` | Rotation-invariance, coplanarity, near-degenerate edge-case tests on synthesized inputs. Also hits internal helpers (`acceptBUpdate`, `convexHull2d`) via filesystem imports for branches not reachable through `solve` for all inputs. |
@@ -267,9 +290,13 @@ and doc files. `tests/`, `cases/`, `examples/` and `bench/` stay out.
 luck: a dependency's `build()` constructs its step graph, but `b.path(...)` is
 a `LazyPath` resolved only when a step that uses it is *made*, and a consumer
 asking for `csar.module("csar")` never makes the test, example or survey
-steps. Keep `build.zig` free of configure-time filesystem access (`std.fs`,
-`@embedFile` of a fixture) and that stays true. The `cases` module is exported
-for path dependents (`bench/`) and is not available to tarball consumers.
+steps. Two things break it, and `just consumer-smoke` is how both were
+found: configure-time filesystem access in `build.zig` (`std.fs`,
+`@embedFile` of a fixture, or a dependency's builder that walks
+directories — zlinter's does, which is why the linter is its own package
+under `lint/`), and a dependency the build always asks for, lazy or not
+(every consumer fetches it). The `cases` module is exported for path
+dependents (`bench/`) and is not available to tarball consumers.
 
 `just consumer-smoke` verifies it on every `just ci` run and in CI: it copies
 `scripts/consumer_smoke/` (a package depending on `csar`, with

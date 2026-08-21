@@ -34,6 +34,11 @@ pub fn build(b: *std.Build) void {
     // gate). Slow tests check `test_options.slow` and skip themselves
     // when it's false.
     const slow = b.option(bool, "slow", "Include slow randomized stress tests in the test binary") orelse false;
+    // `-Dcoverage=true` builds for the kcov gate: Debug (line coverage of
+    // an optimized binary is unreliable) and LLVM (kcov reads only its
+    // DWARF) for every executable. Normal builds are untouched. See dev.md
+    // "Coverage".
+    const coverage = b.option(bool, "coverage", "Build for the coverage gate (Debug everywhere)") orelse false;
     const test_options = b.addOptions();
     test_options.addOption(bool, "slow", slow);
 
@@ -61,12 +66,12 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run csar tests");
     test_step.dependOn(&run_tests.step);
 
-    // `zig build install-test` produces `zig-out/bin/csar-test`, the
-    // test binary built without running. Used by the kcov-based
-    // coverage recipe in the justfile.
-    const install_test = b.addInstallArtifact(tests, .{});
-    const install_test_step = b.step("install-test", "Install the test binary at zig-out/bin/csar-test");
-    install_test_step.dependOn(&install_test.step);
+    // `zig build install-coverage -Dcoverage=true -Dslow=true`: the test
+    // binary plus every example, installed for scripts/coverage_gate.py
+    // to run under kcov (which must be the process runner — hence
+    // installed, not `zig build test`). bench/build.zig installs csar-ab.
+    const install_coverage_step = b.step("install-coverage", "Install the test binary and every example for the coverage gate");
+    install_coverage_step.dependOn(&b.addInstallArtifact(tests, .{}).step);
 
     // `zig build check`: compile every executable (library, examples,
     // survey execs) WITHOUT running anything — the CI Build step and
@@ -81,10 +86,11 @@ pub fn build(b: *std.Build) void {
     // `ex-cases` accepts pass-through args after `--`: `zig build
     // ex-cases -- hex` or `-- --all`. `ex-bench` is force-built in
     // ReleaseFast — timing numbers are meaningless in Debug.
-    addExample(b, check_step, csar_mod, cases_mod, target, optimize, "basic", null, "Run examples/basic.zig (happy-path only)");
-    addExample(b, check_step, csar_mod, cases_mod, target, optimize, "status", null, "Run examples/status.zig (full Outcome branching)");
-    addExample(b, check_step, csar_mod, cases_mod, target, optimize, "cases", null, "Run examples/cases.zig (run a named case or --all)");
-    addExample(b, check_step, csar_mod, cases_mod, target, optimize, "bench", .ReleaseFast, "Run examples/bench.zig (per-case timing, release-built)");
+    const ex = .{ .b = b, .check = check_step, .install = install_coverage_step, .csar = csar_mod, .cases = cases_mod, .target = target, .optimize = optimize, .coverage = coverage };
+    addExample(ex, "basic", null, "Run examples/basic.zig (happy-path only)");
+    addExample(ex, "status", null, "Run examples/status.zig (every Outcome variant)");
+    addExample(ex, "cases", null, "Run examples/cases.zig (run a named case or --all)");
+    addExample(ex, "bench", .ReleaseFast, "Run examples/bench.zig (per-case timing, release-built)");
 
     // US-states aspect-ratio example (see scripts/states/). Standalone
     // exec, not an example: lives under scripts/, force-built ReleaseFast,
@@ -122,32 +128,31 @@ pub fn build(b: *std.Build) void {
     const countries_aspect_step = b.step("countries-aspect", "Run scripts/countries/countries.zig over data/countries.json");
     countries_aspect_step.dependOn(&run_countries_aspect.step);
     check_step.dependOn(&countries_aspect_exe.step);
+
 }
 
 fn addExample(
-    b: *std.Build,
-    check_step: *std.Build.Step,
-    csar_mod: *std.Build.Module,
-    cases_mod: *std.Build.Module,
-    target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
+    ex: anytype,
     stem: []const u8,
     /// Per-example optimize override; null inherits the project-wide
     /// flag. Used by `ex-bench` to force ReleaseFast regardless of
-    /// the top-level build setting.
+    /// the top-level build setting. Ignored under `-Dcoverage`.
     optimize_override: ?std.builtin.OptimizeMode,
     description: []const u8,
 ) void {
+    const b: *std.Build = ex.b;
     const mod = b.createModule(.{
         .root_source_file = b.path(b.fmt("examples/{s}.zig", .{stem})),
-        .target = target,
-        .optimize = optimize_override orelse optimize,
+        .target = ex.target,
+        .optimize = if (ex.coverage) ex.optimize else optimize_override orelse ex.optimize,
     });
-    mod.addImport("csar", csar_mod);
-    mod.addImport("cases", cases_mod);
+    mod.addImport("csar", ex.csar);
+    mod.addImport("cases", ex.cases);
     const exe = b.addExecutable(.{
         .name = b.fmt("csar-ex-{s}", .{stem}),
         .root_module = mod,
+        // kcov reads only LLVM DWARF (dev.md "Two backends").
+        .use_llvm = if (ex.coverage) true else null,
     });
     const run = b.addRunArtifact(exe);
     // Pass through any args after `--` on the `zig build` command.
@@ -155,5 +160,6 @@ fn addExample(
     if (b.args) |args| run.addArgs(args);
     const step = b.step(b.fmt("ex-{s}", .{stem}), description);
     step.dependOn(&run.step);
-    check_step.dependOn(&exe.step);
+    ex.check.dependOn(&exe.step);
+    ex.install.dependOn(&b.addInstallArtifact(exe, .{}).step);
 }

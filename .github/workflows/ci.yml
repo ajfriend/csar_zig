@@ -41,6 +41,14 @@ jobs:
           enable-cache: false
       - name: Build
         run: just check
+      - name: Cache the linter build
+        # zlinter and its deps compile into lint/.zig-cache (~25s cold).
+        uses: actions/cache@v4
+        with:
+          path: lint/.zig-cache
+          key: lint-${{ runner.os }}-${{ hashFiles('lint/build.zig.zon', 'mise.toml') }}
+      - name: Lint (every declaration referenced)
+        run: just lint
       - name: Consumer smoke (the package as shipped through .paths)
         run: just consumer-smoke
       - name: Test (self-hosted backend)
@@ -55,6 +63,17 @@ jobs:
           kcov --version
           just test-slow
           { echo '### Coverage'; cat coverage/summary.md; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload the gate's log
+        # Every kcov invocation's output — for when CI's ledger disagrees
+        # with a local run.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-gate-log
+          path: |
+            zig-out/test-slow.log
+            coverage/summary.txt
+          if-no-files-found: ignore
       - name: Post exclusion ledger on PR
         if: github.event_name == 'pull_request'
         env:

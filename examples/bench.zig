@@ -17,6 +17,20 @@ const N_WARMUP: u32 = 5;
 const N_RUNS: u32 = 100;
 const TOL: f64 = 1e-6;
 
+const Row = struct {
+    name: []const u8,
+    points: []const [3]f64,
+    max_outer: u32,
+};
+
+fn row(comptime name: []const u8, max_outer: u32) Row {
+    return .{
+        .name = name,
+        .points = cases.get(name).points,
+        .max_outer = max_outer,
+    };
+}
+
 fn cmpF64(_: void, a: f64, b: f64) bool {
     return a < b;
 }
@@ -30,11 +44,26 @@ pub fn main(init: std.process.Init) !void {
     // Representative subset of the full manifest. Intentionally fewer
     // cases than `cases.all` — bench is for cross-config timing, not
     // completeness; the full case-coverage gate is the test suite.
-    const CASE_NAMES: []const []const u8 = &.{
-        "hex",      "np20",     "np100",    "np400",
-        "h3_res05", "h3_res09", "h3_res12", "h3_res15",
-        "ha_05",    "ha_08",    "ha_10",    "ha_12",   "ha_14",
-        "infeas_antipodal", "near_collinear",
+    // `max_outer` is per case so the table has one row per outcome:
+    // wide_cap89 at a budget of 1 cannot converge (its eager certificate
+    // fails by construction), so it shows what a DNC row looks like.
+    const CASES = [_]Row{
+        row("hex", 100),
+        row("np20", 100),
+        row("np100", 100),
+        row("np400", 100),
+        row("h3_res05", 100),
+        row("h3_res09", 100),
+        row("h3_res12", 100),
+        row("h3_res15", 100),
+        row("ha_05", 100),
+        row("ha_08", 100),
+        row("ha_10", 100),
+        row("ha_12", 100),
+        row("ha_14", 100),
+        row("infeas_antipodal", 100),
+        row("near_collinear", 100),
+        row("wide_cap89", 1),
     };
 
     const io = init.io;
@@ -48,16 +77,20 @@ pub fn main(init: std.process.Init) !void {
     var total_converged_median: f64 = 0;
     var n_converged: u32 = 0;
 
-    for (CASE_NAMES) |name| {
-        const case = cases.byName(name) orelse {
-            try stdout.print("{s:22}  unknown case (not in manifest)\n", .{name});
-            continue;
-        };
+    for (CASES) |case| {
+        const name = case.name;
         const X = case.points;
+
+        const opts: csar.SolveOptions = .{
+            .gap_tol = TOL,
+            .n_hull = 10,
+            .coplanarity_tol = 1e-12,
+            .max_outer = case.max_outer,
+        };
 
         // Warm up.
         for (0..N_WARMUP) |_| {
-            var outcome = csar.solve(allocator, X, .{ .gap_tol = TOL, .n_hull = 10, .coplanarity_tol = 1e-12 }) catch continue;
+            var outcome = try csar.solve(allocator, X, opts);
             outcome.deinit();
         }
 
@@ -72,7 +105,7 @@ pub fn main(init: std.process.Init) !void {
         // ratios rather than absolutes.
         for (0..N_RUNS) |r| {
             const t0 = std.Io.Timestamp.now(io, .awake);
-            const outcome = try csar.solve(allocator, X, .{ .gap_tol = TOL, .n_hull = 10, .coplanarity_tol = 1e-12 });
+            const outcome = try csar.solve(allocator, X, opts);
             const t1 = std.Io.Timestamp.now(io, .awake);
             times[r] = @as(f64, @floatFromInt(t0.durationTo(t1).nanoseconds)) / 1000.0;
             if (last_outcome) |*lo| lo.deinit();
@@ -104,18 +137,22 @@ pub fn main(init: std.process.Init) !void {
                 .did_not_converge => |p| {
                     outer_iters = p.diag.totalIters();
                     polish_failures = p.diag.trust.polish_failures;
-                    // Uncertified ratio from the last iterate — useful when
-                    // chasing a DNC regression. `DidNotConverge` intentionally
-                    // omits an `aspectRatio()` method since the value isn't
-                    // certified; compute it inline here.
+                    // Uncertified ratio from the last iterate. `DidNotConverge`
+                    // intentionally omits an `aspectRatio()` method since the
+                    // value isn't certified; compute it inline here.
                     aspect_ratio = p.sigma[2] / p.sigma[1];
                 },
                 .infeasible => {},
             }
             try stdout.print("{s:22}  {s:8}  {d:2}  {d:5}  {d:11.2}  {d:14.2}  {d:12.6}  {d:7}\n", .{
-                name,        status_str, X.len,
-                outer_iters, t_min,      t_median,
-                aspect_ratio, polish_failures,
+                name,
+                status_str,
+                X.len,
+                outer_iters,
+                t_min,
+                t_median,
+                aspect_ratio,
+                polish_failures,
             });
             if (lo == .converged) {
                 total_converged_min += t_min;
@@ -138,8 +175,12 @@ pub fn main(init: std.process.Init) !void {
     // "Performance & regression monitoring".
     try stdout.print("----------------------  --------  --  -----  -----------  --------------\n", .{});
     try stdout.print("{s:22}  {s:8}  {d:2}  {s:5}  {d:11.2}  {d:14.2}\n", .{
-        "TOTAL (converged only)", "ok", n_converged, "—",
-        total_converged_min, total_converged_median,
+        "TOTAL (converged only)",
+        "ok",
+        n_converged,
+        "—",
+        total_converged_min,
+        total_converged_median,
     });
     try stdout.flush();
 }

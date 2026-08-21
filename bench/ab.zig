@@ -64,19 +64,24 @@ const cases = @import("cases");
 /// Timing selection: examples spanning the regimes (sub-µs hot path, mid-size,
 /// hard/wide, infeasible). Deliberately NOT a corpus — #19 decides what a
 /// report highlights. Deterministic metrics run over every fixture regardless.
-const TIMING_CASE_NAMES = [_][]const u8{ "hex", "np100", "ha_12", "near_collinear" };
-
-/// Resolved at comptime rather than looked up at runtime: a misspelt name is a
-/// build error here, where `cases.byName` would otherwise return null and the
-/// harness would quietly measure fewer cases than intended.
-const TIMING_CASES = blk: {
-    var out: [TIMING_CASE_NAMES.len]struct { name: []const u8, points: []const [3]f64 } = undefined;
-    for (TIMING_CASE_NAMES, 0..) |name, i| {
-        const case = cases.byName(name) orelse @compileError("unknown timing case: " ++ name);
-        out[i] = .{ .name = name, .points = case.points };
-    }
-    break :blk out;
+const TIMING_CASES = [_]TimingCase{
+    timing("hex"),
+    timing("np100"),
+    timing("ha_12"),
+    timing("near_collinear"),
 };
+
+const TimingCase = struct {
+    name: []const u8,
+    points: []const [3]f64,
+};
+
+fn timing(comptime name: []const u8) TimingCase {
+    return .{
+        .name = name,
+        .points = cases.get(name).points,
+    };
+}
 
 /// Tight enough to push borderline cases off the f64 gap floor, for --inject-tol.
 const INJECT_GAP_TOL = 1e-13;
@@ -181,15 +186,6 @@ fn report(comptime Base: type, init: std.process.Init, opts: Opts) !void {
     for (TIMING_CASES) |case| {
         side_cur.pts = case.points;
         side_base.pts = case.points;
-
-        // Timing a case that errors would measure an error path. The
-        // deterministic pass above already reported it.
-        if (!bc.isOutcome(side_cur.metrics(case.points).status) or
-            !bc.isOutcome(side_base.metrics(case.points).status))
-        {
-            try out.print("  {s:<20} (errored on at least one side)\n", .{case.name});
-            continue;
-        }
 
         bc.warmUp(&side_cur);
         bc.warmUp(&side_base);

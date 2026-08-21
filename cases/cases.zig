@@ -11,8 +11,8 @@
 //! Everything below is compiled into the binary at build time — no
 //! filesystem reads at runtime. Adding a case = drop a `.zon` file +
 //! append one line to `all`. The schema enforces shape at compile time;
-//! the test loop in `src/tests/integration_test.zig` runs every entry,
-//! so an unlisted case is the only way to escape coverage.
+//! the test loop in `tests/cases_test.zig` runs every entry, so an
+//! unlisted case is the only way to escape coverage.
 
 const std = @import("std");
 
@@ -104,7 +104,13 @@ pub const all: []const Entry = &.{
     .{ .name = "wide_cap89", .case = @import("zon/wide_cap89.zon") },
 };
 
-/// Look up a case by name. Linear scan; the manifest is tiny.
+/// A case named at compile time: a misspelling is a compile error.
+pub fn get(comptime name: []const u8) Case {
+    return comptime byName(name) orelse @compileError("unknown case: " ++ name);
+}
+
+/// A case named at runtime (`ex-cases` takes one from the command line).
+/// Linear scan; the manifest is tiny.
 pub fn byName(name: []const u8) ?Case {
     for (all) |entry| {
         if (std.mem.eql(u8, entry.name, name)) return entry.case;
