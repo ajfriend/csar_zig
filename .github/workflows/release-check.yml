@@ -1,0 +1,27 @@
+name: release-check
+
+# Runs when a release tag is pushed (#17 check 1): the tag must equal
+# `build.zig.zon`'s `.version`. It runs AFTER the tag exists, so it is an
+# alarm, not a gate — dev.md "Releasing" keeps the manual check before the
+# push and waits for this run before creating the release. A tag-triggered
+# workflow cannot be exercised by the PR that adds it, hence
+# `workflow_dispatch`: run it by hand with a tag name to see both outcomes.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag name to check against build.zig.zon's .version, e.g. v0.3.0"
+        required: true
+
+jobs:
+  tag-matches-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          tag="${{ inputs.tag || github.ref_name }}"
+          version="$(sed -nE 's/^[[:space:]]*\.version = "([^"]+)",/\1/p' build.zig.zon)"
+          echo "tag $tag, build.zig.zon .version $version"
+          test "$tag" = "v$version"

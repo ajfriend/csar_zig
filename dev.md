@@ -317,7 +317,9 @@ published tarball.
 
 ## Releasing
 
-By hand until #17 automates the tag-time checks. In order; steps 1 and 5
+By hand, with one alarm: `release-check.yml` runs on every `v*` tag push
+and fails if the tag does not equal `build.zig.zon`'s `.version` (#17's
+check 1; the tarball build, check 2, is step 6). In order; steps 1 and 5
 are PRs, the rest are not commits.
 
 1. PR, the last one before the tag: set `build.zig.zon`'s `.version`, rename
@@ -328,7 +330,8 @@ are PRs, the rest are not commits.
    includes `consumer-smoke`, which builds the tree as a consumer receives it
    ("Packaging").
 3. On that commit, with `grep version build.zig.zon` agreeing with the tag:
-   `git tag vX.Y.Z && git push origin vX.Y.Z`.
+   `git tag vX.Y.Z && git push origin vX.Y.Z`, then wait for the
+   `release-check` run on the tag to go green (`gh run watch`).
 4. `gh release create vX.Y.Z --title vX.Y.Z --notes-file <the [X.Y.Z]
    section>` — name and body rules in CLAUDE.md.
 5. PR: re-pin the A/B baseline —
