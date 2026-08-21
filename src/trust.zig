@@ -51,7 +51,6 @@ const Mat3x2 = linalg.Mat3x2;
 const config = @import("config.zig");
 const tc = config.trust;
 const algo = config.algo;
-const tol = config.tol;
 
 const halfspace = @import("halfspace.zig");
 const projectGnomonic = halfspace.projectGnomonic;
@@ -530,18 +529,17 @@ pub fn solveTrust(
         // cells converge right here; hard inputs fall through to the
         // trust region having spent a bounded, cheap prefix. See
         // config.trust.OPEN_ROUNDS.
-        // The axis step's damping, collapsed to what two ticks can do: the
-        // loop runs OPEN_ROUNDS × FW_PER_NEWTON cycles, so the first step
-        // is always full and the second halves if ‖center‖ grew. A general
-        // controller (shrink/grow with bounds) only matters past two ticks;
-        // the assert reopens that question the moment either knob moves.
+        // The loop runs OPEN_ROUNDS × FW_PER_NEWTON = 2 cycles: the first
+        // axis step is always full, the second halves if ‖center‖ grew.
+        // That is the whole damping rule only at two cycles — the assert
+        // reopens the question the moment either knob moves.
         comptime std.debug.assert(tc.OPEN_ROUNDS * algo.FW_PER_NEWTON == 2);
         var prev_norm: f64 = std.math.inf(f64);
         const max_rounds = @min(tc.OPEN_ROUNDS, opts.max_outer);
         var cycle: u32 = 0;
         while (!converged and open_iters < max_rounds) : (cycle += 1) {
             const c_norm = m.center.norm();
-            const alpha: f64 = if (c_norm > prev_norm) algo.DAMP_SHRINK else 1.0;
+            const alpha: f64 = if (c_norm > prev_norm) tc.DAMP_SHRINK else 1.0;
             prev_norm = c_norm;
             const st = core.acceptBUpdate(Xw, b, Q, m.center, alpha, wb.P_buf, wb.Ps);
             b = st.b;

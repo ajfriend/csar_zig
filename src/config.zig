@@ -19,11 +19,6 @@ pub const algo = struct {
     /// Newton polish + gap check.
     pub const FW_PER_NEWTON: u32 = 2;
 
-    /// The opening loop's axis step is halved when |c| grew since the
-    /// previous cycle (trust.zig; it ticks twice, so this is the whole
-    /// damping story).
-    pub const DAMP_SHRINK: f64 = 0.5;
-
     /// Support-set membership cutoff: a point counts as active (kept in
     /// the `Info.cert`, in the constructed dual `Z`, and — load-bearing —
     /// in the Newton-polish active set) iff its weight exceeds this. The
@@ -125,6 +120,11 @@ pub const trust = struct {
     /// oracle-consistency lesson: opening certificates are pure
     /// upper-bound checks and never feed the trust-region model.
     pub const OPEN_ROUNDS: u32 = 1;
+
+    /// The opening loop's axis step is halved when ‖c‖ grew since the
+    /// previous cycle; the loop's `comptime` assert in trust.zig says why
+    /// that is the whole damping rule.
+    pub const DAMP_SHRINK: f64 = 0.5;
 
     /// Inner MVEE oracle per h-evaluation: FW in bursts of INNER_BURST
     /// steps with a stall exit — stop when a burst improves the design

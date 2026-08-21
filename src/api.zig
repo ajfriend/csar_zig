@@ -105,9 +105,8 @@ pub const InputError = error{
 ///
 /// These are the knobs a typical caller might legitimately want to
 /// twist (perf-vs-accuracy trade-offs, behavior toggles). Deeper
-/// tuning constants — Frank-Wolfe inner cycles, the opening step's
-/// damping, backtracking — are kept internal in `algo`
-/// because they interact subtly with each other.
+/// tuning constants — Frank-Wolfe inner cycles, backtracking — are kept
+/// internal in `algo` because they interact subtly with each other.
 pub const SolveOptions = struct {
     /// Convergence threshold on the duality gap. Must be finite and
     /// positive. Smaller = tighter solution but more iterations.

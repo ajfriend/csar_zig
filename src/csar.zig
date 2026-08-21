@@ -60,7 +60,7 @@ const InputError = api.InputError;
 const SolveOptions = api.SolveOptions;
 
 // ----------------------------------------------------------------
-// Outer-loop primitives: rescale / moments / damp.
+// Outer-loop primitives: rescale / moments / axis step.
 // Each is a thin wrapper so the outer loop reads close to pseudocode.
 // All inline → zero runtime cost vs hand-rolled arithmetic.
 // ----------------------------------------------------------------

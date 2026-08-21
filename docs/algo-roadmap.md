@@ -359,11 +359,8 @@ zero algorithmic risk; the cost is a major-version API change.
   same release.
 - Changelog entry + major version bump; note the escape hatch (the test
   oracle) for anyone who was selecting `.alternating` deliberately.
-- Follow-up deletions this unlocked: `DampState` and the `DAMP_GROW` /
-  `DAMP_MIN` / `DAMP_MAX` knobs went in #31 — the trust path's opening
-  cadence ticks the controller exactly twice, so a two-line rule
-  reproduces it bit for bit (`quasiNewtonAxisDirection`,
-  PRECOND_COND_MIN and AXIS_WARMUP had already gone with the path).
+- Follow-up deletions: done — `DampState` and the `DAMP_GROW` / `DAMP_MIN` /
+  `DAMP_MAX` knobs in #31; the rest went with the path.
 
 ### 10. Unify the eager/OPEN_ROUNDS and RECERT phases
 
