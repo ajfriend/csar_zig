@@ -240,7 +240,7 @@ state, a raw FW step is a no-op once g_max < 3 numerically, polish is
 at its fixed point. The sampling lever the alternating path enjoys is axis motion. So
 the fix is honest about that: **the re-cert phase is a few alternating-path
 outer iterations warm-started at the TR optimum** — FW step → polish →
-certify → damped axis micro-step (`config.trust.RECERT_MAX` bounds
+certify → axis micro-step, undamped (`config.trust.RECERT_MAX` bounds
 it). TR for the global descent, fast iteration for the terminal
 certification.
 

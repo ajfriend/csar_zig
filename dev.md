@@ -415,6 +415,36 @@ dependency — consumers can't inherit it, and nothing under `bench/` ships
 (see "Packaging"). Reports are for pasting into a PR;
 nothing is written to disk.
 
+### Reading a small stable shift
+
+A stable ≈1% ratio shift with an empty deterministic diff is a change in
+machine code, and the machine code can be read. Before blaming layout
+(`bench/ab.zig` "Known residual bias", #22):
+
+1. Several commits in the PR: bisect — check out each commit's `src/`,
+   re-run `just ab`; expect the shift to belong to one.
+2. Get both versions of `csar.solve` as ReleaseFast machine code. The
+   bench binary already holds both sides, so when `main` is the pinned
+   release one `zig build --build-file bench/build.zig install` and one
+   `objdump -d bench/zig-out/bin/csar-ab` has `cur` and `base` side by
+   side. Otherwise `git worktree add` at each commit and `zig build
+   install-coverage` there: `zig-out/bin/csar-ex-bench` is hard-wired
+   ReleaseFast and keeps `csar.solve` as a symbol. Builds are
+   deterministic, so this is the code the report measured.
+3. Find what moved. On Linux `nm --size-sort`; Mach-O has no symbol
+   sizes, so on macOS take address deltas from `nm -n` (symbols carry a
+   leading `_`) or diff `objdump -d` per function. What is inlined into
+   `csar.solve` is the compiler's call — `nm` tells you, each time.
+4. `objdump -d` the mover and read the changed loop. A new store/load to
+   the stack inside it (aarch64 `str`/`ldr` to `[sp, …]`; x86-64 `mov` to
+   `[rsp+…]`) is a spilled loop-carried value — a few cycles per
+   iteration, which on a 6–10 point cell is the ~20 ns a 1% batch row is.
+
+First use: #52 — a collapsed damping struct kept `1.0` and a norm live
+across the solver calls, which spilled the inlined `computeMoments`
+accumulator. Forcing that call out of line recovered about half and was
+not kept.
+
 ## Examples
 
 Four single-file programs under `examples/`, each wired into

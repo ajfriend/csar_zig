@@ -20,6 +20,7 @@ const config = @import("config.zig");
 const Vec3 = linalg.Vec3;
 const Mat3 = linalg.Mat3;
 const LU = linalg.LU;
+const algo = config.algo;
 const tol = config.tol;
 
 /// Scratch for `newtonPolish` + `solveBorderedKkt` (active-set Newton's
@@ -68,7 +69,7 @@ pub const NewtonScratch = struct {
 /// identical to prior behavior except when a boundary drop fires —
 /// see the drop rule in `newtonPolish`); its known asymptotic
 /// ill-conditioning — 1 → g/3 approaches range(H) as the g-spread
-/// → 0, since gᵢ = vᵢᵀe identically — is bounded by the inner_tol
+/// → 0, since gᵢ = vᵢᵀe identically — is bounded by the `tol.NEWTON_INNER`
 /// break firing first. Pre-existing, documented, unchanged.
 pub const RANGE_SPACE_MIN_K: usize = 8;
 
@@ -190,17 +191,19 @@ fn solveKktRangeSpace(Y: []const Vec3, g: []const f64, delta_w: []f64) bool {
     return true;
 }
 
-/// Newton polish on the D-optimal dual restricted to {i : w_i > active_thresh}.
+/// Newton polish on the D-optimal dual restricted to {i : w_i > algo.ACTIVE_THRESH}.
 /// Mutates w in place; inactive entries reset to 0 on exit. Boundary-
 /// limited Newton steps shed the blocking weight and continue on the
 /// reduced active set (the drop rule below) — so unlike the historical
 /// behavior, weights CAN reach exactly 0 during polish.
 /// Returns false on failure (<3 active, Cholesky breakdown, or KKT singular).
-pub fn newtonPolish(Ql: []const Vec3, w: []f64, active_thresh: f64, max_iter: u32, inner_tol: f64, s: *NewtonScratch) bool {
+/// Cutoff, budget and tolerance are `algo.ACTIVE_THRESH`,
+/// `algo.POLISH_MAX_ITER` and `tol.NEWTON_INNER`.
+pub fn newtonPolish(Ql: []const Vec3, w: []f64, s: *NewtonScratch) bool {
     const active_idx = s.active_idx;
     var k: usize = 0;
     for (w, 0..) |wi, i| {
-        if (wi > active_thresh) {
+        if (wi > algo.ACTIVE_THRESH) {
             active_idx[k] = i;
             k += 1;
         }
@@ -221,7 +224,7 @@ pub fn newtonPolish(Ql: []const Vec3, w: []f64, active_thresh: f64, max_iter: u3
     const delta_w = s.delta_w;
 
     var it: u32 = 0;
-    while (it < max_iter) : (it += 1) {
+    while (it < algo.POLISH_MAX_ITER) : (it += 1) {
         // k ≥ RANGE_SPACE_MIN_K routes the KKT solve through the rank-6
         // range space (see solveKktRangeSpace); below it, the dense
         // path of prior behavior. Derived fresh each iteration because
@@ -256,7 +259,7 @@ pub fn newtonPolish(Ql: []const Vec3, w: []f64, active_thresh: f64, max_iter: u3
             if (g[i] > g_max) g_max = g[i];
             if (g[i] < g_min) g_min = g[i];
         }
-        if (g_max - g_min < inner_tol) break;
+        if (g_max - g_min < tol.NEWTON_INNER) break;
 
         var solved = false;
         if (use_range) solved = solveKktRangeSpace(Y[0..k], g[0..k], delta_w);

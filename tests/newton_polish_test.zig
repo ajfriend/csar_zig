@@ -23,7 +23,6 @@ const config = @import("../src/config.zig");
 const Vec3 = linalg.Vec3;
 const Mat3 = linalg.Mat3;
 const algo = config.algo;
-const tol = config.tol;
 
 /// Post-polish state summary. g statistics are over the points still
 /// active (w > algo.ACTIVE_THRESH) — the set polish's own convergence
@@ -39,7 +38,7 @@ const PolishResult = struct {
 
 fn runPolish(a: std.mem.Allocator, Ql: []const Vec3, w: []f64) !PolishResult {
     var scratch = try newton.NewtonScratch.init(a, Ql.len);
-    const ok = newton.newtonPolish(Ql, w, algo.ACTIVE_THRESH, algo.POLISH_MAX_ITER, tol.NEWTON_INNER, &scratch);
+    const ok = newton.newtonPolish(Ql, w, &scratch);
 
     var S = Mat3.zero;
     for (Ql, 0..) |qi, i| S.addSymRank1(w[i], qi);

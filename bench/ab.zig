@@ -54,9 +54,11 @@
 //! `--aa` cannot see it either: one module against itself shares layout by
 //! construction. The re-pin after each release is the one run with two copies
 //! of the same commit in two layouts; the samples are recorded on #22 (so
-//! far: inside the A/A floor), which also owns a repeatable measure. Treat an
-//! A/B difference near the noise floor as unproven, and prefer a change that
-//! shows up across several cases over one that moves a single case slightly.
+//! far: inside the A/A floor), which also owns a repeatable measure. Before
+//! attributing a small stable shift to layout, diff the disassembly (dev.md
+//! "Reading a small stable shift"). Treat an A/B difference near the noise
+//! floor as unproven, and prefer a change that shows up across several cases
+//! over one that moves a single case slightly.
 
 const std = @import("std");
 const bc = @import("core.zig");
@@ -217,7 +219,8 @@ fn report(comptime Base: type, init: std.process.Init, opts: Opts) !void {
     try out.print("  baseline  : {s}\n", .{if (opts.aa) "(A/A: the working tree)" else build_options.baseline});
     try out.print("  reps      : {d} (+{d} warm-up), interleaved; batches {d} reps, no warm-up\n", .{ bc.N_REPS, bc.N_WARMUP, BATCH_REPS });
     try out.print("  note      : compare ratios, not µs — absolute times vary 2-5x between\n" ++
-        "              launches (see ab.zig, \"No process isolation\"); ratios do not.\n", .{});
+        "              launches (see ab.zig, \"No process isolation\"); ratios do not.\n" ++
+        "              A small stable shift with an empty diff: dev.md \"Reading a small stable shift\".\n", .{});
     if (opts.inject_2x) try out.print("  injected  : 2x on the current side\n", .{});
     if (opts.inject_tol) try out.print("  injected  : gap_tol={e} on the current side\n", .{INJECT_GAP_TOL});
     if (opts.gap_tol) |t| try out.print("  gap_tol   : {e} on both sides — deterministic pass only\n", .{t});
