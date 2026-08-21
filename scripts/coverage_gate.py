@@ -10,8 +10,10 @@ run, merged here — then derives the exclusion ledger from a report-only
 pass and cross-checks it against the source markers. Policy, what the
 gate guarantees, and the ledger's meaning: dev.md "Coverage".
 
-Output: quiet on success — the test-run summary line, then the summary
-block (also written to coverage/summary.txt, which CI posts on PRs).
+Output: the test-run summary line, then one report — the coverage
+line, the exclusion ledger, and on failure the sections that say why
+(failed runs, ledger mismatches, uncovered lines). The report is also
+written to coverage/summary.txt, which CI posts on the PR green or red.
 Every kcov invocation's output lands in zig-out/test-slow.log, in RUNS
 order, dumped only when a run fails.
 
@@ -61,8 +63,7 @@ RUNS = [
 INSTALL_DIRS = ['zig-out/bin', 'bench/zig-out/bin']  # every binary here must be in RUNS
 LOG = Path('zig-out/test-slow.log')
 OUT = Path('coverage')              # one kcov output dir per run, under here
-SUMMARY = OUT / 'summary.txt'
-SUMMARY_MD = OUT / 'summary.md'     # fenced form; CI puts it in the step summary + PR comment
+SUMMARY = OUT / 'summary.txt'       # the report; CI posts it on the PR
 INCLUDE_PATTERN = 'src/,tests/,cases/,examples/,bench/'
 # The A/B harness compiles the pinned baseline's sources too (unpacked under
 # bench/zig-pkg/); those match `src/` and must not be measured.
@@ -75,7 +76,7 @@ EXCLUDE_PATTERN = 'zig-pkg/'
 # future toolchain flags an uncovered doc-comment line, add `///`
 # here with that justification.)
 EXCLUDE_LINE = '=> unreachable,kcov-excl'
-GATE_PERCENT = 100.0
+# The gate is exactly 100%: any uncovered line fails it (dev.md "Coverage exclusions").
 ROOT = str(Path.cwd()) + '/'
 
 
@@ -168,11 +169,12 @@ with tempfile.TemporaryDirectory() as tmp, ThreadPoolExecutor() as pool:
     results = list(pool.map(lambda ir: measure(*ir, tmp), enumerate(RUNS)))
 log = ''.join(r[0] for r in results)
 LOG.write_text(log)
-if failed := [f'{b} {" ".join(a)}: exit {rc}, expected {"success" if ok else "failure"}'
-              for (b, a, ok), (_, rc, _, _) in zip(RUNS, results) if (rc == 0) != ok]:
+failed = [f'{" ".join([b, *a])}: exit {rc}, expected {"success" if ok else "failure"}'
+          for (b, a, ok), (_, rc, _, _) in zip(RUNS, results) if (rc == 0) != ok]
+if failed:
     print(log, end='')
-    sys.exit('\n'.join(failed))
-print(next(l for l in reversed(log.splitlines()) if l.startswith('All ') and 'tests passed' in l))
+else:
+    print(next(l for l in reversed(log.splitlines()) if l.startswith('All ') and 'tests passed' in l))
 
 gated = merge([g for _, _, g, _ in results])
 raw = merge([r for _, _, _, r in results if r])
@@ -211,22 +213,27 @@ covered = sum(1 for fl in gated.values() for h in fl.values() if h > 0)
 total = sum(len(fl) for fl in gated.values())
 percent = 100.0 * covered / total if total else 0.0
 
-text = '\n'.join([
-    f'csar coverage: {percent:.2f}%',
-    f'coverage exclusions: {sum(len(ls) for ls in excluded.values())} lines excluded from the gate',
-    *(f'  {rel(f)}: {len(ls)}' for f, ls in sorted(excluded.items())),
-]) + '\n'
-SUMMARY.write_text(text)
-SUMMARY_MD.write_text(f'```\n{text}```\n')
-print(text, end='')
+uncovered = {f: ns for f, fl in gated.items() if (ns := [n for n, h in sorted(fl.items()) if h == 0])}
 
-if problems:
-    print('ledger does not match the source markers:')
-    for pr in problems:
-        print('  ' + pr)
-    sys.exit(1)
-if percent < GATE_PERCENT:
-    for file, fl in sorted(gated.items()):
-        if missed := [str(n) for n, h in sorted(fl.items()) if h == 0]:
-            print(f'  uncovered {rel(file)}: {",".join(missed)}')
-    sys.exit(1)
+
+def section(title, rows, count=None):
+    """`title: count`, then the indented rows; nothing when there are none."""
+    return [f'{title}: {len(rows) if count is None else count}', *(f'  {r}' for r in rows)] if rows else []
+
+
+def per_file(lines):
+    return [f'{rel(f)}: {",".join(map(str, ns))}' for f, ns in sorted(lines.items())]
+
+
+kcov_version = run(['kcov', '--version'])[1].splitlines()[-1]
+report = [
+    f'csar coverage: {percent:.2f}%  ({kcov_version})',
+    *section('excluded lines', per_file(excluded), sum(map(len, excluded.values()))),
+    *section('failed runs', failed),
+    *section('ledger mismatches', problems),
+    *section('uncovered lines', per_file(uncovered), sum(map(len, uncovered.values()))),
+]
+text = '\n'.join(report) + '\n'
+SUMMARY.write_text(text)
+print(text, end='')
+sys.exit(1 if failed or problems or uncovered else 0)
