@@ -15,7 +15,7 @@ test-slow:
 test-selfhosted:
     zig build test -Dslow=true -Dllvm=false
 
-# Compile the library and every executable without running (CI's Build step).
+# Compile the library and every executable without running (CI's `check` job).
 # The bench package builds too — it lives outside this build graph, so nothing
 # else would notice it rotting. Resolving its manifest fetches the pinned
 # baseline the first time on a machine; see bench/build.zig.
@@ -45,6 +45,7 @@ consumer-smoke:
     sh scripts/consumer_smoke/run.sh
 
 # Everything CI checks that can run on this machine — use before pushing a PR.
+# CI runs each of these as its own job; keep .github/workflows/ci.yml in step.
 ci: check lint consumer-smoke test-slow _ci-selfhosted
 
 [linux]

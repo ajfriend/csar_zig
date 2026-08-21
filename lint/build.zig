@@ -11,7 +11,10 @@ const zlinter = @import("zlinter");
 pub fn build(b: *std.Build) void {
     const lint_step = b.step("lint", "Every declaration is referenced (zlinter no_unused)");
     lint_step.dependOn(step: {
-        var builder = zlinter.builder(b, .{});
+        // Debug, not zlinter's ReleaseSafe default: the lint itself takes
+        // milliseconds, and a ReleaseSafe compile of zlinter plus its zls
+        // dependency dominates a cold build.
+        var builder = zlinter.builder(b, .{ .optimize = .Debug });
         // Relative to THIS build root: zlinter resolves include paths
         // against it and runs with it as cwd. (A path it cannot open is a
         // warning, not an error — the `lint` recipe checks for it.)
