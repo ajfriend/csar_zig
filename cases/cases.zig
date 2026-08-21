@@ -16,9 +16,23 @@
 
 const std = @import("std");
 
+/// The solver options every pin in the corpus — cases and batches — is
+/// taken under. The tests and `bench/core.zig` reference these rather
+/// than carrying their own copies: a pin is meaningless without them.
+pub const PIN = .{
+    .gap_tol = 1e-6,
+    .n_hull = 10,
+    .coplanarity_tol = 1e-12,
+};
+
+/// The batch fixtures (cases/batches/*.zon): ~1000-cell DGGS samples
+/// with a pinned convergence count. Nothing but the tests and `bench/`
+/// reference this, so lazy analysis keeps the data out of the examples.
+pub const batches = @import("batches.zig");
+
 pub const Expected = union(enum) {
     /// Solver should converge with this aspect ratio (matched within
-    /// the integration test's tolerance, currently 1e-6).
+    /// the integration test's tolerance, `PIN.gap_tol`).
     converged: struct { ar: f64 },
     /// Solver should detect infeasibility. Universal sanity checks
     /// (λ ≥ 0, ∑λ ≈ 1, ‖∑ λᵢ xᵢ‖ ≈ residual) live in the test loop;

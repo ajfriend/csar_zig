@@ -31,6 +31,14 @@ countries-plot:
 # Full countries pipeline: fetch -> solve -> plot.
 countries-all: countries-gen countries-aspect countries-plot
 
+# Regenerate the batch fixtures cases/batches/*.{ids,zon} (pins: PINS in the script).
+batches-gen:
+    uv run scripts/batches/gen_batches.py
+
+# Check every committed batch .zon against its .ids (vertex chord distance <= 1e-12).
+batches-verify:
+    uv run scripts/batches/verify_batches.py
+
 # Remove generated survey data.
 clean:
     rm -rf scripts/states/data scripts/countries/data

@@ -11,6 +11,7 @@
 //! `ab.zig`.
 
 const std = @import("std");
+const cases = @import("cases");
 
 // ---------------------------------------------------------------------------
 // Warm-up
@@ -371,9 +372,9 @@ pub fn writeDiff(w: *std.Io.Writer, name: []const u8, a: Metrics, b: Metrics) st
 // for.
 // ---------------------------------------------------------------------------
 
-/// Matches the tolerance the test suite runs at, so a report is comparable to
-/// what `just ci` gates on.
-pub const GAP_TOL = 1e-6;
+/// The tolerance the corpus is pinned at, so a report is comparable to what
+/// `just ci` gates on.
+pub const GAP_TOL = cases.PIN.gap_tol;
 
 /// One side of a comparison: a library version bound to an allocator, a clock,
 /// and the options it solves under. Exposes `metrics` and `measure`.
@@ -403,8 +404,8 @@ pub fn Side(comptime lib: type) type {
         fn opts(self: Self) lib.SolveOptions {
             return .{
                 .gap_tol = self.gap_tol,
-                .n_hull = 10,
-                .coplanarity_tol = 1e-12,
+                .n_hull = cases.PIN.n_hull,
+                .coplanarity_tol = cases.PIN.coplanarity_tol,
                 .max_outer = 100,
                 // `.trust`, not `.auto`: `.auto` is an alias each version is
                 // free to re-point.
