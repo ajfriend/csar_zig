@@ -40,6 +40,12 @@ Strictly-interior filler points (radius factor < 1 on the same ellipse) leave
 the support -- and so the expected AR -- unchanged; they exercise hull
 reduction and sparse init without moving the answer.
 
+N is kept ODD. With even N the ring points fall in antipodal pairs, so the
+configuration is centrally symmetric about the tangency point, the min-norm
+starting axis is already optimal, and the outer loop runs ZERO iterations --
+the fixture would exercise the inner MVEE and the certificate but never the
+axis search. AR depends only on (a1, a2), so parity does not move the pins.
+
 Writes cases/zon/exact_*.zon, and an examples/difftest-format listing to
 examples/difftest_exact.txt for cross-checking before registering them in
 cases/cases.zig.
@@ -57,12 +63,15 @@ CASES = {
     'exact_w82_ar1p4':    (5.0000, 7.1154, 9,   0,   'width 82.0 deg, AR 1.42 - wide and near-circular'),
     'exact_w85_ar2':      (5.6713, 11.430, 9,   0,   'width 85.0 deg, AR 2.02 - wide and near-circular'),
     'exact_w88_ar1p5':    (19.081, 28.636, 11,  0,   'width 88.0 deg, AR 1.50 - very wide, near-circular'),
-    'exact_w89_ar2':      (28.636, 57.290, 12,  0,   'width 89.0 deg, AR 2.00 - extreme width'),
-    'exact_w88_ar10':     (3.0000, 30.000, 8,   0,   'width 88.1 deg, AR 10 - wide and elongated'),
+    'exact_w89_ar2':      (28.636, 57.290, 11,  0,   'width 89.0 deg, AR 2.00 - extreme width'),
+    'exact_w88_ar10':     (3.0000, 30.000, 9,   0,   'width 88.1 deg, AR 10 - wide and elongated'),
     'exact_w76_ar20':     (0.2000, 4.0000, 7,   0,   'width 76.0 deg, AR 20 - wide and elongated'),
-    'exact_w84_ar1000':   (0.0100, 10.000, 12,  0,   'width 84.3 deg, AR 1000 - wide and extreme AR'),
+    'exact_w84_ar1000':   (0.0100, 10.000, 11,  0,   'width 84.3 deg, AR 1000 - wide and extreme AR'),
     'exact_min3_ar5':     (0.4000, 2.0000, 3,   0,   'N = 3, AR 5 - minimal support set'),
-    'exact_tiny_ar3':     (5.0e-4, 1.5e-3, 6,   0,   'half-width 0.086 deg, AR 3 - fine-scale conditioning'),
+    # Converges in 0 outer iterations regardless of parity: at this scale the
+    # objective is flat enough in b that the starting axis is already optimal.
+    # It pins fine-scale conditioning of the inner solve, not the axis search.
+    'exact_tiny_ar3':     (5.0e-4, 1.5e-3, 7,   0,   'half-width 0.086 deg, AR 3 - fine-scale conditioning'),
     'exact_w85_ar2_fill': (5.6713, 11.430, 9,   180, 'width 85 deg, AR 2.02 plus 180 interior points'),
 }
 
