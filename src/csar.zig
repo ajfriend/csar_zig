@@ -673,13 +673,19 @@ pub fn dualityGapConstructed(
         cert_lambdas_out[i] = lam[i];
     }
 
-    // gap = (−log det Z − 3 + ‖w‖) − log det A, and via the similarity
-    //   log det Z = log det M − log det A,
-    // so the two log det A terms cancel:  gap = ‖w‖ − 3 − log det M.
-    // Routing through M (eigenvalues near 1 at convergence) avoids the
-    // ~1e-3 error that sum-of-logs on Z's own ill-conditioned eigenvalues
-    // would suffer (hex-degenerate cases, κ(Z) ~ 1e7).
-    const gap = w_sum.norm() - 3.0 - Lm.logDet();
+    // Gap against the normalized dual (max log det Z s.t. ‖Xλ‖ ≤ 3):
+    // rescaling the multipliers onto the constraint boundary by 3/‖w‖
+    // contributes 3·log(‖w‖/3), and via the similarity
+    //   log det Z = log det M − log det A
+    // the two log det A terms cancel:
+    //   gap = 3·log(‖w‖/3) − log det M.
+    // log1p keeps the axis term exact near ‖w‖ = 3, and routing through
+    // M (eigenvalues near 1 at convergence) avoids the ~1e-3 error that
+    // sum-of-logs on Z's own ill-conditioned eigenvalues would suffer
+    // (hex-degenerate cases, κ(Z) ~ 1e7). Never exceeds the Lagrangian
+    // form ‖w‖ − 3 − log det M (by t − 3 − 3·log(t/3) ≥ 0), so the
+    // certified bound only tightens.
+    const gap = 3.0 * std.math.log1p((w_sum.norm() - 3.0) / 3.0) - Lm.logDet();
     return .{
         .gap = gap,
         .cert_n = k,
