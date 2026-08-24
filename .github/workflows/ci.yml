@@ -68,12 +68,19 @@ jobs:
       # carries the image version because the cached set is exactly the
       # dependencies *that image* lacks — no restore-keys, since a deb set
       # picked for one image may not satisfy the next.
+      - name: Identify the runner image
+        id: image
+        # ImageOS/ImageVersion are the runner's *process* environment, not the
+        # `env:` expression context — `${{ env.ImageOS }}` in a cache key
+        # silently expands to the empty string, pinning every image to one
+        # entry. Read them from a shell, where they actually exist.
+        run: echo "id=${ImageOS:-unknown}-${ImageVersion:-unknown}" >> "$GITHUB_OUTPUT"
       - name: Restore the kcov .debs
         id: kcov-debs
         uses: actions/cache@v4
         with:
           path: ~/kcov-debs
-          key: kcov-debs-${{ env.ImageOS }}-${{ env.ImageVersion }}
+          key: kcov-debs-${{ steps.image.outputs.id }}
       - name: Download the kcov .debs
         if: steps.kcov-debs.outputs.cache-hit != 'true'
         run: |
