@@ -235,12 +235,15 @@ Two consequences:
 
 ### 7. Two-component, cancellation-free gap
 
-`dualityGapConstructed` computes the axis term as `w_sum.norm() - 3.0`
-(src/csar.zig) — subtracting 3 from a norm that is ≈ 3 near convergence,
-discarding the term's value into ~1e-15 cancellation noise. Since
-b·Xλ = 3·Σwᵢ structurally, the stable split is
+`dualityGapConstructed` computes the axis term as
+3·log1p((‖Xλ‖ − 3)/3) (src/csar.zig; the normalized-dual form) — the
+log1p is exact, but its argument still subtracts 3 from a norm that
+is ≈ 3 near convergence, discarding the term's value into ~1e-15
+cancellation noise. Since b·Xλ = 3·Σwᵢ structurally, the stable
+split is
 
-    gap_axis  = 3·(Σ_active wᵢ − 1) + ‖τ‖² / (‖Xλ‖ + b·Xλ)   (τ = tangential part)
+    dev       = ‖Xλ‖ − 3 = 3·(Σ_active wᵢ − 1) + ‖τ‖² / (‖Xλ‖ + b·Xλ)   (τ = tangential part)
+    gap_axis  = 3·log1p(dev/3)
     gap_inner = −log det M
 
 Two wins: no cancellation, and the gap decomposes into named components —
@@ -251,7 +254,8 @@ eigenvalues at fixed axis). Afternoon-sized; measure on the floor-marginal
 S2/A5 populations (needs the survey harness — see the infrastructure note).
 
 **Implementation notes.** In `dualityGapConstructed` (src/csar.zig, the
-`gap = w_sum.norm() - 3.0 - Lm.logDet()` line):
+`gap = 3.0 * std.math.log1p(...) - Lm.logDet()` line; the exact `dev`
+above replaces the naive `w_sum.norm() - 3.0` as the log1p argument):
 
 - `s = b·w_sum` — but compute the *deviation* `s − 3` without cancellation:
   since `λᵢ·(b·xᵢ) = 3wᵢ` exactly by construction, `s − 3 = 3·(Σ_active wᵢ
@@ -263,7 +267,8 @@ S2/A5 populations (needs the survey harness — see the infrastructure note).
   agree to ~1e-14 in a debug check.
 - `τ = w_sum − s·b` (tangential part; ‖τ‖² is a sum of squares, no
   cancellation), and
-  `gap_axis = (s − 3) + ‖τ‖² / (‖w_sum‖ + s)`,
+  `dev = (s − 3) + ‖τ‖² / (‖w_sum‖ + s)`,
+  `gap_axis = 3·log1p(dev/3)`,
   `gap_inner = −Lm.logDet()`, `gap = gap_axis + gap_inner`.
   The identity behind the split: ‖w_sum‖² = s² + ‖τ‖², so
   ‖w_sum‖ − s = ‖τ‖²/(‖w_sum‖ + s).

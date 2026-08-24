@@ -673,13 +673,22 @@ pub fn dualityGapConstructed(
         cert_lambdas_out[i] = lam[i];
     }
 
-    // gap = (−log det Z − 3 + ‖w‖) − log det A, and via the similarity
-    //   log det Z = log det M − log det A,
-    // so the two log det A terms cancel:  gap = ‖w‖ − 3 − log det M.
-    // Routing through M (eigenvalues near 1 at convergence) avoids the
-    // ~1e-3 error that sum-of-logs on Z's own ill-conditioned eigenvalues
-    // would suffer (hex-degenerate cases, κ(Z) ~ 1e7).
-    const gap = w_sum.norm() - 3.0 - Lm.logDet();
+    // Gap against the normalized dual (max log det Z s.t. ‖Xλ‖ ≤ 3):
+    // rescaling the multipliers onto the constraint boundary by 3/‖Xλ‖
+    // contributes 3·log(‖Xλ‖/3), and via the similarity
+    // log det Z = log det M − log det A the two log det A terms cancel:
+    //   gap = 3·log(‖Xλ‖/3) − log det M      (w_sum = Xλ).
+    // Since ‖Xλ‖ − 3 ≥ 3·log(‖Xλ‖/3), this is never looser than the
+    // Lagrangian form ‖Xλ‖ − 3 − log det M. ‖Xλ‖ is used directly
+    // rather than assuming b·Xλ = 3: that identity is broken by
+    // active-set truncation (Σ_active wᵢ is slightly below 1), and the
+    // ‖Xλ‖ form is a valid dual value regardless — do not "simplify"
+    // the assumption in. Computed as 3·log1p((‖Xλ‖ − 3)/3), exact up
+    // to the subtraction's ~1e-15 cancellation (algo-roadmap item 7);
+    // routing through M (eigenvalues near 1 at convergence) avoids the
+    // ~1e-3 error of sum-of-logs on Z's own ill-conditioned
+    // eigenvalues (hex-degenerate cases, κ(Z) ~ 1e7).
+    const gap = 3.0 * std.math.log1p((w_sum.norm() - 3.0) / 3.0) - Lm.logDet();
     return .{
         .gap = gap,
         .cert_n = k,
