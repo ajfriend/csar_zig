@@ -673,16 +673,16 @@ pub fn dualityGapConstructed(
         cert_lambdas_out[i] = lam[i];
     }
 
-    // Gap against the normalized dual (max log det Z s.t. ‖Xλ‖ ≤ 3,
-    // paper eq:dual): rescaling the multipliers onto the constraint
-    // boundary by 3/‖Xλ‖ contributes 3·log(‖Xλ‖/3), and via the
-    // similarity log det Z = log det M − log det A the two log det A
-    // terms cancel:
+    // Gap against the normalized dual (max log det Z s.t. ‖Xλ‖ ≤ 3):
+    // rescaling the multipliers onto the constraint boundary by 3/‖Xλ‖
+    // contributes 3·log(‖Xλ‖/3), and via the similarity
+    // log det Z = log det M − log det A the two log det A terms cancel:
     //   gap = 3·log(‖Xλ‖/3) − log det M      (w_sum = Xλ).
-    // The ‖Xλ‖ form is used rather than the paper's tangential-c form
-    // (eq:gap-formula) so the bound stays valid under active-set
-    // truncation (Σ_active wᵢ is slightly below 1) — do not "fix" it
-    // back to the c form. log1p is exact given its argument; the
+    // ‖Xλ‖ is used directly rather than assuming b·Xλ = 3 (which would
+    // give the tangential-component form): the recipe's identity is
+    // broken by active-set truncation (Σ_active wᵢ is slightly below
+    // 1), and the ‖Xλ‖ form is a valid dual value regardless — do not
+    // "simplify" that assumption in. log1p is exact given its argument; the
     // ‖Xλ‖ − 3 subtraction itself carries ~1e-15 cancellation noise
     // (algo-roadmap item 7). Routing through M (eigenvalues near 1 at
     // convergence) avoids the ~1e-3 error that sum-of-logs on Z's own
