@@ -61,13 +61,10 @@ jobs:
         with:
           enable-cache: false
       - name: Install kcov
-        # The old 8–28 s, mirror-dependent cost here was almost entirely
-        # `apt-get update` (issue #47): the image already carries every kcov
-        # dependency, and the kcov deb itself is 483 kB, fetched in ~0 s. So
-        # install straight from the image's baked package lists. If those
-        # ever go stale, this fails loudly — reinstate `apt-get update` then.
-        # `kcov --version` both proves the install and is the string the
-        # gate's report header carries (dev.md "Coverage").
+        # No `apt-get update`: the image's baked lists resolve kcov, and the
+        # update was this step's whole mirror-dependent cost (#47). If the
+        # lists ever go stale this fails loudly — reinstate it then.
+        # `kcov --version` is the string the gate's report header carries.
         run: |
           sudo apt-get install -y kcov
           kcov --version
