@@ -5,6 +5,11 @@ commit that carries the full detail.
 
 ## [Unreleased]
 
+- The certified gap is now measured against the normalized dual — a
+  never-looser bound; behavior otherwise unchanged (deterministic diff
+  empty, timing within noise). Details in
+  [#65](https://github.com/ajfriend/csar_zig/pull/65).
+
 ## [0.4.0]
 
 - **Breaking:** `Outcome` gains `.precision_floor` (the tolerance is below
