@@ -673,18 +673,22 @@ pub fn dualityGapConstructed(
         cert_lambdas_out[i] = lam[i];
     }
 
-    // Gap against the normalized dual (max log det Z s.t. ‖Xλ‖ ≤ 3):
-    // rescaling the multipliers onto the constraint boundary by 3/‖w‖
-    // contributes 3·log(‖w‖/3), and via the similarity
-    //   log det Z = log det M − log det A
-    // the two log det A terms cancel:
-    //   gap = 3·log(‖w‖/3) − log det M.
-    // log1p keeps the axis term exact near ‖w‖ = 3, and routing through
-    // M (eigenvalues near 1 at convergence) avoids the ~1e-3 error that
-    // sum-of-logs on Z's own ill-conditioned eigenvalues would suffer
-    // (hex-degenerate cases, κ(Z) ~ 1e7). Never exceeds the Lagrangian
-    // form ‖w‖ − 3 − log det M (by t − 3 − 3·log(t/3) ≥ 0), so the
-    // certified bound only tightens.
+    // Gap against the normalized dual (max log det Z s.t. ‖Xλ‖ ≤ 3,
+    // paper eq:dual): rescaling the multipliers onto the constraint
+    // boundary by 3/‖Xλ‖ contributes 3·log(‖Xλ‖/3), and via the
+    // similarity log det Z = log det M − log det A the two log det A
+    // terms cancel:
+    //   gap = 3·log(‖Xλ‖/3) − log det M      (w_sum = Xλ).
+    // The ‖Xλ‖ form is used rather than the paper's tangential-c form
+    // (eq:gap-formula) so the bound stays valid under active-set
+    // truncation (Σ_active wᵢ is slightly below 1) — do not "fix" it
+    // back to the c form. log1p is exact given its argument; the
+    // ‖Xλ‖ − 3 subtraction itself carries ~1e-15 cancellation noise
+    // (algo-roadmap item 7). Routing through M (eigenvalues near 1 at
+    // convergence) avoids the ~1e-3 error that sum-of-logs on Z's own
+    // ill-conditioned eigenvalues would suffer (hex-degenerate cases,
+    // κ(Z) ~ 1e7). By ‖Xλ‖ − 3 − 3·log(‖Xλ‖/3) ≥ 0 this bound is
+    // never looser than the Lagrangian form ‖Xλ‖ − 3 − log det M.
     const gap = 3.0 * std.math.log1p((w_sum.norm() - 3.0) / 3.0) - Lm.logDet();
     return .{
         .gap = gap,
