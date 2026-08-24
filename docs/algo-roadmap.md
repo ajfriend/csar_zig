@@ -236,11 +236,11 @@ Two consequences:
 ### 7. Two-component, cancellation-free gap
 
 `dualityGapConstructed` computes the axis term as
-`3·log1p((w_sum.norm() - 3.0)/3)` (src/csar.zig; the normalized-dual
-form) — the log1p is exact, but its argument still subtracts 3 from a
-norm that is ≈ 3 near convergence, discarding the term's value into
-~1e-15 cancellation noise. Since
-b·Xλ = 3·Σwᵢ structurally, the stable split is
+3·log1p((‖Xλ‖ − 3)/3) (src/csar.zig; the normalized-dual form) — the
+log1p is exact, but its argument still subtracts 3 from a norm that
+is ≈ 3 near convergence, discarding the term's value into ~1e-15
+cancellation noise. Since b·Xλ = 3·Σwᵢ structurally, the stable
+split is
 
     dev       = ‖Xλ‖ − 3 = 3·(Σ_active wᵢ − 1) + ‖τ‖² / (‖Xλ‖ + b·Xλ)   (τ = tangential part)
     gap_axis  = 3·log1p(dev/3)

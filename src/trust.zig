@@ -5,11 +5,10 @@
 //!   h(b) = min_A { −log det A : ‖A·xᵢ‖₂ ≤ bᵀxᵢ }
 //!
 //! over the unit sphere. Partial minimization of the jointly convex
-//! primal makes h convex on the unit ball and
-//! radially non-increasing, so its sphere minimum is the joint optimum
-//! and every sphere point has a non-increasing normalized-segment path
-//! to it — no spurious strict local minima for a descent method to
-//! fall into.
+//! primal makes h convex on the unit ball and radially non-increasing,
+//! so its sphere minimum is the joint optimum and every sphere point
+//! has a non-increasing normalized-segment path to it — no spurious
+//! strict local minima for a descent method to fall into.
 //!
 //! The inner minimization at fixed b is EXACTLY the 2D lifted MVEE that
 //! `csar.zig`'s chart primitives solve in the gnomonic chart: the lifted points
