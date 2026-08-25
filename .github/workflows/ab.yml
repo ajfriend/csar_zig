@@ -1,0 +1,61 @@
+name: ab
+
+# On-demand A/B run (issue: on-demand CI run of the A/B tool): automates
+# dev.md "The PR procedure, and what gates" step 1 — `just ab --aa`, then
+# `just ab` — and posts both reports. Deliberately NOT on push/pull_request:
+# the deterministic per-case signal already rides every CI run via the
+# coverage gate's csar-ab invocations, and standing timing runs on hosted
+# runners would only accumulate noise. Trigger with:
+#   gh workflow run ab --ref <branch>
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: ab-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ab:
+    # ubuntu-latest, unpinned: the A/A calibration runs in-band, so image
+    # churn shows up as a changed floor in the same report rather than
+    # silently invalidating a stored one — the image choice is not
+    # load-bearing.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+          cache-key: ab
+      - uses: extractions/setup-just@v3
+      # --aa first, then the A/B — the calibration is what makes the A/B
+      # interpretable, and both come from the same binary in the same job.
+      - name: Run the A/A calibration, then the A/B
+        run: |
+          just ab --aa | tee aa-report.txt
+          just ab | tee ab-report.txt
+      - name: Post both reports
+        # To the step summary always; to the branch's open PR (if any) as a
+        # NEW comment per run — deliberately not `--edit-last`, which edits
+        # the bot's most recent comment and would clobber the coverage
+        # ledger (same bot identity). On-demand runs are rare and each
+        # report is a measurement worth keeping; the PR is the archive.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          { printf '**A/B report** (on-demand, %s; read ratios against the A/A floor below — dev.md "The PR procedure, and what gates"):\n' "${ImageOS:-ubuntu}"
+            printf '<details><summary>just ab</summary>\n\n```\n'
+            cat ab-report.txt
+            printf '```\n</details>\n<details><summary>just ab --aa</summary>\n\n```\n'
+            cat aa-report.txt
+            printf '```\n</details>\n'
+          } > ab-comment.md
+          cat ab-comment.md >> "$GITHUB_STEP_SUMMARY"
+          pr=$(gh pr list --head "${GITHUB_REF_NAME}" --state open --json number --jq '.[0].number' || true)
+          if [ -n "$pr" ]; then
+            gh pr comment "$pr" --body-file ab-comment.md
+          fi
