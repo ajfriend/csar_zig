@@ -46,6 +46,15 @@ pub fn casePoints(name: []const u8) []const [3]f64 {
     return (cases.byName(name) orelse unreachable).points;
 }
 
+/// ‖Σ λᵢxᵢ‖ over a certificate, in the caller's indexing.
+pub fn xlamNorm(pts: []const [3]f64, cert: csar.Cert) f64 {
+    var z = Vec3.zero;
+    for (cert.indices, cert.lambdas) |idx, l| {
+        z = Vec3.lincomb(1.0, z, l, Vec3{ .m = pts[idx] });
+    }
+    return z.norm();
+}
+
 /// The parts of a resolvable (converged / DNC) outcome that tolerant
 /// tests read without caring which way a platform-sensitive solve
 /// landed; `null` for an infeasible outcome, which has no iterate. Both

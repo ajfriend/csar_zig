@@ -11,7 +11,6 @@ const std = @import("std");
 const csar = @import("../src/root.zig");
 const cases = @import("cases");
 const helpers = @import("helpers.zig");
-const Vec3 = csar.Vec3;
 
 /// Recorded settings for tier-2 cases: the adjustments under which the claim
 /// is made (fields not listed keep `cases.pin`'s values). All current entries
@@ -128,6 +127,11 @@ test "the tier x claim loop: every case's claim enforced at its tier's settings"
                 const viol = csar.checkFeasibility(c, case.points);
                 try std.testing.expect(viol <= tol);
 
+                // Primal-cert contract: λ ≥ 0, multipliers exported on the
+                // normalized dual's constraint boundary (api.zig `Cert`).
+                for (c.cert.lambdas) |l| try std.testing.expect(l >= 0);
+                try std.testing.expectApproxEqAbs(3.0, helpers.xlamNorm(case.points, c.cert), 1e-12);
+
                 // Tiers 0-1 additionally pin the AR. The certified duality
                 // gap is the source of truth for correctness; AR agreement
                 // is a cross-implementation / cross-version sanity check.
@@ -148,13 +152,10 @@ test "the tier x claim loop: every case's claim enforced at its tier's settings"
                 }
                 try std.testing.expect(@abs(sum - 1.0) < 1e-9);
 
-                var z = Vec3.zero;
-                for (inf.cert.indices, inf.cert.lambdas) |idx, l| {
-                    z = Vec3.lincomb(1.0, z, l, Vec3{ .m = case.points[idx] });
-                }
-                try std.testing.expect(z.norm() < 1e-2);
+                const wit = helpers.xlamNorm(case.points, inf.cert);
+                try std.testing.expect(wit < 1e-2);
                 // residual matches the computed witness magnitude (to a couple of ulp).
-                try std.testing.expect(@abs(inf.residual - z.norm()) < 1e-6);
+                try std.testing.expect(@abs(inf.residual - wit) < 1e-6);
             },
             .none => {
                 // Tier 3: no claim — the solve returning is the whole check.

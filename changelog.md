@@ -5,6 +5,8 @@ commit that carries the full detail.
 
 ## [Unreleased]
 
+- Normalize dual variables so `‖Xλ‖₂ = 3` (#88)
+
 ## [0.5.0]
 
 - The A/B report leads with the gate's verdict and the timing tables;

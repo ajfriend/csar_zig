@@ -667,10 +667,19 @@ pub fn dualityGapConstructed(
     for (0..k) |i| {
         w_sum = Vec3.lincomb(1.0, w_sum, lam[i], xa[i]);
     }
+    const xlam_norm = w_sum.norm();
 
+    // Export the multipliers rescaled onto the normalized dual's
+    // constraint boundary (‖Xλ‖ = 3), so a shipped certificate
+    // satisfies the stated feasible set literally. Only the exported
+    // copy is scaled: the gap below already prices in the rescale (see
+    // the gap comment), and the raw `lam` keeps the exact identity
+    // λᵢ·(b·xᵢ) = 3wᵢ. No zero guard: ‖Xλ‖ ≥ b·Xλ = 3·Σ_active wᵢ ≈ 3
+    // whenever k > 0.
+    const cert_scale = 3.0 / xlam_norm;
     for (0..k) |i| {
         cert_active_out[i] = active_idx[i];
-        cert_lambdas_out[i] = lam[i];
+        cert_lambdas_out[i] = cert_scale * lam[i];
     }
 
     // Gap against the normalized dual (max log det Z s.t. ‖Xλ‖ ≤ 3):
@@ -688,7 +697,7 @@ pub fn dualityGapConstructed(
     // routing through M (eigenvalues near 1 at convergence) avoids the
     // ~1e-3 error of sum-of-logs on Z's own ill-conditioned
     // eigenvalues (hex-degenerate cases, κ(Z) ~ 1e7).
-    const gap = 3.0 * std.math.log1p((w_sum.norm() - 3.0) / 3.0) - Lm.logDet();
+    const gap = 3.0 * std.math.log1p((xlam_norm - 3.0) / 3.0) - Lm.logDet();
     return .{
         .gap = gap,
         .cert_n = k,

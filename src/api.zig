@@ -236,11 +236,16 @@ pub const TrustDiagnostics = struct {
     gaps_below_model: u32,
 };
 
-/// Active-set certificate. `indices` / `lambdas` are paired arrays:
-/// the indices into the caller's `X[]` of the active input points and
-/// their dual weights (λ ≥ 0, ∑λ = 1). Shared across all three
-/// outcome variants; the per-variant scalar (gap / residual) lives on
-/// the variant itself.
+/// Active-set certificate, shared across all three outcome variants;
+/// the per-variant scalar (gap / residual) lives on the variant
+/// itself. `indices` / `lambdas` are paired arrays: the indices into
+/// the caller's `X[]` of the active input points and their dual
+/// multipliers (λ ≥ 0). The normalization is per-variant: on
+/// `Converged`/`Uncertified` the multipliers sit on the normalized
+/// dual's constraint boundary, ‖Σᵢ λᵢxᵢ‖₂ = 3 to f64 roundoff
+/// (verify by rescaling, not by hard-comparing against ≤ 3; ∑λ is
+/// unconstrained); on `Infeasible` they are Farkas simplex weights,
+/// ∑λ = 1 (up to active-set truncation).
 pub const Cert = struct {
     indices: []u32,
     lambdas: []f64,
