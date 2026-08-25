@@ -240,9 +240,11 @@ pub const TrustDiagnostics = struct {
 /// the indices into the caller's `X[]` of the active input points and
 /// their dual multipliers (λ ≥ 0). The normalization is per-variant:
 /// on `Converged`/`Uncertified` the multipliers are exported on the
-/// normalized dual's constraint boundary, ‖Σᵢ λᵢxᵢ‖₂ = 3 (∑λ is
-/// unconstrained); on `Infeasible` they are Farkas simplex weights,
-/// ∑λ = 1 (up to active-set truncation). Shared across all three
+/// normalized dual's constraint boundary, ‖Σᵢ λᵢxᵢ‖₂ = 3 to f64
+/// roundoff — a recomputed norm can land an ulp either side of 3, so
+/// a verifier rescales rather than hard-comparing against the ≤ 3
+/// constraint (∑λ is unconstrained); on `Infeasible` they are Farkas
+/// simplex weights, ∑λ = 1 (up to active-set truncation). Shared across all three
 /// outcome variants; the per-variant scalar (gap / residual) lives on
 /// the variant itself.
 pub const Cert = struct {
