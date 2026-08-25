@@ -38,9 +38,12 @@ if not summary:
 with open(summary, 'a') as fh:
     fh.write(comment)
 
-# check=True separates "no open PR" (exit 0, empty output — skip quietly)
-# from "gh broke" (nonzero — fail the job); stderr flows to the job log.
-pr = subprocess.run(
+# On pull_request events CI passes PR_NUMBER (the ref is N/merge there, so
+# a branch lookup cannot work); under workflow_dispatch it is empty and the
+# ref's open PR is looked up. check=True separates "no open PR" (exit 0,
+# empty output — skip quietly) from "gh broke" (nonzero — fail the job);
+# stderr flows to the job log.
+pr = os.environ.get('PR_NUMBER', '') or subprocess.run(
     ['gh', 'pr', 'list', '--head', os.environ['GITHUB_REF_NAME'],
      '--state', 'open', '--json', 'number', '--jq', '.[0].number'],
     stdout=subprocess.PIPE, text=True, check=True,

@@ -437,10 +437,14 @@ these signals yet, and whether we'd even want that is open. The
 procedure applies to any PR that touches the solve path (`src/`);
 docs-, CI-, and fixtures-only PRs skip all of this:
 
-1. **Run `just ab --aa`, then `just ab`, and paste both reports into
-   the PR body** (collapsed `<details>` blocks) — or trigger
-   the on-demand CI run, which posts both to the PR:
-   `gh workflow run ab --ref <branch>` (`.github/workflows/ab.yml`).
+1. **CI posts both reports as a PR comment** on any PR touching the
+   solve path or the harness (`.github/workflows/ab.yml`; its paths
+   filter mirrors this procedure's scope). Run `just ab --aa` +
+   `just ab` locally when iterating, or dispatch a re-run:
+   `gh workflow run ab --ref <branch>`. CI *timing* is coarse —
+   between-session runner variance is ~10x the within-run A/A floor
+   (#22) — so a CI-only ratio shift needs a second dispatch or a
+   local run before it is named in the PR body.
 2. **The deterministic diff is the gate.** A non-empty diff blocks
    the PR until every differing row is explained and accepted in the
    PR body. Exceptions — named in the PR body, no justification

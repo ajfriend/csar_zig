@@ -1,14 +1,27 @@
 name: ab
 
-# On-demand A/B run (issue: on-demand CI run of the A/B tool): automates
-# dev.md "The PR procedure, and what gates" step 1 — `just ab --aa`, then
-# `just ab` — and posts both reports. Deliberately NOT on push/pull_request:
-# the deterministic per-case signal already rides every CI run via the
-# coverage gate's csar-ab invocations, and standing timing runs on hosted
-# runners would only accumulate noise. Trigger with:
+# The A/B run: automates dev.md "The PR procedure, and what gates" step 1 —
+# `just ab --aa`, then `just ab` — and posts both reports as a PR comment.
+# Runs on every PR that touches the report's inputs (the paths mirror the
+# procedure's own scope rule: docs-class PRs skip), so the gate's bit-exact
+# diff is self-enforcing rather than author-remembered; the test suite's
+# 1e-6 pins never covered that. CI *timing* stays coarse — between-session
+# runner variance is ~10x the within-run A/A floor (samples: #22) — so a
+# CI-only ratio shift needs a second dispatch or a local run before it is
+# named in a PR body. For a branch without a PR (e.g. main):
 #   gh workflow run ab --ref <branch>
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'bench/**'
+      - 'cases/**'
+      - 'build.zig'
+      - 'build.zig.zon'
+      # The delivery mechanism itself: a change to it should prove it runs.
+      - '.github/workflows/ab.yml'
+      - 'scripts/ab_comment.py'
 
 permissions:
   contents: read
@@ -50,4 +63,8 @@ jobs:
         # produce the same block for a manual PR-body paste.
         env:
           GH_TOKEN: ${{ github.token }}
+          # On pull_request the event names the PR (the ref is N/merge, so a
+          # branch lookup can't); empty under workflow_dispatch, where the
+          # script resolves the branch's open PR instead.
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: uv run scripts/ab_comment.py
