@@ -425,21 +425,23 @@ The pin advances in its own PR after each tag ("Releasing"); a
 mid-cycle re-pin records its reason in the PR that moves it.
 It is a separate package so the library's manifest never carries a benchmark
 dependency — consumers can't inherit it, and nothing under `bench/` ships
-(see "Packaging"). Reports are for pasting into a PR;
-nothing is written to disk.
+(see "Packaging"). Reports go to stdout — CI posts them to the PR
+(step 1 below); nothing is written to disk.
 
 ### The PR procedure, and what gates
 
 The aim is legible joint review — human and agent reading the same
-report in the same PR — so that when a change moves anything, it
-*likely* gets flagged; *likely*, because nothing mechanical enforces
-these signals yet, and whether we'd even want that is open. The
-procedure applies to any PR that touches the solve path (`src/`);
-docs-, CI-, and fixtures-only PRs skip all of this:
+report in the same PR. The report showing a change is produced and
+posted mechanically; nothing mechanical *acts* on it — a non-empty
+diff fails no check — and whether it should is open. The procedure
+applies to any PR that touches the report's inputs — the solve path
+(`src/`), the harness and baseline pin (`bench/`), the corpus
+(`cases/`), the build files — or its delivery mechanism; only
+docs-class PRs skip:
 
 1. **CI posts both reports as a PR comment** on any PR touching the
-   solve path or the harness (`.github/workflows/ab.yml`; its paths
-   filter mirrors this procedure's scope). Run `just ab --aa` +
+   in-scope paths (`.github/workflows/ab.yml` — its filter is the
+   executable form of the scope above). Run `just ab --aa` +
    `just ab` locally when iterating, or dispatch a re-run:
    `gh workflow run ab --ref <branch>`. CI *timing* is coarse —
    between-session runner variance is ~10x the within-run A/A floor

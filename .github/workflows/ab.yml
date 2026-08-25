@@ -2,13 +2,13 @@ name: ab
 
 # The A/B run: automates dev.md "The PR procedure, and what gates" step 1 —
 # `just ab --aa`, then `just ab` — and posts both reports as a PR comment.
-# Runs on every PR that touches the report's inputs (the paths mirror the
-# procedure's own scope rule: docs-class PRs skip), so the gate's bit-exact
-# diff is self-enforcing rather than author-remembered; the test suite's
-# 1e-6 pins never covered that. CI *timing* stays coarse — between-session
-# runner variance is ~10x the within-run A/A floor (samples: #22) — so a
-# CI-only ratio shift needs a second dispatch or a local run before it is
-# named in a PR body. For a branch without a PR (e.g. main):
+# Runs on every PR that touches the report's inputs or its delivery
+# mechanism (the paths below are the executable form of the procedure's
+# scope; docs-class PRs skip), so the gate's bit-exact diff report is
+# delivered mechanically rather than author-remembered — the test suite's
+# 1e-6 pins never covered that. CI *timing* stays coarse (between-session
+# variance ~10x the within-run A/A floor — dev.md step 1, #22). For a
+# branch without a PR (e.g. main), or a second timing sample on one:
 #   gh workflow run ab --ref <branch>
 on:
   workflow_dispatch:
@@ -60,7 +60,7 @@ jobs:
           just ab | tee ab-report.txt
       - name: Post both reports
         # All logic in scripts/ab_comment.py — also runnable locally to
-        # produce the same block for a manual PR-body paste.
+        # read the same block while iterating.
         env:
           GH_TOKEN: ${{ github.token }}
           # On pull_request the event names the PR (the ref is N/merge, so a

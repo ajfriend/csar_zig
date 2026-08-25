@@ -4,12 +4,11 @@
 # ///
 '''Compose the A/B + A/A report comment from ab-report.txt / aa-report.txt
 (in CWD), then: in CI (GITHUB_STEP_SUMMARY set), append it to the job summary
-and post it to the ref's open PR if there is one — a NEW comment per run:
-CI comments are append-only by design (scripts/gate_comment.py likewise), so
-nothing is ever edited and each report stays archived. Run locally after
-`just ab --aa | tee aa-report.txt` and `just ab | tee ab-report.txt` to print
-the same block for pasting into a PR body by hand — one formatter for both
-paths (dev.md "The PR procedure, and what gates", step 1).
+and post it to the PR — a NEW comment per run: CI comments are append-only
+by design (scripts/gate_comment.py likewise), so nothing is ever edited and
+each report stays archived. Run locally after `just ab --aa | tee
+aa-report.txt` and `just ab | tee ab-report.txt` to read the same block CI
+posts (dev.md "The PR procedure, and what gates", step 1).
 
 Run with: uv run scripts/ab_comment.py
 '''
@@ -39,10 +38,14 @@ with open(summary, 'a') as fh:
     fh.write(comment)
 
 # On pull_request events CI passes PR_NUMBER (the ref is N/merge there, so
-# a branch lookup cannot work); under workflow_dispatch it is empty and the
-# ref's open PR is looked up. check=True separates "no open PR" (exit 0,
+# a branch lookup cannot work — and falling through to it would end in the
+# quiet no-PR skip, so an empty PR_NUMBER on such an event fails loudly
+# instead); under workflow_dispatch it is empty and the ref's open PR is
+# looked up. check=True separates "no open PR" (exit 0,
 # empty output — skip quietly) from "gh broke" (nonzero — fail the job);
 # stderr flows to the job log.
+if os.environ.get('GITHUB_EVENT_NAME') == 'pull_request' and not os.environ.get('PR_NUMBER'):
+    raise SystemExit('pull_request event without PR_NUMBER: refusing the silent skip')
 pr = os.environ.get('PR_NUMBER', '') or subprocess.run(
     ['gh', 'pr', 'list', '--head', os.environ['GITHUB_REF_NAME'],
      '--state', 'open', '--json', 'number', '--jq', '.[0].number'],

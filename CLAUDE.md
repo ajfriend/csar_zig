@@ -77,8 +77,8 @@ When changing the solver, the full check is: `just ci` green (suite + coverage
 gate + both backends where supported) + **`just ab`**, which measures the
 working tree against the pinned baseline in one binary and reports a
 deterministic diff over every fixture and batch cell plus interleaved timing
-(the batches — `cases/batches.zig` — are the hot-path rows). Attach both the
-`ab` and `--aa` reports to the PR; a non-empty deterministic diff blocks until
+(the batches — `cases/batches.zig` — are the hot-path rows). CI posts both
+the `ab` and `--aa` reports to the PR; a non-empty deterministic diff blocks until
 each unexcepted row is explained and accepted in the PR body (exceptions and
 procedure: dev.md "The PR procedure, and what gates"). Methodology: `bench/core.zig`
 and `bench/ab.zig`.
