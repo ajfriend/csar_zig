@@ -37,8 +37,11 @@ problem). Core: `src/csar.zig` (`solve`, the outer loop, `mveeFw` inner MVEE),
 
 ## Performance & regression monitoring (read before "optimizing" the solver)
 
-The hot/common path is **small cells** — 4–10 points (H3 hexagons, S2/A5 finest
-cells) — which solve in ~1–2 outer iterations and a few µs. Protect them:
+The hot/common path is **normal-resolution DGGS cells** — 4–10 points, an H3
+cell at any resolution the type specimen — which solve in ~1–2 outer
+iterations and a few µs. (The *extremely* small, finest-resolution S2/A5
+cells are not this tier: they sit near the f64 floor, below, and belong to
+the robustness tier of dev.md's "Weigh rows by tier".) Protect the hot path:
 
 - **Do NOT judge a solver change by `ex-bench`'s `TOTAL` line.** It sums
   wall-times and is dominated by the large synthetic cases (np400, ha_*), so a

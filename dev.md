@@ -447,6 +447,17 @@ docs-, CI-, and fixtures-only PRs skip all of this:
    small stable shift with an empty diff is not yet a finding
    ("Reading a small stable shift" below).
 
+**Weigh rows by tier.** The DGGS batches and the normal-resolution
+fixtures (an H3 cell at any resolution is the type specimen) are the
+product: they must converge and stay fast, and an above-floor shift
+there is the headline of any report. Edge-case rows — wide caps,
+slivers, degenerate scatters, and the extremely small cells near the
+f64 floor — are robustness: their status flips matter, their timing
+mostly doesn't (most aren't timed). `[hard]` rows are aspiration;
+nothing blocks. A change that trades batch speed for edge-case
+robustness is backwards by default — accepting one needs the case
+made in the PR body.
+
 For scale, a clean report reads: deterministic diff `none`, gap shift
 ≤ 1.5e-24, timing ratios 0.987–1.012 against a roughly-1% per-row
 `--aa` floor — from the gap-formula change this procedure was
