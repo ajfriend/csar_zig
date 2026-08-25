@@ -7,7 +7,7 @@ commit that carries the full detail.
 
 - The A/B report leads with the gate's verdict and the timing tables;
   per-unit detail collapses to a corpus table when clean (`min gap` is
-  gone — `below_model` remains the anomaly flag). Details in PR_80.
+  gone — `below_model` remains the anomaly flag). Details in [#81](https://github.com/ajfriend/csar_zig/pull/81).
 
 - `ex-bench` is retired — `just ab` is the timing tool — and fixtures no
   longer carry a `tags` field (tier + claim + description say everything
