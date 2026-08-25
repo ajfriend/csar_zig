@@ -90,6 +90,6 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         # The report names the kcov build; the script names the image too,
         # the other thing that can move kcov's line classification and so
-        # the ledger. Upsert by marker, not --edit-last: rationale in
-        # scripts/gate_comment.py.
+        # the ledger. Append-only, one comment per run — no comment is ever
+        # edited, by either this or the ab workflow: scripts/gate_comment.py.
         run: uv run scripts/gate_comment.py

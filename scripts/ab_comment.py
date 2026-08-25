@@ -1,8 +1,8 @@
 '''Compose the A/B + A/A report comment from ab-report.txt / aa-report.txt
 (in CWD), then: in CI (GITHUB_STEP_SUMMARY set), append it to the job summary
-and post it to the ref's open PR if there is one — a NEW comment per run,
-deliberately not `gh pr comment --edit-last`, which edits the bot's most
-recent comment and would clobber the coverage ledger. Run locally after
+and post it to the ref's open PR if there is one — a NEW comment per run:
+CI comments are append-only by design (scripts/gate_comment.py likewise), so
+nothing is ever edited and each report stays archived. Run locally after
 `just ab --aa | tee aa-report.txt` and `just ab | tee ab-report.txt` to print
 the same block for pasting into a PR body by hand — one formatter for both
 paths (dev.md "The PR procedure, and what gates", step 1).
