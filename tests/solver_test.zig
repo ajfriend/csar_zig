@@ -13,7 +13,7 @@ test "max_outer cap forces did_not_converge on any input" {
     // a real (non-degenerate) last-iterate gap. The `.hard` fixtures
     // in cases/ also DNC today, but only this test GUARANTEES a DNC
     // whatever the solver becomes — the fixtures are meant to be
-    // outgrown (Expected.hard).
+    // outgrown (see Expected.hard).
     const allocator = std.testing.allocator;
     // Deliberately IRREGULAR triangle: a perfectly symmetric frame
     // certifies with gap ≈ 0 exactly (measured ~5e-32 on the trust

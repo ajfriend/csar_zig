@@ -48,16 +48,17 @@ pub const Expected = union(enum) {
     infeasible,
     /// A case at or beyond the solver's current frontier: no outcome is
     /// asserted — the solve must merely return (not error). Carried for
-    /// the A/B harness (`just ab`), which reports outcome, iteration,
-    /// and timing shifts; a case that starts converging is promoted to
-    /// `.converged` (with its freshly certified AR) in that PR. Status
-    /// here can sit at FP-noise level (CLAUDE.md "Performance &
-    /// regression monitoring"), which is why nothing blocks on it.
-    /// Keep the frontier populated: these are also what exercises the
-    /// non-converged reporting paths (the coverage gate trips on
-    /// examples/cases.zig's DNC print if the last one converges —
-    /// that failure means "add new frontier cases", e.g. thinner
-    /// slivers, not "delete the branch").
+    /// the A/B harness (`just ab`), which diffs outcome, iterations,
+    /// and AR against the pinned baseline; status here can sit at
+    /// FP-noise level (CLAUDE.md "Performance & regression
+    /// monitoring"), which is why nothing blocks on it. A case that
+    /// starts converging is promoted to `.converged` (with its freshly
+    /// certified AR) in that PR — and the frontier replenished (e.g.
+    /// thinner slivers), because these fixtures are also what
+    /// exercises the non-converged reporting path: the coverage gate
+    /// trips on examples/cases.zig's DNC print if the last one
+    /// converges. That failure means "add new frontier cases", not
+    /// "delete the branch".
     hard,
 };
 
