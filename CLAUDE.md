@@ -76,9 +76,9 @@ working tree against the pinned baseline in one binary and reports a
 deterministic diff over every fixture and batch cell plus interleaved timing
 (the batches — `cases/batches.zig` — are the hot-path rows). Attach both the
 `ab` and `--aa` reports to the PR; a non-empty deterministic diff blocks until
-each row is explained and accepted in the PR body (procedure, gating rules,
-and the `[hard]`/floor-marginal exceptions: dev.md "The PR procedure, and
-what gates"). Methodology: `bench/core.zig` and `bench/ab.zig`.
+each row is explained and accepted in the PR body (exceptions and procedure:
+dev.md "The PR procedure, and what gates"). Methodology: `bench/core.zig`
+and `bench/ab.zig`.
 
 ## Background / history
 

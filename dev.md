@@ -412,59 +412,42 @@ Every loop has one lever, each a constant edited in place — no flags:
 A quick local `just ab`, if ever wanted, is the same `build_options`
 mechanism the coverage build uses.
 
-### The PR procedure, and what gates
-
-Written only after the tool had produced reports on real changes —
-thresholds written before real numbers are calibrated against
-nothing. The calibration set, all reports attached to their PRs: a
-gap-formula change that moved nothing (the clean exemplar:
-deterministic diff `none` over every fixture and batch cell, gap
-shift ≤ 1.5e-24, timing ratios 0.987–1.012 against a ~1–3% `--aa`
-floor), a corpus growth (six `.hard` fixtures entering both tallies,
-no diffs), and a CI-timing investigation with no solver surface. The
-procedure:
-
-1. **A PR that touches the solve path** (`src/`) runs `just ab --aa`
-   and then `just ab`, and pastes **both** reports into the PR body
-   (collapsed `<details>` blocks). The `--aa` floor is what makes the
-   timing table readable — a ratio without it is a number with no
-   error bar. PRs that don't touch the solve path (docs, CI,
-   fixtures-only) skip this. This is a checklist obligation, not
-   mechanical enforcement: CI neither runs the tool nor parses
-   reports (an on-demand CI run is tracked in the issues).
-2. **The deterministic diff is the gate — by review, not mechanism.**
-   A non-empty diff blocks the PR until every differing row is
-   explained and accepted in the PR body, the same flag-don't-bump
-   norm the `.zon` expectations follow. Two standing exception
-   classes, which the PR body still names but need not justify:
-   rows labeled `[hard]` (a status flip there is a promotion
-   candidate — `Expected.hard` in `cases/cases.zig` owns the
-   protocol), and floor-marginal status flips of the kind CLAUDE.md's
-   monitoring notes already classify as FP-noise.
-3. **Wall time never gates.** Read ratios against the same session's
-   `--aa` floor; a small stable shift with an empty diff is not yet a
-   finding ("Reading a small stable shift" below). µs-scale rows on
-   small cells are noise-dominated by design.
-4. **The baseline pin advances at each release**, in the release PR
-   (see "Releasing"), so reports always measure against the last
-   released solver. A mid-cycle re-pin needs its reason recorded in
-   the PR that moves it.
-5. **Local and CI reports compare by ratio, never by µs** (absolute
-   times vary 2–5× between launches; machines differ more). A
-   deterministic-diff disagreement between machines on floor-marginal
-   rows is the known FP-noise class, not a defect.
-
-Which rows deserve standing *highlights* — and `ex-bench`'s fate — is
-the report-curation question, tracked in the issues and deliberately
-not this section's: the gate above is row-agnostic and stays valid
-under any future curation.
-
 The baseline pin lives in `bench/build.zig.zon`; resolving it fetches once per
 machine and is then cached (why that's fine, rather than lazy: `bench/build.zig`).
+The pin advances in its own PR after each tag ("Releasing"); a
+mid-cycle re-pin records its reason in the PR that moves it.
 It is a separate package so the library's manifest never carries a benchmark
 dependency — consumers can't inherit it, and nothing under `bench/` ships
 (see "Packaging"). Reports are for pasting into a PR;
 nothing is written to disk.
+
+### The PR procedure, and what gates
+
+For a PR that touches the solve path (`src/`); docs-, CI-, and
+fixtures-only PRs skip all of this:
+
+1. **Run `just ab --aa`, then `just ab`, and paste both reports into
+   the PR body** (collapsed `<details>` blocks). Checklist, not CI
+   (an on-demand CI run is tracked in the issues).
+2. **The deterministic diff is the gate — by review, not mechanism.**
+   A non-empty diff blocks the PR until every differing row is
+   explained and accepted in the PR body. Exceptions — named in the
+   PR body, no justification needed: `[hard]` rows (a status flip is
+   a promotion candidate; protocol: `Expected.hard`,
+   `cases/cases.zig`) and floor-marginal status flips (the FP-noise
+   class of CLAUDE.md's monitoring notes — including when two
+   machines disagree on such a row).
+3. **Wall time never gates.** Read ratios against the same session's
+   `--aa` floor — that is also how local and CI reports compare,
+   never by µs — and a small stable shift with an empty diff is not
+   yet a finding ("Reading a small stable shift" below).
+
+For scale, a clean report reads: deterministic diff `none`, gap shift
+≤ 1.5e-24, timing ratios 0.987–1.012 against a ~1–3% `--aa` floor —
+the gap-formula change this procedure was calibrated on (that report,
+a corpus-growth report, and a CI-timing investigation are in their
+PRs). The gate is row-agnostic: report curation, tracked in the
+issues, does not change what blocks.
 
 ### Reading a small stable shift
 
