@@ -19,7 +19,7 @@ question:
    at strict tol) — lives in the *certificate arithmetic*, not the MVEE. A
    better inner solver does nothing for it.
 3. **The small-cell hot path** — already at parity (0.89–1.02×). Protect
-   (CANARY pins, ex-bench per-case), don't optimize.
+   (CANARY pins, `just ab` per-case rows), don't optimize.
 
 In the h framing: the outer methods now buy (value, gradient) pairs only when
 needed; what's left is making each pair cheaper (items 1–3, 5) and making the
@@ -54,7 +54,7 @@ part 2): Schur square of a rank-3 Gram.
   that produces "corrupted state at a converged design."
 
 Touches the shared polish ⇒ full gauntlet (slow suite with CANARY discipline,
-ex-bench per-case, a5_res0, geographies, rotations). But it's derived
+`just ab` per-case rows, a5_res0, geographies, rotations). But it's derived
 structure, not a heuristic — the enabling math is written and validated in
 trust.zig.
 
@@ -180,7 +180,7 @@ DGGS-floor measurement harness did NOT migrate from the skar-era repos.
 `tests/dggs_dnc_test.zig`, `zig build ex-compare`, the probe programs, and
 skar_py's `scripts/dggs/survey.py` (10k-cell h3/s2/a5 sweeps) exist only in
 skar_zig / skar_py history. What this repo has: `tests/methods_test.zig`
-(wide-cap fixtures + Clarabel references), `cases/`, `just bench`,
+(wide-cap fixtures + Clarabel references), `cases/`, `just ab`,
 and the states/countries pipelines under `scripts/`. Items whose validation
 says "floor-marginal S2/A5 populations" need the survey harness ported to
 csar_py first (source: skar_py `scripts/dggs/survey.py`; it is a thin loop

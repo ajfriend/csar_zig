@@ -1,6 +1,5 @@
 .{
     .description = "two points only — below the three the SDP needs; solve must refuse with InsufficientPoints",
-    .tags = .{ "reject" },
     .points = .{
         .{ 1, 0, 0 },
         .{ 0, 1, 0 },

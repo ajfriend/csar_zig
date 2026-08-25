@@ -1,6 +1,5 @@
 .{
     .description = "200 random points in a 57° cap; near feasibility boundary",
-    .tags = .{ "wide_angle", "hard" },
     .points = .{
         .{ -0.25215765824602332, 0.5386564986234792, 0.80390651936563828 },
         .{ 0.10198309777372845, 0.24624274197914975, 0.9638277645881882 },

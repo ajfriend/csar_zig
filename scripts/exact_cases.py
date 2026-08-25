@@ -113,14 +113,15 @@ def build(a1, a2, n_ring, n_fill, rng):
     return np.array([p / np.linalg.norm(p) for p in P @ Q.T])
 
 
-def zon(P, ar, tags, description):
+def zon(P, ar, description):
     out = ['.{',
            f'    .description = "{description}; optimum known in closed form (scripts/exact_cases.py)",',
-           '    .tags = .{ ' + ', '.join(f'"{t}"' for t in tags) + ' },',
            '    .points = .{']
     out += ['        .{ %s },' % ', '.join(f'{v:.17g}' for v in p) for p in P]
     out += ['    },',
-            '    .expected = .{ .converged = .{ .ar = %.17g } },' % ar,
+            '    .tier = 1,',
+            '    .claim = .converges,',
+            '    .ar = %.17g,' % ar,
             '}']
     return '\n'.join(out) + '\n'
 
@@ -133,19 +134,8 @@ for name, (a1, a2, n_ring, n_fill, note) in CASES.items():
     ar = max(a1, a2) / min(a1, a2)
     width = math.degrees(math.atan(max(a1, a2)))
     description = f'width {width:.3g}°, AR {ar:.4g} — {note}'
-    tags = ['exact']
-    if width > 75:
-        tags.append('wide_angle')
-    if ar > 5:
-        tags.append('high_ar')
-    if n_fill:
-        tags.append('redundant')
-    if width < 1:
-        tags.append('small_scale')
-    if len(P) <= 10:
-        tags.append('small')
     with open(OUT_DIR / f'{name}.zon', 'w') as fh:
-        fh.write(zon(P, ar, tags, description))
+        fh.write(zon(P, ar, description))
     manifest.append(f'    .{{ .name = "{name}", .case = @import("zon/{name}.zon") }},')
     print(f'{name:<22}{len(P):>5}{width:>11.3f}{ar:>15.6f}'
           f'{math.log(a1 * a2) - 0.5 * math.log(4.0 / 27.0):>12.6f}')

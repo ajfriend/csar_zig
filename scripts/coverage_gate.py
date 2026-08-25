@@ -51,7 +51,6 @@ RUNS = [
     ('zig-out/bin/csar-ex-cases', ['hex'], True),
     ('zig-out/bin/csar-ex-cases', ['--all'], True),
     ('zig-out/bin/csar-ex-cases', ['no-such-case'], False),
-    ('zig-out/bin/csar-ex-bench', [], True),
     ('bench/zig-out/bin/csar-ab', [], True),
     ('bench/zig-out/bin/csar-ab', ['--aa'], True),
     ('bench/zig-out/bin/csar-ab', ['--inject-2x'], True),

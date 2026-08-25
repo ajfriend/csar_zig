@@ -1,6 +1,5 @@
 .{
     .description = "200 random points in an 80° cap; widest angular extent we converge on",
-    .tags = .{ "wide_angle", "stress" },
     .points = .{
         .{ -0.32991944390772743, 0.70477039531257024, 0.62805401871381994 },
         .{ 0.14111133916858176, 0.34071962746529361, 0.92951477955864747 },

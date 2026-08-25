@@ -1,6 +1,5 @@
 .{
     .description = "H3 resolution-5 hex: ~8km edge length (town scale)",
-    .tags = .{ "dggs", "small_scale" },
     .points = .{
         .{ 0.0014157898268129811, 0, 0.99999899776908097 },
         .{ 0.00064354086768223992, 0.0011146454795725993, 0.99999917170996022 },

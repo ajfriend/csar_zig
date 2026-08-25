@@ -1,6 +1,5 @@
 .{
     .description = "175° great-circle arc, out-of-plane thickness 1e-4; the irregular offsets are load-bearing — frontier case, stationary short of the predicted floor (#62)",
-    .tags = .{ "hard_expected", "sliver", "wide_angle" },
     .points = .{
         .{ 0.86358155083141830, -0.47573482874245970, -0.16704274238944058 },
         .{ 0.83860985867271198, -0.48898465230819205, -0.24005731553937412 },

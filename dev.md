@@ -33,7 +33,6 @@
 | `just check` | Compile the library and every executable, running nothing (CI's `check` job). |
 | `just lint` | Every declaration is referenced (zlinter `no_unused`, its own package under `lint/`) — the check coverage cannot make; see "Coverage". The first run builds the linter. |
 | `just consumer-smoke` | Build `scripts/consumer_smoke/` against the tree as a consumer receives it, and print the shipped file list. The only check of the published package rather than the working tree; see "Packaging". |
-| `just bench` | Run the benchmark suite (release-built `ex-bench`) — single-version timing. |
 | `just ab` | A/B the working tree against the pinned baseline, both in one binary. `just ab --aa` calibrates. See "A/B benchmarking" below. |
 | `just clean` | Remove `zig-out/`, `.zig-cache/`, `coverage/`, and the bench package's caches and unpacked baseline. |
 | `just surveys::…` | The states/countries survey pipelines (research/example tooling), grouped in the `surveys` module (`surveys.just`) — `just --list surveys`. |
@@ -109,7 +108,7 @@ data with no line table.
 
 The gate's binaries are built with `-Dcoverage=true`: Debug (line
 coverage of an optimized binary is unreliable — it overrides the
-ReleaseFast forced on `ex-bench` and `csar-ab`) and LLVM (see "Two
+ReleaseFast forced on `csar-ab`) and LLVM (see "Two
 backends"). Test code isn't exempt — dead test helpers are dead code
 too. The gate runs under `just test-slow`, not `just test` — slow-tier
 tests (currently cap_test) exercise lines the fast tier doesn't reach.
@@ -285,8 +284,8 @@ re-exporting them through the public API.
 | `tests/extreme_aspect_test.zig` | Rotation-invariance, coplanarity, near-degenerate edge-case tests on synthesized inputs. Also hits internal helpers (`acceptBUpdate`, `convexHull2d`) via filesystem imports for branches not reachable through `solve` for all inputs. |
 | `tests/cases_test.zig` | Tests driven by the case manifest: cases.byName lookup, per-case outcome dispatch, Q/sigma shape invariants on np100. |
 | `tests/batches_test.zig` | The batch contract: per batch, tally every cell (`bench/core.zig`'s `Side`/`Tally`) and require all of them converged. A failure prints the tally and names the batch. Slow tier (`-Dslow`): 8000 Debug solves guarding a gate property. |
-| `cases/cases.zig` | Comptime manifest over `cases/zon/*.zon` — defines the `Case` schema and the `all` list — plus `GAP_TOL` and `pin(Options)`, the solver options every pin in the corpus is taken under (the tests, `bench/core.zig` and `examples/bench.zig` take them from here rather than carrying copies). Exposed as the `cases` build module; imported by the tests, the examples and `bench/`. Top-level because it is a shared corpus, not test code. |
-| `cases/zon/*.zon` | Per-case fixture: description + tags + points + expected outcome. |
+| `cases/cases.zig` | Comptime manifest over `cases/zon/*.zon` — defines the `Case` schema and the `all` list — plus `GAP_TOL` and `pin(Options)`, the solver options every pin in the corpus is taken under (the tests and `bench/core.zig` take them from here rather than carrying copies). Exposed as the `cases` build module; imported by the tests, the examples and `bench/`. Top-level because it is a shared corpus, not test code. |
+| `cases/zon/*.zon` | Per-case fixture: description + points + tier + claim (+ `ar` for tier <= 1 `converges`). |
 | `cases/batches.zig`, `cases/batches/*.{zon,ids}` | Batch fixtures: ~1000 distinct cells of one DGGS family at one resolution (H3 r9/r15; S2 and A5 count-matched to H3 r9/r12/r15) — the timing workload for `csar-ab`; the contract (every cell converges) and its rationale are in `batches.zig`'s header. The `.ids` is the portable artifact; `just surveys::batches-gen` regenerates both from `scripts/batches/gen_batches.py` (dggs_compare's sampler and bindings), `just surveys::batches-verify` checks the committed `.zon` against the `.ids` by vertex chord distance — on demand, not in `just ci`, so the family wheels stay out of CI. The batches are plain comptime `@import`s like the cases, measured at +0.25 s cold `zig build test`, +130 MB compiler peak RSS, +2 MB in the two binaries that reference them (test, `csar-ab`), examples unchanged. That scales with the data: at ~10× more cells compiler memory reaches several GB and a runtime loader (`load(allocator)`, callers own the memory) becomes the right shape. |
 
 To add a new test file: create `tests/<name>_test.zig`, then add
@@ -512,8 +511,9 @@ machine code, and the machine code can be read. Before blaming layout
    release one `zig build --build-file bench/build.zig install` and one
    `objdump -d bench/zig-out/bin/csar-ab` has `cur` and `base` side by
    side. Otherwise `git worktree add` at each commit and `zig build
-   install-coverage` there: `zig-out/bin/csar-ex-bench` is hard-wired
-   ReleaseFast and keeps `csar.solve` as a symbol. Builds are
+   --build-file bench/build.zig install` there — `csar-ab` is forced
+   ReleaseFast and keeps that commit's `csar.solve` as the `cur` side's
+   symbol. Builds are
    deterministic, so this is the code the report measured.
 3. Find what moved. On Linux `nm --size-sort`; Mach-O has no symbol
    sizes, so on macOS take address deltas from `nm -n` (symbols carry a
@@ -532,7 +532,7 @@ not kept.
 
 ## Examples
 
-Four single-file programs under `examples/`, each wired into
+Three single-file programs under `examples/`, each wired into
 `build.zig` via `addExample`:
 
 | Step | Source | Role |
@@ -540,9 +540,6 @@ Four single-file programs under `examples/`, each wired into
 | `ex-basic` | `examples/basic.zig` | Minimum API call — solve + read AR + axis. |
 | `ex-status` | `examples/status.zig` | Full `Outcome` switch with per-variant inspection. |
 | `ex-cases` | `examples/cases.zig` | Runs a bundled case by name (`-- hex`) or iterates the whole manifest (`-- --all`). |
-| `ex-bench` | `examples/bench.zig` | Per-case timing across a hand-picked subset. Forced to `.ReleaseFast` in `build.zig` regardless of the top-level optimize flag — Debug timings are noise. The `csar`/`cases` modules still inherit the project-wide optimize flag, which looks like it would bench a Debug solver but doesn't: the root module's mode governs codegen for the whole compilation (checked — byte-identical binary either way). |
 
-`addExample` accepts an optional optimize override (`null` inherits
-the project-wide flag); only `ex-bench` uses it today. Examples
-also receive pass-through args after `--`; only `ex-cases` reads
-them today.
+Examples receive pass-through args after `--`; only `ex-cases`
+reads them today.

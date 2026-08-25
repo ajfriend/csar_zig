@@ -1,6 +1,5 @@
 .{
     .description = "two clusters near opposite poles; origin is in conv(X)",
-    .tags = .{ "infeasible_expected" },
     .points = .{
         .{ 0.0011291852206319266, -0.051147356099039282, 0.99869047902982211 },
         .{ -0.092190838220382668, -0.022527565749475904, 0.99548649319296456 },

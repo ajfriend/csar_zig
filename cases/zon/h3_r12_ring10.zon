@@ -1,6 +1,5 @@
 .{
     .description = "H3 res-12 hex at grid distance 10 from a pentagon; deep in icosahedron face, highest-AR hexagon regime",
-    .tags = .{ "dggs", "high_ar" },
     .points = .{
         .{ 0.42016867210976494, 0.078141499967879835, 0.90407532482658026 },
         .{ 0.42016981551600324, 0.07814132104529406, 0.90407480889279512 },

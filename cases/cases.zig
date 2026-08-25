@@ -3,7 +3,6 @@
 //! Each case lives in its own `cases/*.zon` file with shape:
 //!   .{
 //!     .description = "...",
-//!     .tags = .{ "...", ... },
 //!     .points = .{ .{x, y, z}, ... },
 //!     .tier = 0,             // 0-3: the commitment ladder (legend: dev.md)
 //!     .claim = .converges,   // or .infeasible / .{ .rejects = ... } / .none
@@ -75,7 +74,6 @@ pub const RejectError = enum { insufficient_points, coplanar_input };
 
 pub const Case = struct {
     description: []const u8,
-    tags: []const []const u8,
     points: []const [3]f64,
     /// Commitment tier, 0-3, each strictly weaker — what is promised about
     /// this case and at which settings, and how much its speed matters.

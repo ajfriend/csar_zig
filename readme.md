@@ -59,7 +59,6 @@ The original alternating solver was removed in 0.3.0.
 - `cases/zon/*.zon` — fixture point sets + expected outcomes (data only)
 - `test_root.zig` — test-target root at repo level
 - `examples/basic.zig`, `examples/status.zig`, `examples/cases.zig` — end-user usage demos
-- `examples/bench.zig` — per-case timing (release-built; run via `zig build ex-bench`)
 - `dev.md` — developer-workflow guide (coverage, layout, conventions)
 
 ## Build
@@ -70,7 +69,6 @@ zig build ex-basic     # runs examples/basic.zig
 zig build ex-status    # runs examples/status.zig
 zig build ex-cases -- hex      # runs one bundled case
 zig build ex-cases -- --all    # runs every bundled case
-zig build ex-bench     # runs the per-case timing bench (release-built)
 zig build test         # fast unit suite (no coverage)
 ```
 

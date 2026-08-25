@@ -151,7 +151,7 @@ everywhere, delete `algo.SEED_SPARSE_*` + `farthestPointSeed` + the
   a5_res0 12/12 at strict default **with uniform init**, few iters, wall
   time ≤ current (~74 µs-class); symmetric small cells stay ~1 alternating outer
   iteration with uniform init (the whole point — no symmetric-cell
-  regression); `ex-bench` per-case small cells not slower (ignore TOTAL);
+  regression); `just ab` small-cell rows not slower;
   DGGS floor DNC counts unchanged at 1e-6; states/countries unchanged;
   full slow suite with reconciled canaries.
 - Only after stage 2 lands does the doc cleanup happen: update

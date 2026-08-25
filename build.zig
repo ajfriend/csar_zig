@@ -34,10 +34,11 @@ pub fn build(b: *std.Build) void {
     // gate). Slow tests check `test_options.slow` and skip themselves
     // when it's false.
     const slow = b.option(bool, "slow", "Include slow randomized stress tests in the test binary") orelse false;
-    // `-Dcoverage=true` builds for the kcov gate: Debug (line coverage of
-    // an optimized binary is unreliable) and LLVM (kcov reads only its
-    // DWARF) for every executable. Normal builds are untouched. See dev.md
-    // "Coverage".
+    // `-Dcoverage=true` builds for the kcov gate: it forces the LLVM
+    // backend (kcov reads only its DWARF) for every executable; Debug
+    // comes from the default optimize mode, which the gate leaves alone
+    // (line coverage of an optimized binary is unreliable). Normal
+    // builds are untouched. See dev.md "Coverage".
     const coverage = b.option(bool, "coverage", "Build for the coverage gate (Debug everywhere)") orelse false;
     const test_options = b.addOptions();
     test_options.addOption(bool, "slow", slow);
@@ -84,13 +85,11 @@ pub fn build(b: *std.Build) void {
     // Examples. Single-file runnable programs. Step name matches the
     // example's filename (examples/<stem>.zig → `zig build ex-<stem>`).
     // `ex-cases` accepts pass-through args after `--`: `zig build
-    // ex-cases -- hex` or `-- --all`. `ex-bench` is force-built in
-    // ReleaseFast — timing numbers are meaningless in Debug.
+    // ex-cases -- hex` or `-- --all`.
     const ex = .{ .b = b, .check = check_step, .install = install_coverage_step, .csar = csar_mod, .cases = cases_mod, .target = target, .optimize = optimize, .coverage = coverage };
-    addExample(ex, "basic", null, "Run examples/basic.zig (happy-path only)");
-    addExample(ex, "status", null, "Run examples/status.zig (every Outcome variant)");
-    addExample(ex, "cases", null, "Run examples/cases.zig (run a named case or --all)");
-    addExample(ex, "bench", .ReleaseFast, "Run examples/bench.zig (per-case timing, release-built)");
+    addExample(ex, "basic", "Run examples/basic.zig (happy-path only)");
+    addExample(ex, "status", "Run examples/status.zig (every Outcome variant)");
+    addExample(ex, "cases", "Run examples/cases.zig (run a named case or --all)");
 
     // US-states aspect-ratio example (see scripts/states/). Standalone
     // exec, not an example: lives under scripts/, force-built ReleaseFast,
@@ -134,17 +133,13 @@ pub fn build(b: *std.Build) void {
 fn addExample(
     ex: anytype,
     stem: []const u8,
-    /// Per-example optimize override; null inherits the project-wide
-    /// flag. Used by `ex-bench` to force ReleaseFast regardless of
-    /// the top-level build setting. Ignored under `-Dcoverage`.
-    optimize_override: ?std.builtin.OptimizeMode,
     description: []const u8,
 ) void {
     const b: *std.Build = ex.b;
     const mod = b.createModule(.{
         .root_source_file = b.path(b.fmt("examples/{s}.zig", .{stem})),
         .target = ex.target,
-        .optimize = if (ex.coverage) ex.optimize else optimize_override orelse ex.optimize,
+        .optimize = ex.optimize,
     });
     mod.addImport("csar", ex.csar);
     mod.addImport("cases", ex.cases);

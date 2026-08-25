@@ -1,6 +1,5 @@
 .{
     .description = "H3 res-12 pentagon cell at icosahedron vertex (True); regular, AR ≈ 1",
-    .tags = .{ "dggs", "pentagon" },
     .points = .{
         .{ 0.42015266453962857, 0.078144004841485357, 0.90408254766231622 },
         .{ 0.42015357009844828, 0.078145070487029955, 0.90408203471372295 },
