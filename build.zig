@@ -34,10 +34,11 @@ pub fn build(b: *std.Build) void {
     // gate). Slow tests check `test_options.slow` and skip themselves
     // when it's false.
     const slow = b.option(bool, "slow", "Include slow randomized stress tests in the test binary") orelse false;
-    // `-Dcoverage=true` builds for the kcov gate: Debug (line coverage of
-    // an optimized binary is unreliable) and LLVM (kcov reads only its
-    // DWARF) for every executable. Normal builds are untouched. See dev.md
-    // "Coverage".
+    // `-Dcoverage=true` builds for the kcov gate: it forces the LLVM
+    // backend (kcov reads only its DWARF) for every executable; Debug
+    // comes from the default optimize mode, which the gate leaves alone
+    // (line coverage of an optimized binary is unreliable). Normal
+    // builds are untouched. See dev.md "Coverage".
     const coverage = b.option(bool, "coverage", "Build for the coverage gate (Debug everywhere)") orelse false;
     const test_options = b.addOptions();
     test_options.addOption(bool, "slow", slow);

@@ -511,8 +511,9 @@ machine code, and the machine code can be read. Before blaming layout
    release one `zig build --build-file bench/build.zig install` and one
    `objdump -d bench/zig-out/bin/csar-ab` has `cur` and `base` side by
    side. Otherwise `git worktree add` at each commit and `zig build
-   install-coverage` there: `zig-out/bin/csar-ex-bench` is hard-wired
-   ReleaseFast and keeps `csar.solve` as a symbol. Builds are
+   --build-file bench/build.zig install` there — `csar-ab` is forced
+   ReleaseFast and keeps that commit's `csar.solve` as the `cur` side's
+   symbol. Builds are
    deterministic, so this is the code the report measured.
 3. Find what moved. On Linux `nm --size-sort`; Mach-O has no symbol
    sizes, so on macOS take address deltas from `nm -n` (symbols carry a
@@ -531,7 +532,7 @@ not kept.
 
 ## Examples
 
-Four single-file programs under `examples/`, each wired into
+Three single-file programs under `examples/`, each wired into
 `build.zig` via `addExample`:
 
 | Step | Source | Role |
