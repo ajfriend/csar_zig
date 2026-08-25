@@ -245,7 +245,7 @@ pub const trust = struct {
 };
 
 /// Tuning for the foreign-candidate certifier (`src/cert.zig`): the
-/// inner-MVEE budget `certify` runs at the candidate's axis. Off the
+/// inner-MVEE budget `cert_primal` runs at the candidate's axis. Off the
 /// hot path, so the budget is generous — pairwise FW converges
 /// linearly on the MVEE, the tolerance sits well below any gap a
 /// caller would act on, and the iteration cap is a backstop, not a

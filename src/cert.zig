@@ -4,18 +4,20 @@
 //! (`dualityGapConstructed`, csar.zig); this module makes the same
 //! certificate math reachable for a candidate produced elsewhere — a
 //! generic conic solver, a shipped certificate being re-checked, a
-//! hand-constructed cone. Two entry points, one core: `certify`
-//! manufactures a certificate for a cone ("how good is this cone?"),
-//! `verify` checks a supplied one ("does this certificate check
-//! out?") — and `certify` funnels through `verify`, so its output is
-//! checked by the identical path a third party would run.
+//! hand-constructed cone. Two entry points, one core: `cert_primal`
+//! takes the primal variables alone and manufactures a certificate
+//! ("how good is this cone?"); `cert_dual` additionally takes the
+//! dual variables and checks the pair ("does this certificate check
+//! out?"). `cert_primal` funnels through `cert_dual`, so its
+//! output is checked by the identical path a third party would run.
 //!
 //! Both are total: every input yields a payload or an enumerated
-//! `no_certificate` reason — never an error (`certify` can also fail
-//! on allocation). Both repair rather than reject, by one mechanism
-//! per side, applied unconditionally: a uniform primal rescale onto
-//! containment-tightness (`Verified.scale`) and a dual rescale onto
-//! the normalized dual's constraint boundary (`Verified.dual_scale`).
+//! `no_certificate` reason — never an error (`cert_primal` can also
+//! fail on allocation). Both repair rather than reject, by one
+//! mechanism per side, applied unconditionally: a uniform primal
+//! rescale onto containment-tightness (`Verified.scale`) and a dual
+//! rescale onto the normalized dual's constraint boundary
+//! (`Verified.dual_scale`).
 //! The reported gap is the solver's own closed form against the
 //! normalized dual (the gap comment in `dualityGapConstructed`), plus
 //! the primal repair's 3·log s charge.
@@ -82,15 +84,15 @@ pub const Verified = struct {
     dual_scale: f64,
 };
 
-pub const VerifyOutcome = union(enum) {
+pub const DualOutcome = union(enum) {
     verified: Verified,
     no_certificate: Reason,
 };
 
-/// A manufactured certificate: `verify`'s payload plus the multipliers
-/// `certify` derived, exported boundary-normalized (‖Σᵢ λᵢxᵢ‖₂ = 3, the
-/// same invariant as a solver-shipped `Cert` — see api.zig) so `verify`
-/// accepts them without repair.
+/// A manufactured certificate: `cert_dual`'s payload plus the
+/// multipliers `cert_primal` derived, exported boundary-normalized
+/// (‖Σᵢ λᵢxᵢ‖₂ = 3, the same invariant as a solver-shipped `Cert` —
+/// see api.zig) so `cert_dual` accepts them without repair.
 pub const Certified = struct {
     // Scalars as in `Verified`; `dual_scale` is absent because the
     // exported multipliers are already boundary-normalized.
@@ -109,7 +111,7 @@ pub const Certified = struct {
     }
 };
 
-pub const CertifyOutcome = union(enum) {
+pub const PrimalOutcome = union(enum) {
     certified: Certified,
     no_certificate: Reason,
 };
@@ -117,7 +119,7 @@ pub const CertifyOutcome = union(enum) {
 /// Worst containment violation of (A, b) over X: max_i ‖A xᵢ‖ − b·xᵢ.
 /// ≤ 0 means every point is inside the cone; positive means at least
 /// one point is not covered. `api.checkFeasibility` delegates here.
-pub fn primalViolation(X: []const [3]f64, A: Mat3, b: Vec3) f64 {
+pub fn primal_violation(X: []const [3]f64, A: Mat3, b: Vec3) f64 {
     var max_viol: f64 = -1e30;
     const Xv: []const Vec3 = @ptrCast(X);
     for (Xv) |xi| {
@@ -127,16 +129,16 @@ pub fn primalViolation(X: []const [3]f64, A: Mat3, b: Vec3) f64 {
     return max_viol;
 }
 
-/// Check the certificate (A, b, λ): pure arithmetic, no solve. Repairs
-/// both sides unconditionally (module doc), assembles the aligned dual
-/// point γᵢ = λᵢ·Axᵢ/‖Axᵢ‖ (SOC-tight by construction; alignment is
-/// invariant under the primal repair), and returns the gap the pair
-/// proves. `lambda` pairs with `X` (`lambda.len == X.len`); entries
-/// ≤ 0 are treated as inactive. A slack λ inflates the gap honestly:
-/// it bounds the *pair's* suboptimality — a large gap says "this
-/// certificate proves little", not "this cone is bad"; `certify`
-/// answers the latter.
-pub fn verify(X: []const [3]f64, A: Mat3, b_raw: Vec3, lambda: []const f64) VerifyOutcome {
+/// Certify from the full primal-dual pair (A, b, λ): pure arithmetic,
+/// no solve. Repairs both sides unconditionally (module doc),
+/// assembles the aligned dual point γᵢ = λᵢ·Axᵢ/‖Axᵢ‖ (SOC-tight by
+/// construction; alignment is invariant under the primal repair), and
+/// returns the gap the pair proves. `lambda` pairs with `X`
+/// (`lambda.len == X.len`); entries ≤ 0 are treated as inactive. A
+/// slack λ inflates the gap honestly: it bounds the *pair's*
+/// suboptimality — a large gap says "this certificate proves little",
+/// not "this cone is bad"; `cert_primal` answers the latter.
+pub fn cert_dual(X: []const [3]f64, A: Mat3, b_raw: Vec3, lambda: []const f64) DualOutcome {
     std.debug.assert(lambda.len == X.len);
     const b_norm = b_raw.norm();
     if (!(b_norm > tol.TINY)) return .{ .no_certificate = .axis_not_interior };
@@ -188,19 +190,20 @@ pub fn verify(X: []const [3]f64, A: Mat3, b_raw: Vec3, lambda: []const f64) Veri
     } };
 }
 
-/// Certify the cone (A, b): repair, run the inner-MVEE machinery at
+/// Certify from the primal variables alone: repair the cone (A, b),
+/// run the inner-MVEE machinery at
 /// the candidate's axis to manufacture multipliers
-/// (λᵢ = 3wᵢ/(b·xᵢ), then boundary-normalized), and `verify`. The
+/// (λᵢ = 3wᵢ/(b·xᵢ), then boundary-normalized), and `cert_dual`. The
 /// candidate carries no structural promises — its b need not be an
 /// eigenvector of its A — so only A ≻ 0 and b·xᵢ > 0 are assumed, and
 /// both are checked, not trusted. The only error is allocation
 /// failure; every numerical outcome is a `CertifyOutcome`.
-pub fn certify(
+pub fn cert_primal(
     allocator: std.mem.Allocator,
     X: []const [3]f64,
     A: Mat3,
     b_raw: Vec3,
-) error{OutOfMemory}!CertifyOutcome {
+) error{OutOfMemory}!PrimalOutcome {
     const n = X.len;
     const b_norm = b_raw.norm();
     if (!(b_norm > tol.TINY)) return .{ .no_certificate = .axis_not_interior };
@@ -244,7 +247,7 @@ pub fn certify(
         }
     }
 
-    const v = switch (verify(X, A, b, lam_full)) {
+    const v = switch (cert_dual(X, A, b, lam_full)) {
         .verified => |v| v,
         .no_certificate => |r| return .{ .no_certificate = r },
     };
@@ -252,7 +255,7 @@ pub fn certify(
     // Export the active pairs boundary-normalized, matching the
     // shipped-`Cert` invariant. A second pass over lam_full is forced:
     // the normalization factor `v.dual_scale` exists only after
-    // `verify` has seen the full vector.
+    // `cert_dual` has seen the full vector.
     const indices = try allocator.alloc(u32, k);
     errdefer allocator.free(indices);
     const lambdas = try allocator.alloc(f64, k);

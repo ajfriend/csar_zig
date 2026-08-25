@@ -420,5 +420,5 @@ pub const Outcome = union(enum) {
 /// at the switch site. Callers reach this via `outcome.converged` after
 /// switching on the union tag.
 pub fn checkFeasibility(c: Converged, X: []const [3]f64) f64 {
-    return cert.primalViolation(X, c.A(), c.b());
+    return cert.primal_violation(X, c.A(), c.b());
 }
