@@ -247,11 +247,14 @@ fn report(comptime Base: type, init: std.process.Init, opts: Opts) !void {
     for (results) |r| n_diff += r.n_diff;
 
     // ---- headline: the gate's answer before anything else; on a dirty
-    // report the blocking rows follow immediately — they are the content ----
+    // report the blocking rows follow immediately — they are the content.
+    // The mode is in the headline so the calibration can never be mistaken
+    // for the measurement when both blocks sit open in one PR ----
+    const title: []const u8 = if (opts.aa) "csar A/A calibration" else "csar A/B report";
     if (n_diff == 0) {
-        try out.print("csar A/B report — deterministic diff: none ({d} fixtures + {d} batches)\n", .{ cases.all.len, BATCHES.len });
+        try out.print("{s} — deterministic diff: none ({d} fixtures + {d} batches)\n", .{ title, cases.all.len, BATCHES.len });
     } else {
-        try out.print("csar A/B report — deterministic diff: {d} rows differ ({d} fixtures + {d} batches; status / iters / ar)\n", .{ n_diff, cases.all.len, BATCHES.len });
+        try out.print("{s} — deterministic diff: {d} rows differ ({d} fixtures + {d} batches; status / iters / ar)\n", .{ title, n_diff, cases.all.len, BATCHES.len });
         try out.writeAll(diffs.written());
     }
     if (BATCHES.len < cases.batches.all.len) {
@@ -261,6 +264,7 @@ fn report(comptime Base: type, init: std.process.Init, opts: Opts) !void {
 
     if (opts.gap_tol == null) {
         try out.print("timing (min of {d} reps, {d} for a batch; µs per solve — a batch row averages its cells)\n", .{ bc.N_REPS, BATCH_REPS });
+        try out.print("ratio = cur/base — above 1 is the current side slower; judge shifts against the --aa floor\n", .{});
         try out.print("tier 0 — the product; above-floor shifts here are the headline (batches are tier 0 by contract)\n", .{});
         try out.print("{s}\n", .{bc.timing_header});
         for (TIMING_T0) |unit| try timeUnit(out, &side_cur, &side_base, cur_mult, unit, null);
@@ -281,7 +285,10 @@ fn report(comptime Base: type, init: std.process.Init, opts: Opts) !void {
         const t = r.tallies;
         if (r.n_diff == 0 and t.cur.below_model == 0 and t.base.below_model == 0) {
             var obuf: [96]u8 = undefined;
-            try out.print("  {s:<9} {d:>5}  {s:<36} {f}", .{ r.unit.name, r.unit.cells.len, outcomes(t.cur, r.unit.cells.len, &obuf), r.shift });
+            try out.print("  {s:<9} {d:>5}  {s:<36} ", .{ r.unit.name, r.unit.cells.len, outcomes(t.cur, r.unit.cells.len, &obuf) });
+            // A quiet zero: seven bulky "max |Δgap| 0.00e0 over 1000 rows"
+            // lines are the low-density pattern this format exists to kill.
+            if (r.shift.max == 0) try out.print("Δgap 0", .{}) else try out.print("{f}", .{r.shift});
         } else {
             try out.print("  {s} ({d} cells)\n    cur : {f}\n    base: {f}\n    gap shift : {f}", .{ r.unit.name, r.unit.cells.len, t.cur, t.base, r.shift });
         }
