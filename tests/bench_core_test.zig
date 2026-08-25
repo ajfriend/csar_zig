@@ -5,7 +5,6 @@
 
 const std = @import("std");
 const csar = @import("../src/root.zig");
-const cases = @import("cases");
 const helpers = @import("helpers.zig");
 const test_options = @import("test_options");
 const bc = @import("../bench/core.zig");
@@ -305,8 +304,9 @@ test "Side.metrics: a converged outcome carries iters, AR and gap" {
     try std.testing.expectEqualStrings("converged", m.status);
     try std.testing.expect(m.iters > 0);
     try std.testing.expect(m.gap <= bc.GAP_TOL);
-    // Same answer the suite gates on, at the suite's tolerance.
-    const expected = (cases.byName("np100") orelse unreachable).expected.converged.ar;
+    // Same answer the suite gates on, at the suite's tolerance (the pin
+    // table in cases_test.zig).
+    const expected = try @import("cases_test.zig").requirePin("np100");
     try std.testing.expectApproxEqAbs(expected, m.ar, 1e-6);
 }
 

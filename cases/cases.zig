@@ -5,8 +5,16 @@
 //!     .description = "...",
 //!     .tags = .{ "...", ... },
 //!     .points = .{ .{x, y, z}, ... },
-//!     .expected = .{ .converged = .{ .ar = 1.234 } }  // or .infeasible / .hard
+//!     .tier = 0,             // 0-3: the commitment ladder (legend: dev.md)
+//!     .claim = .converges,   // or .infeasible / .{ .rejects = ... } / .none
 //!   }
+//!
+//! The claim names the kind of correct answer; the tier names the settings
+//! under which it is claimed (defaults for tiers 0-1, recorded settings for
+//! tier 2) and how much the case's speed matters. Claimed *values* — AR pins,
+//! tier-2 settings — live test-side in `tests/cases_test.zig`, which derives
+//! each case's obligations from tier x claim and enforces the invariants
+//! (`claim = none <=> tier = 3`; `rejects` sits at tier <= 1).
 //!
 //! Everything below is compiled into the binary at build time — no
 //! filesystem reads at runtime. Adding a case = drop a `.zon` file +
@@ -38,35 +46,42 @@ pub fn pin(comptime Options: type) Options {
 /// data out of the examples.
 pub const batches = @import("batches.zig");
 
-pub const Expected = union(enum) {
-    /// Solver should converge with this aspect ratio (matched within
-    /// the integration test's tolerance, `GAP_TOL`).
-    converged: struct { ar: f64 },
-    /// Solver should detect infeasibility. Universal sanity checks
-    /// (λ ≥ 0, ∑λ ≈ 1, ‖∑ λᵢ xᵢ‖ ≈ residual) live in the test loop;
-    /// no per-case residual value is stored.
+/// What a case is: the kind of correct answer. The claim carries kind only,
+/// never a measured value (an `InputError` name is a kind — definitional to
+/// the point set, never measured or bumped).
+pub const Claim = union(enum) {
+    /// A certified cone at the tier's settings. AR pins for tiers 0-1 live
+    /// in `tests/cases_test.zig`.
+    converges,
+    /// A certified rejection (Farkas). Universal sanity checks (λ ≥ 0,
+    /// ∑λ ≈ 1, ‖∑ λᵢ xᵢ‖ ≈ residual) live in the test loop; no per-case
+    /// residual value is stored.
     infeasible,
-    /// A case at or beyond the solver's current frontier: no outcome is
-    /// asserted — the solve must merely return (not error). Carried for
-    /// the A/B harness (`just ab`), which diffs outcome, iterations,
-    /// and AR against the pinned baseline; status here can sit at
-    /// FP-noise level (CLAUDE.md "Performance & regression
-    /// monitoring"), which is why nothing blocks on it. A case that
-    /// starts converging is promoted to `.converged` (with its freshly
-    /// certified AR) in that PR — and the frontier replenished (e.g.
-    /// thinner slivers), because these fixtures are also what
-    /// exercises the non-converged reporting path: the coverage gate
-    /// trips on examples/cases.zig's DNC print if the last one
-    /// converges. That failure means "add new frontier cases", not
-    /// "delete the branch".
-    hard,
+    /// Malformed input the solver must refuse; the payload names the
+    /// `InputError` (mirrored here because this module cannot import the
+    /// solver; mapped back in the test loop).
+    rejects: RejectError,
+    /// No claim: the solve must merely return (not error). Tier 3 only —
+    /// a frontier case whose status can sit at FP-noise level, which is
+    /// why nothing asserts it; the A/B harness diffs it, and an
+    /// improvement that flips one shows up as a labeled `[t3]` diff row
+    /// (promotion protocol: the tier legend, dev.md).
+    none,
 };
+
+/// Mirror of the solver's `InputError` names.
+pub const RejectError = enum { insufficient_points, coplanar_input };
 
 pub const Case = struct {
     description: []const u8,
     tags: []const []const u8,
     points: []const [3]f64,
-    expected: Expected,
+    /// Commitment tier, 0-3, each strictly weaker — what is promised about
+    /// this case and at which settings, and how much its speed matters.
+    /// The legend (tier meanings, benchmark roles, invariants, promotion)
+    /// lives in dev.md; it is the single home.
+    tier: u2,
+    claim: Claim,
 };
 
 pub const Entry = struct {
@@ -146,6 +161,8 @@ pub const all: []const Entry = &.{
     .{ .name = "oct_s1", .case = @import("zon/oct_s1.zon") },
     .{ .name = "oct_s2", .case = @import("zon/oct_s2.zon") },
     .{ .name = "oct_s3", .case = @import("zon/oct_s3.zon") },
+    .{ .name = "reject_great_circle", .case = @import("zon/reject_great_circle.zon") },
+    .{ .name = "reject_two_points", .case = @import("zon/reject_two_points.zon") },
     .{ .name = "sliver_S150_d1em6", .case = @import("zon/sliver_S150_d1em6.zon") },
     .{ .name = "sliver_S175_d1em4", .case = @import("zon/sliver_S175_d1em4.zon") },
     .{ .name = "sliver_S175_d1em6", .case = @import("zon/sliver_S175_d1em6.zon") },

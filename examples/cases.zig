@@ -51,9 +51,13 @@ fn runAll(allocator: std.mem.Allocator) !void {
     for (cases.all) |entry| try report(allocator, entry.name, entry.case.points);
 }
 
-/// One line per case: the outcome tag and the one number that matters for it.
+/// One line per case: the outcome tag and the one number that matters for
+/// it — or the refusal, for malformed input (the corpus's reject_* cases).
 fn report(allocator: std.mem.Allocator, name: []const u8, points: []const [3]f64) !void {
-    var outcome = try csar.solve(allocator, points, .{});
+    var outcome = csar.solve(allocator, points, .{}) catch |e| {
+        std.debug.print("{s:22}  rejected  {s}\n", .{ name, @errorName(e) });
+        return;
+    };
     defer outcome.deinit();
     switch (outcome) {
         .converged => |c| std.debug.print("{s:22}  converged  AR={d:.6}  gap={e:.3}  iters={d}\n", .{
@@ -62,6 +66,6 @@ fn report(allocator: std.mem.Allocator, name: []const u8, points: []const [3]f64
         .infeasible => |i| std.debug.print("{s:22}  infeasible  residual={e:.3}  active={d}\n", .{
             name, i.residual, i.cert.indices.len,
         }),
-        .did_not_converge, .precision_floor => |p| std.debug.print("{s:22}  {s}  gap={e:.3}  iters={d}\n", .{ name, @tagName(outcome), p.gap, p.diag.totalIters() }), // covered by the .hard frontier fixtures — if this goes uncovered, replenish the frontier (Expected.hard, cases/cases.zig), don't re-exclude
+        .did_not_converge, .precision_floor => |p| std.debug.print("{s:22}  {s}  gap={e:.3}  iters={d}\n", .{ name, @tagName(outcome), p.gap, p.diag.totalIters() }), // covered by the tier-2/3 frontier fixtures, which the tier legend (dev.md) keeps nonempty — if this goes uncovered, replenish the frontier, don't re-exclude
     }
 }
