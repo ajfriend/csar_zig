@@ -15,6 +15,11 @@ problem). Core: `src/csar.zig` (`solve`, the outer loop, `mveeFw` inner MVEE),
   (or the commit, if no PR was opened). Detail lives in the PR, not here.
 - Release names are just the version (`vX.Y.Z`); detail goes in the release body
   (which itself points to the PR). Procedure: dev.md "Releasing".
+- Tree files are self-contained: issue/PR numbers may reference **open**
+  work only. When work completes, the ref points at what it became (a
+  function, test, doc section) or the prose carries the fact — provenance
+  stays in the PR (git blame finds it). The PR that completes a referenced
+  issue retires the tree's refs to it.
 
 ## Build & test
 
@@ -88,7 +93,8 @@ and `bench/ab.zig`.
 - `docs/trust-solver.md` — the trust solver (the `SolveOptions.method`
   default since the trust path landed): writeup, measurements, validation ledger.
 - `docs/away-step-fw.md` — staged proposal: away-step FW for the inner MVEE
-  solver (stage 1: reduced-oracle only; stage 2 is moot since #30).
+  solver (stage 1: reduced-oracle only; stage 2 is moot since the
+  alternating path was removed).
 - `docs/algo-roadmap.md` — ranked candidates for future speed/convergence/
   stability work (range-space polish, elimination, cert-floor probe), plus
   the measured dead ends not to retry.

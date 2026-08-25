@@ -96,7 +96,7 @@ fn fixture(comptime name: []const u8) Unit {
 }
 
 /// The fixture corpus as one unit, for the deterministic pass. `.hard`
-/// frontier fixtures get a ` [hard]` row label (#68): rows print only
+/// frontier fixtures get a ` [hard]` row label: rows print only
 /// when the sides differ, and a hard row that flips status is a
 /// promotion candidate, not a regression (see Expected.hard in
 /// cases/cases.zig for the protocol).
@@ -115,7 +115,7 @@ const FIXTURES: Unit = blk: {
 /// The batches the report covers — diffed and timed. Under the coverage build
 /// (`-Dcoverage`, the kcov gate's Debug binary) one batch at one rep: a Debug
 /// pass over a batch is ~0.4 s, and the gate needs each line to run once, not
-/// eight batches × 1000 cells × 2 sides (#37). Outside it, 30 reps rather
+/// eight batches × 1000 cells × 2 sides. Outside it, 30 reps rather
 /// than `N_REPS`: a batch interval is ~2 ms and already a mean over 1000
 /// cells, so the min settles sooner — measured `--aa` floor on batch rows:
 /// ≤0.2% at 30 (as the fixture rows), up to 1.2% at 10.
@@ -151,8 +151,8 @@ const Opts = struct {
     /// `--gap-tol=X`: both sides solve at X instead of `bc.GAP_TOL`, and the
     /// report is the deterministic pass only. The fixtures' pins hold at the
     /// default, so timing at another tolerance has no baseline to read
-    /// against; and a cell that errors there — the #2 class at 1e-9, once
-    /// #6 adds those repros as fixtures — would panic `measure`.
+    /// against; and a cell that errors there — as the close-pair repro
+    /// (tests/neg_gap_test.zig) once did at 1e-9 — would panic `measure`.
     gap_tol: ?f64 = null,
 };
 

@@ -119,7 +119,7 @@ What "100% line coverage" buys you:
 - Every line in every compiled function is reached by some run — tests,
   and for the examples and the harness, an end-to-end execution on every
   CI run. An example with code that doesn't run isn't a good example;
-  this makes the #12 class of rot (examples silently breaking) impossible
+  this makes that old class of rot — examples silently breaking — impossible
   rather than merely caught by `just check`.
 - `comptime` branches that aren't realized at runtime don't appear in
   the binary, so they don't show as uncovered — Zig's comptime is
@@ -133,8 +133,9 @@ What it **doesn't** buy you:
 - **"Nothing is dead."** Zig's analysis is lazy: a declaration nothing
   references is never compiled, has no line entries, and is invisible
   to the gate — it does not even enter the denominator. That is how
-  `WorkBuffers` outlived its only caller in #30. The gate's guarantee
-  is "every compiled line runs"; the complementary question — is every
+  `WorkBuffers` outlived its only caller when the
+  alternating path was removed. The gate's guarantee is "every
+  compiled line runs"; the complementary question — is every
   *written* declaration referenced — is `just lint` (zlinter's
   `no_unused`, a parse, in `just ci` and CI). Its
   known blind spot is #32: a declaration referenced only from inside
@@ -169,7 +170,7 @@ first is a question, not a technique, and it comes first:
 
 - **Ask whether the code should exist.** An uncovered line is evidence
   that nothing reaches it; before working out how to reach it, check
-  whether anything *should*. Removing the alternating path (PR #30) left the
+  whether anything *should*. Removing the alternating path left the
   quasi-Newton preconditioner in `quasiNewtonAxisDirection` uncovered:
   the trust path's opening rounds never iterate far enough to engage it,
   so it was dead with the shipped constants. It was deleted, along with
@@ -286,7 +287,7 @@ re-exporting them through the public API.
 | `tests/batches_test.zig` | The batch contract: per batch, tally every cell (`bench/core.zig`'s `Side`/`Tally`) and require all of them converged. A failure prints the tally and names the batch. Slow tier (`-Dslow`): 8000 Debug solves guarding a gate property. |
 | `cases/cases.zig` | Comptime manifest over `cases/zon/*.zon` — defines the `Case` schema and the `all` list — plus `GAP_TOL` and `pin(Options)`, the solver options every pin in the corpus is taken under (the tests, `bench/core.zig` and `examples/bench.zig` take them from here rather than carrying copies). Exposed as the `cases` build module; imported by the tests, the examples and `bench/`. Top-level because it is a shared corpus, not test code. |
 | `cases/zon/*.zon` | Per-case fixture: description + tags + points + expected outcome. |
-| `cases/batches.zig`, `cases/batches/*.{zon,ids}` | Batch fixtures: ~1000 distinct cells of one DGGS family at one resolution (H3 r9/r15; S2 and A5 count-matched to H3 r9/r12/r15) — the timing workload for `csar-ab` (#37); the contract (every cell converges) and its rationale are in `batches.zig`'s header. The `.ids` is the portable artifact; `just surveys::batches-gen` regenerates both from `scripts/batches/gen_batches.py` (dggs_compare's sampler and bindings), `just surveys::batches-verify` checks the committed `.zon` against the `.ids` by vertex chord distance — on demand, not in `just ci`, so the family wheels stay out of CI. The batches are plain comptime `@import`s like the cases, measured at +0.25 s cold `zig build test`, +130 MB compiler peak RSS, +2 MB in the two binaries that reference them (test, `csar-ab`), examples unchanged. That scales with the data: at ~10× more cells compiler memory reaches several GB and a runtime loader (`load(allocator)`, callers own the memory) becomes the right shape. |
+| `cases/batches.zig`, `cases/batches/*.{zon,ids}` | Batch fixtures: ~1000 distinct cells of one DGGS family at one resolution (H3 r9/r15; S2 and A5 count-matched to H3 r9/r12/r15) — the timing workload for `csar-ab`; the contract (every cell converges) and its rationale are in `batches.zig`'s header. The `.ids` is the portable artifact; `just surveys::batches-gen` regenerates both from `scripts/batches/gen_batches.py` (dggs_compare's sampler and bindings), `just surveys::batches-verify` checks the committed `.zon` against the `.ids` by vertex chord distance — on demand, not in `just ci`, so the family wheels stay out of CI. The batches are plain comptime `@import`s like the cases, measured at +0.25 s cold `zig build test`, +130 MB compiler peak RSS, +2 MB in the two binaries that reference them (test, `csar-ab`), examples unchanged. That scales with the data: at ~10× more cells compiler memory reaches several GB and a runtime loader (`load(allocator)`, callers own the memory) becomes the right shape. |
 
 To add a new test file: create `tests/<name>_test.zig`, then add
 `_ = @import("<name>_test.zig");` to `tests/all.zig`. The test
@@ -327,8 +328,8 @@ are PRs, the rest are not commits.
 
 1. PR, the last one before the tag: set `build.zig.zon`'s `.version`, rename
    `changelog.md`'s `## [Unreleased]` to `## [X.Y.Z]`, and open a fresh empty
-   `## [Unreleased]` above it. The version is not bumped before this PR (#12
-   had to revert one that was).
+   `## [Unreleased]` above it. The version is not bumped before this PR
+   (one bumped early had to be reverted).
 2. Wait for the `ci` run on the merge commit to go green (`gh run watch`); it
    includes `consumer-smoke`, which builds the tree as a consumer receives it
    ("Packaging").
@@ -391,7 +392,8 @@ near the noise floor as unproven.
   isn't by is that run's noise floor. Nothing is stored — re-measure instead.
 - `just ab --gap-tol=1e-9` — both sides at that tolerance, deterministic
   pass only (why: `Opts.gap_tol` in `bench/ab.zig`). For a change whose
-  effect lives below the suite's tolerance — #6's #2 class.
+  effect lives below the suite's tolerance — the negative-gap class
+  (tests/neg_gap_test.zig).
 - The report's `gap shift` line is the largest move of the certified gap
   among rows the diff does *not* flag, and each tally ends in `min gap`,
   the smallest certified gap among its converged cases — sign included.
@@ -490,7 +492,8 @@ machine code, and the machine code can be read. Before blaming layout
    `[rsp+…]`) is a spilled loop-carried value — a few cycles per
    iteration, which on a 6–10 point cell is the ~20 ns a 1% batch row is.
 
-First use: #52 — a collapsed damping struct kept `1.0` and a norm live
+First use, `trust.zig`'s DampState collapse: the collapsed struct kept
+`1.0` and a norm live
 across the solver calls, which spilled the inlined `computeMoments`
 accumulator. Forcing that call out of line recovered about half and was
 not kept.

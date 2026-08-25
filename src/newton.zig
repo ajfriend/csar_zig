@@ -301,7 +301,7 @@ pub fn newtonPolish(Ql: []const Vec3, w: []f64, s: *NewtonScratch) bool {
         // point, unlike mveeFw's full-mass noise drop. Steps with
         // r_min > 1 are bit-identical to prior behavior (fl(0.99·r) is
         // monotone, so min-of-products = product-of-min). Measurements
-        // and history: PR #8.
+        // and history: docs/trust-solver.md (validation ledger).
         if (r_min <= 1.0 and k > 3) {
             for (0..k) |i| w_a[i] += r_min * delta_w[i];
             // Swap-remove the blocker; its caller-side weight is zeroed

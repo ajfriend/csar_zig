@@ -244,7 +244,8 @@ pub const Tally = struct {
     errored: u32 = 0,
     /// Smallest certified gap among the converged entries; `inf` when there
     /// are none. A negative value is a `converged` outcome whose certificate
-    /// sits below zero — the anomaly #6 repairs — so the sign is the point.
+    /// sits below zero — the negative-gap anomaly (tests/neg_gap_test.zig)
+    /// — so the sign is the point.
     min_gap: f64 = std.math.inf(f64),
     /// Sum of `Metrics.below_model`: should be 0; printed only otherwise.
     below_model: u32 = 0,
@@ -287,7 +288,7 @@ pub const Tally = struct {
 /// both sides converged, and `differs` false. `differs` leaves the gap out
 /// on purpose (it moves without meaning a behavioural change), so this is
 /// where "the gaps shifted by at most X" becomes a number — for the PR body,
-/// not a gate (#18). `--aa` reads zero.
+/// not a gate (dev.md "The PR procedure, and what gates"). `--aa` reads zero.
 pub const GapShift = struct {
     max: f64 = 0,
     /// Index of the row holding the max, for the caller to name — it knows
@@ -314,8 +315,8 @@ pub const GapShift = struct {
     }
 };
 
-/// The deterministic-diff predicate: the tool's contract, consumed by #5, #6
-/// and #9 as "an empty deterministic diff".
+/// The deterministic-diff predicate: the tool's contract, consumed by
+/// dev.md's PR procedure (and #9) as "an empty deterministic diff".
 ///
 /// AR is compared **bit-for-bit**, not within a tolerance. The commit gate already
 /// checks AR within 1e-6 (`tests/cases_test.zig`); comparing exactly here
@@ -453,8 +454,9 @@ pub fn Side(comptime lib: type) type {
 
         /// Solve once and reduce to comparable metrics. Errors are reported,
         /// not propagated: `solve` can still return one on a valid input
-        /// (#1, #2), and a case that errors on one side only is precisely a
-        /// difference worth seeing. Dying here would hide it.
+        /// (as tests/neg_gap_test.zig's repros once did), and a case that
+        /// errors on one side only is precisely a difference worth seeing.
+        /// Dying here would hide it.
         pub fn metrics(self: Self, pts: []const [3]f64) Metrics {
             var o = lib.solve(self.gpa, pts, self.opts()) catch |e| {
                 return .{ .status = @errorName(e) };
