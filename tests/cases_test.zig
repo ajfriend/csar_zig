@@ -86,9 +86,7 @@ test "all cases match expected outcome" {
             },
             .hard => {
                 // Frontier case: no outcome asserted (see Expected.hard) —
-                // the `try` on solve above is the whole check. Outcome and
-                // timing shifts are the A/B harness's to report; a case
-                // that starts converging gets promoted to `.converged`.
+                // the `try` on solve above is the whole check.
             },
         }
     }

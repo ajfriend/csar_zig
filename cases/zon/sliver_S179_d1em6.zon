@@ -1,6 +1,6 @@
 .{
-    .description = "179° great-circle arc, out-of-plane thickness 1e-6 — frontier case, stationary short of the predicted floor (issue #62)",
-    .tags = .{ "hard", "sliver", "wide_angle" },
+    .description = "179° great-circle arc, out-of-plane thickness 1e-6 — frontier case, stationary short of the predicted floor (#62)",
+    .tags = .{ "hard_expected", "sliver", "wide_angle" },
     .points = .{
         .{ 0.87302235942834006, -0.46886695148094215, -0.13414820813988590 },
         .{ 0.84982571150335173, -0.48370308789483379, -0.20935038292017802 },
