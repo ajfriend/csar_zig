@@ -4,9 +4,11 @@
 //! the unit sphere, find the tightest ellipsoidal cone enclosing it.
 //!
 //! Where to look:
-//!   - `src/api.zig` — public API surface: types, methods,
-//!     `checkFeasibility`, and the errors-vs-outcome rationale. Read
-//!     this file end-to-end to learn what the library exposes.
+//!   - `src/api.zig` — the solver's public surface: types, methods,
+//!     `checkFeasibility`, and the errors-vs-outcome rationale.
+//!   - `src/cert.zig` — foreign-candidate certification:
+//!     `cert_primal` / `cert_dual` / `primal_violation` and their
+//!     result types.
 //!   - `src/csar.zig` — algorithm implementation; defines `solve`.
 //!
 //! This file is just a re-export shim so consumers can write
@@ -14,6 +16,7 @@
 
 const linalg = @import("linalg.zig");
 const api = @import("api.zig");
+const cert = @import("cert.zig");
 const csar = @import("csar.zig");
 
 // Linear-algebra types surfaced by the public solver API:
@@ -40,3 +43,15 @@ pub const checkFeasibility = api.checkFeasibility;
 
 // Solver entry point (`src/csar.zig`).
 pub const solve = csar.solve;
+
+// Foreign-candidate certification (`src/cert.zig`): certify (A, b)
+// cones from any source — `cert_primal` from the primal variables
+// alone, `cert_dual` given the dual multipliers as well.
+pub const cert_primal = cert.cert_primal;
+pub const cert_dual = cert.cert_dual;
+pub const primal_violation = cert.primal_violation;
+pub const PrimalOutcome = cert.PrimalOutcome;
+pub const DualOutcome = cert.DualOutcome;
+pub const PrimalCert = cert.PrimalCert;
+pub const DualCert = cert.DualCert;
+pub const NoCertReason = cert.NoCertReason;

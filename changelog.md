@@ -7,6 +7,7 @@ commit that carries the full detail.
 
 - Normalize dual variables so `‖Xλ‖₂ = 3` (#88)
 - Refresh the `verify_duality.py` oracle to the normalized dual (#89)
+- Add `cert_primal` / `cert_dual` for foreign `(A, b)` candidates (#90)
 
 ## [0.5.0]
 

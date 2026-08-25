@@ -244,6 +244,18 @@ pub const trust = struct {
     pub const RECERT_MAX: u32 = 32;
 };
 
+/// Tuning for the foreign-candidate certifier (`src/cert.zig`): the
+/// inner-MVEE budget `cert_primal` runs at the candidate's axis. Off the
+/// hot path, so the budget is generous — pairwise FW converges
+/// linearly on the MVEE, the tolerance sits well below any gap a
+/// caller would act on, and the iteration cap is a backstop, not a
+/// tuning knob. Interacts with the gap-reproduction tolerance recorded
+/// in tests/cert_test.zig.
+pub const cert = struct {
+    pub const FW_MAX_ITER: u32 = 4096;
+    pub const FW_INNER_TOL: f64 = 1e-10;
+};
+
 /// Numerical tolerances — the "how small is small" guards.
 /// These guard against divide-by-zero, underflow, and spurious convergence.
 /// Tuned to f64 precision; not exposed to callers.

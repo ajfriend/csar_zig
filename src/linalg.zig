@@ -499,6 +499,15 @@ pub const Chol3 = struct {
     pub inline fn logDet(self: Chol3) f64 {
         return 2.0 * (@log(self.m[0]) + @log(self.m[4]) + @log(self.m[8]));
     }
+
+    /// The factor as a general Mat3 — the sanctioned exit from the
+    /// restricted API, for when L is needed as an explicit square root
+    /// (e.g. a congruence LᵀZL). Storage is row-major with the upper
+    /// triangle guaranteed zero, so this is a reinterpretation, not a
+    /// copy-with-fixup.
+    pub inline fn asMat3(self: Chol3) Mat3 {
+        return .{ .m = self.m };
+    }
 };
 
 /// LU factorization with partial pivoting, dimension-generic. Storage
