@@ -5,11 +5,8 @@ commit that carries the full detail.
 
 ## [Unreleased]
 
-- Certificate multipliers are now exported on the normalized dual's
-  constraint boundary (`‖Xλ‖₂ = 3`), so shipped certificates — including
-  uncertified ones — pass a literal dual-feasibility check; gap values
-  are unchanged. Details in
-  [#88](https://github.com/ajfriend/csar_zig/pull/88).
+- Boundary-normalized certificate export (`‖Xλ‖₂ = 3`).
+  Details in [#88](https://github.com/ajfriend/csar_zig/pull/88).
 
 ## [0.5.0]
 
