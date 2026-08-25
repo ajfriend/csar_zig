@@ -385,9 +385,12 @@ pub fn writeSkipped(w: *std.Io.Writer, name: []const u8, reason: []const u8) std
 ///
 /// Fixed-point rather than scientific so the two aspect ratios line up digit
 /// for digit: reading *where* they diverge is the point of the row.
+///
+/// The name column fits the corpus's longest label: currently a 17-char
+/// fixture name plus the ` [hard]` marker (bench/ab.zig, FIXTURES).
 pub fn writeDiff(w: *std.Io.Writer, name: []const u8, a: Metrics, b: Metrics) std.Io.Writer.Error!void {
     try w.print(
-        "  {s:<22} cur={s}/{d}/{d:.17}/{e:.2}  base={s}/{d}/{d:.17}/{e:.2}\n",
+        "  {s:<24} cur={s}/{d}/{d:.17}/{e:.2}  base={s}/{d}/{d:.17}/{e:.2}\n",
         .{ name, a.status, a.iters, a.ar, a.gap, b.status, b.iters, b.ar, b.gap },
     );
 }
