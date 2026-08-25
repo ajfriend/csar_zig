@@ -51,6 +51,7 @@ The original alternating solver was removed in 0.3.0.
 
 - `src/root.zig` — public API re-exports
 - `src/api.zig` — public API surface (types + methods + `checkFeasibility`)
+- `src/cert.zig` — foreign-candidate certification (`cert_primal` / `cert_dual` / `primal_violation`)
 - `src/csar.zig` — solver core: preprocessing, the inner MVEE machinery, certification, dispatch (std-only)
 - `src/trust.zig` — the trust-region solver path (what `.auto` resolves to)
 - `src/linalg.zig`, `src/halfspace.zig`, `src/newton.zig`, `src/config.zig` — internal modules

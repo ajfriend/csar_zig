@@ -171,12 +171,12 @@ test "the tier x claim loop: every case's claim enforced at its tier's settings"
                 const lam_full = try allocator.alloc(f64, case.points.len);
                 defer allocator.free(lam_full);
                 scatter(lam_full, c.cert);
-                const v = csar.cert_dual(case.points, c.A(), c.b(), lam_full).verified;
+                const v = csar.cert_dual(case.points, c.A(), c.b(), lam_full).certified;
                 try std.testing.expectApproxEqAbs(c.gap + 3.0 * @log(v.scale), v.gap, GAP_REPRO_TOL);
                 try std.testing.expectApproxEqAbs(1.0, v.scale, 1e-4);
                 try std.testing.expectApproxEqAbs(1.0, v.dual_scale, 1e-9);
                 scatter(lam_full, cd.cert);
-                const rv = csar.cert_dual(case.points, c.A(), c.b(), lam_full).verified;
+                const rv = csar.cert_dual(case.points, c.A(), c.b(), lam_full).certified;
                 try std.testing.expectApproxEqAbs(cd.gap, rv.gap, GAP_REPRO_TOL);
 
                 // Tiers 0-1 additionally pin the AR. The certified duality

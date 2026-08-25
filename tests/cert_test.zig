@@ -1,5 +1,5 @@
-//! Module-local tests for `src/cert.zig` — cert_primal/cert_dual for foreign
-//! (A, b) candidates. The per-case corpus obligations (re-certify,
+//! Module-local tests for `src/cert.zig` — `cert_primal` /
+//! `cert_dual` for foreign (A, b) candidates. The per-case corpus obligations (re-certify,
 //! shipped-gap reproduction, round-trip) live in cases_test.zig's
 //! tier x claim loop, where tier-2 settings apply.
 //!
@@ -46,7 +46,7 @@ test "repair: gap is invariant under scaling A; off-axis candidates still certif
     try std.testing.expect(cd_off.gap > 100.0 * cd.gap);
 }
 
-test "OOM in certify's last alloc hits the indices errdefer" {
+test "OOM in cert_primal's last alloc hits the indices errdefer" {
     // Same technique as extreme_aspect_test.zig's cert-builder OOM
     // tests: count parent-allocator calls on a clean run, then fail
     // the last one — `lambdas`, the second of the two back-to-back
@@ -101,7 +101,7 @@ test "no_certificate: every reason, from both entry points" {
     // dual_indefinite: a single-point λ leaves Z rank-deficient.
     const lam_one = [_]f64{ 1, 0, 0 };
     try std.testing.expect(csar.cert_dual(&octant, eye, b_ok, &lam_one).no_certificate == .dual_indefinite);
-    // certify pass-through: two points can never pin a full-rank dual.
+    // cert_primal pass-through: two points can never pin a full-rank dual.
     const two = [_][3]f64{ .{ 1, 0, 0 }, .{ 0, 1, 0 } };
     const co_two = try csar.cert_primal(allocator, &two, eye, b_ok);
     try std.testing.expect(co_two.no_certificate == .dual_indefinite);
