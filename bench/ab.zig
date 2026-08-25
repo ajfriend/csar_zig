@@ -236,10 +236,66 @@ fn report(comptime Base: type, init: std.process.Init, opts: Opts) !void {
     var side_cur = Cur{ .gpa = gpa, .io = io, .gap_tol = cur_tol };
     var side_base = Base{ .gpa = gpa, .io = io, .gap_tol = tol };
 
-    // Self-describing: a local report and a CI report must be comparable, and
-    // the invariant that travels between machines is the ratio, not the µs.
+    // ---- deterministic pass first: the headline needs the verdict, so the
+    // pass computes before anything prints (diff rows buffered) ----
+    var diffs: std.Io.Writer.Allocating = .init(gpa);
+    defer diffs.deinit();
+    var results: [1 + BATCHES.len]UnitResult = undefined;
+    results[0] = try diffUnit(&diffs.writer, &side_cur, &side_base, FIXTURES);
+    for (BATCHES, results[1..]) |unit, *r| r.* = try diffUnit(&diffs.writer, &side_cur, &side_base, unit);
+    var n_diff: usize = 0;
+    for (results) |r| n_diff += r.n_diff;
+
+    // ---- headline: the gate's answer before anything else; on a dirty
+    // report the blocking rows follow immediately — they are the content ----
+    if (n_diff == 0) {
+        try out.print("csar A/B report — deterministic diff: none ({d} fixtures + {d} batches)\n", .{ cases.all.len, BATCHES.len });
+    } else {
+        try out.print("csar A/B report — deterministic diff: {d} rows differ ({d} fixtures + {d} batches; status / iters / ar)\n", .{ n_diff, cases.all.len, BATCHES.len });
+        try out.writeAll(diffs.written());
+    }
+    if (BATCHES.len < cases.batches.all.len) {
+        try out.print("  ({d} of {d} batches: coverage build)\n", .{ BATCHES.len, cases.batches.all.len });
+    }
+    try out.print("\n", .{});
+
+    if (opts.gap_tol == null) {
+        try out.print("timing (min of {d} reps, {d} for a batch; µs per solve — a batch row averages its cells)\n", .{ bc.N_REPS, BATCH_REPS });
+        try out.print("tier 0 — the product; above-floor shifts here are the headline (batches are tier 0 by contract)\n", .{});
+        try out.print("{s}\n", .{bc.timing_header});
+        for (TIMING_T0) |unit| try timeUnit(out, &side_cur, &side_base, cur_mult, unit, null);
+        for (BATCHES, results[1..]) |unit, r| try timeUnit(out, &side_cur, &side_base, cur_mult, unit, r.tallies);
+        try out.print("tier 1 — correct at defaults; improved gladly, never at tier 0's expense\n", .{});
+        try out.print("{s}\n", .{bc.timing_header});
+        for (TIMING_T1) |unit| try timeUnit(out, &side_cur, &side_base, cur_mult, unit, null);
+    } else {
+        try out.print("timing: skipped under --gap-tol (see meta)\n", .{});
+    }
+    try out.print("\n", .{});
+
+    // ---- corpus: one row per unit; a unit earns the per-side block only
+    // when it differs (or when below_model fires, which `differs` never
+    // compares, so it must print per side) ----
+    try out.print("corpus (outcome tallies; sides identical wherever the diff is none)\n", .{});
+    for (results) |r| {
+        const t = r.tallies;
+        if (r.n_diff == 0 and t.cur.below_model == 0 and t.base.below_model == 0) {
+            var obuf: [96]u8 = undefined;
+            try out.print("  {s:<9} {d:>5}  {s:<36} {f}", .{ r.unit.name, r.unit.cells.len, outcomes(t.cur, r.unit.cells.len, &obuf), r.shift });
+        } else {
+            try out.print("  {s} ({d} cells)\n    cur : {f}\n    base: {f}\n    gap shift : {f}", .{ r.unit.name, r.unit.cells.len, t.cur, t.base, r.shift });
+        }
+        var lbuf: [48]u8 = undefined;
+        if (r.shift.idx) |i| try out.print(" ({s})", .{r.unit.label(i, &lbuf)});
+        try out.print("\n", .{});
+    }
+    try out.print("\n", .{});
+
+    // ---- meta: context for numbers already read; self-describing so a
+    // local report and a CI report stay comparable — the invariant that
+    // travels between machines is the ratio, not the µs ----
     const builtin = @import("builtin");
-    try out.print("csar A/B report\n", .{});
+    try out.print("meta\n", .{});
     try out.print("  mode      : {s}\n", .{if (opts.aa) "A/A (current vs current)" else "A/B (current vs pinned baseline)"});
     try out.print("  host      : {t}-{t}\n", .{ builtin.cpu.arch, builtin.os.tag });
     try out.print("  zig       : {s}\n", .{builtin.zig_version_string});
@@ -251,30 +307,6 @@ fn report(comptime Base: type, init: std.process.Init, opts: Opts) !void {
     if (opts.inject_2x) try out.print("  injected  : 2x on the current side\n", .{});
     if (opts.inject_tol) try out.print("  injected  : gap_tol={e} on the current side\n", .{INJECT_GAP_TOL});
     if (opts.gap_tol) |t| try out.print("  gap_tol   : {e} on both sides — deterministic pass only\n", .{t});
-    try out.print("\n", .{});
-
-    // ---- deterministic pass: the fixtures as one group, each batch as one --
-    try out.print("deterministic diff (status / iters / ar; {d} fixtures, {d} batches)\n", .{ cases.all.len, BATCHES.len });
-    _ = try diffGroup(out, &side_cur, &side_base, FIXTURES);
-    var batch_tallies: [BATCHES.len]Tallies = undefined;
-    for (BATCHES, &batch_tallies) |unit, *t| t.* = try diffGroup(out, &side_cur, &side_base, unit);
-    if (BATCHES.len < cases.batches.all.len) {
-        try out.print("  ({d} of {d} batches: coverage build)\n", .{ BATCHES.len, cases.batches.all.len });
-    }
-    try out.print("\n", .{});
-
-    if (opts.gap_tol == null) {
-        try out.print("timing (min of {d} reps, {d} for a batch; µs per solve — a batch row averages its cells)\n", .{ bc.N_REPS, BATCH_REPS });
-        try out.print("tier 0 — the product; above-floor shifts here are the headline (batches are tier 0 by contract)\n", .{});
-        try out.print("{s}\n", .{bc.timing_header});
-        for (TIMING_T0) |unit| try timeUnit(out, &side_cur, &side_base, cur_mult, unit, null);
-        for (BATCHES, batch_tallies) |unit, t| try timeUnit(out, &side_cur, &side_base, cur_mult, unit, t);
-        try out.print("tier 1 — correct at defaults; improved gladly, never at tier 0's expense\n", .{});
-        try out.print("{s}\n", .{bc.timing_header});
-        for (TIMING_T1) |unit| try timeUnit(out, &side_cur, &side_base, cur_mult, unit, null);
-    } else {
-        try out.print("timing: skipped under --gap-tol (see the header)\n", .{});
-    }
 
     // Not redundant with the `defer` above: this is the one that reports a
     // write failure instead of swallowing it.
@@ -284,36 +316,57 @@ fn report(comptime Base: type, init: std.process.Init, opts: Opts) !void {
 /// Both sides' tallies over one unit, from the deterministic pass.
 const Tallies = struct { cur: bc.Tally, base: bc.Tally };
 
-/// One group of the deterministic pass: differing rows (capped), a tally per
-/// side, the gap shift.
-fn diffGroup(out: *std.Io.Writer, side_cur: anytype, side_base: anytype, unit: Unit) !Tallies {
-    var n_diff: usize = 0;
-    var t: Tallies = .{ .cur = .{}, .base = .{} };
-    var shift: bc.GapShift = .{};
+/// One unit's deterministic pass, computed without printing: the report's
+/// sections need the verdict before the layout starts.
+const UnitResult = struct {
+    unit: Unit,
+    tallies: Tallies,
+    shift: bc.GapShift,
+    n_diff: usize,
+};
+
+/// Tally both sides and track the gap shift; only when rows differ, write
+/// the unit's header and its capped diff rows into `diffs` (the buffer the
+/// headline section prints).
+fn diffUnit(diffs: *std.Io.Writer, side_cur: anytype, side_base: anytype, unit: Unit) !UnitResult {
+    var r: UnitResult = .{ .unit = unit, .tallies = .{ .cur = .{}, .base = .{} }, .shift = .{}, .n_diff = 0 };
     var buf: [48]u8 = undefined;
-    try out.print("  {s} ({d} cells)\n", .{ unit.name, unit.cells.len });
     for (unit.cells, 0..) |pts, i| {
         const a = side_cur.metrics(pts);
         const b = side_base.metrics(pts);
-        t.cur.add(a);
-        t.base.add(b);
-        shift.add(i, a, b);
+        r.tallies.cur.add(a);
+        r.tallies.base.add(b);
+        r.shift.add(i, a, b);
         if (!bc.differs(a, b)) continue;
-        n_diff += 1;
-        if (n_diff <= MAX_DIFF_ROWS) try bc.writeDiff(out, unit.label(i, &buf), a, b);
+        if (r.n_diff == 0) try diffs.print("  {s} ({d} cells)\n", .{ unit.name, unit.cells.len });
+        r.n_diff += 1;
+        if (r.n_diff <= MAX_DIFF_ROWS) try bc.writeDiff(diffs, unit.label(i, &buf), a, b);
     }
-    if (n_diff == 0) {
-        try out.print("    none\n", .{});
-    } else {
-        if (n_diff > MAX_DIFF_ROWS) try out.print("    … and {d} more\n", .{n_diff - MAX_DIFF_ROWS});
-        try out.print("    {d} of {d} differ\n", .{ n_diff, unit.cells.len });
+    if (r.n_diff > MAX_DIFF_ROWS) try diffs.print("    … and {d} more\n", .{r.n_diff - MAX_DIFF_ROWS});
+    if (r.n_diff > 0) try diffs.print("    {d} of {d} differ\n", .{ r.n_diff, unit.cells.len });
+    return r;
+}
+
+/// The one-row outcome summary: `all converged` for the common batch case,
+/// otherwise the nonzero counts only — zeros are padding, not information.
+fn outcomes(t: bc.Tally, cells: usize, buf: []u8) []const u8 {
+    if (t.converged == cells) return "all converged";
+    var w = std.Io.Writer.fixed(buf);
+    const parts = [_]struct { n: u32, label: []const u8 }{
+        .{ .n = t.converged, .label = "conv" },
+        .{ .n = t.did_not_converge, .label = "DNC" },
+        .{ .n = t.precision_floor, .label = "floor" },
+        .{ .n = t.infeasible, .label = "infeas" },
+        .{ .n = t.errored, .label = "err" },
+    };
+    var sep: []const u8 = "";
+    for (parts) |p| {
+        // The buffer fits the widest possible summary; a format error here
+        // is a programming bug, not a runtime condition.
+        if (p.n > 0) w.print("{s}{d} {s}", .{ sep, p.n, p.label }) catch unreachable;
+        if (p.n > 0) sep = " / ";
     }
-    try out.print("    cur : {f}\n", .{t.cur});
-    try out.print("    base: {f}\n", .{t.base});
-    try out.print("    gap shift : {f}", .{shift});
-    if (shift.idx) |i| try out.print(" ({s})", .{unit.label(i, &buf)});
-    try out.print("\n", .{});
-    return t;
+    return w.buffered();
 }
 
 /// One timing row, paired and interleaved. A one-cell unit is warmed up and

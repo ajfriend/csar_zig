@@ -242,12 +242,9 @@ pub const Tally = struct {
     precision_floor: u32 = 0,
     infeasible: u32 = 0,
     errored: u32 = 0,
-    /// Smallest certified gap among the converged entries; `inf` when there
-    /// are none. A negative value is a `converged` outcome whose certificate
-    /// sits below zero — the negative-gap anomaly (tests/neg_gap_test.zig)
-    /// — so the sign is the point.
-    min_gap: f64 = std.math.inf(f64),
     /// Sum of `Metrics.below_model`: should be 0; printed only otherwise.
+    /// Not compared by `differs` (it derives from `gap`), so it is never
+    /// assumed side-symmetric — the report prints it per side.
     below_model: u32 = 0,
 
     pub fn add(self: *Tally, m: Metrics) void {
@@ -259,10 +256,7 @@ pub const Tally = struct {
         };
         self.below_model += m.below_model;
         switch (tag) {
-            .converged => {
-                self.converged += 1;
-                self.min_gap = @min(self.min_gap, m.gap);
-            },
+            .converged => self.converged += 1,
             .infeasible => self.infeasible += 1,
             .did_not_converge => self.did_not_converge += 1,
             .precision_floor => self.precision_floor += 1,
@@ -271,13 +265,12 @@ pub const Tally = struct {
 
     /// zig's `{f}` formatting hook.
     pub fn format(self: Tally, w: *std.Io.Writer) std.Io.Writer.Error!void {
-        try w.print("{d} converged / {d} DNC / {d} floor / {d} infeasible / {d} errored / min gap {e:.2}", .{
+        try w.print("{d} converged / {d} DNC / {d} floor / {d} infeasible / {d} errored", .{
             self.converged,
             self.did_not_converge,
             self.precision_floor,
             self.infeasible,
             self.errored,
-            self.min_gap,
         });
         // Printed only when nonzero: it is a bug report, not a statistic.
         if (self.below_model > 0) try w.print(" / {d} BELOW ERROR MODEL", .{self.below_model});

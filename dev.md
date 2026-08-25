@@ -355,16 +355,21 @@ are PRs, the rest are not commits.
 
 `bench/` is a separate zig package that depends on **both** the working tree
 (`.path = ".."`) and a hash-pinned release, and compiles them into one
-binary. `just ab` measures them side by side: a deterministic diff over every
-fixture and every batch cell (status, iterations and aspect ratio; the
-certified gap is printed but deliberately not compared — see `differs` in
-`bench/core.zig`), grouped — the fixtures as one group, each batch as one —
-with a per-side tally and a gap-shift line per group and differing rows
-capped per group; then interleaved timing, µs per solve,
+binary. `just ab` measures them side by side and reports in four parts:
+a **headline** carrying the gate's verdict (a deterministic diff over
+every fixture and every batch cell — status, iterations and aspect ratio;
+the certified gap is deliberately not compared, see `differs` in
+`bench/core.zig`), followed immediately by the differing rows (capped per
+group) when there are any; then interleaved timing, µs per solve,
 in two tier subsections (the timed-set rule and roles: the tier legend
 below): tier 0 — `hex` (the many-passes quantization canary) and the eight
 batches (the hot path — `cases/batches.zig`) — then tier 1, the regimes
-batches lack (`np100`, `ha_12`). A batch row is a mean over its ~1000
+batches lack (`np100`, `ha_12`); then a **corpus** table, one outcome-tally row per
+unit with its gap-shift figure (a unit expands to per-side detail only
+when it differs, or when `below_model` fires — that counter is not
+diff-compared, so it is never assumed side-symmetric); then **meta**
+(mode, host, baseline, reps), trailing because it is context for numbers
+already read. A batch row is a mean over its ~1000
 cells where a fixture row is one cell: less row noise, the same layout bias
 (below). The `solves` column is how many solves each timed interval spanned
 — the calibrated passes for a fixture, the cell count for a batch. A batch
@@ -394,10 +399,9 @@ near the noise floor as unproven.
   pass only (why: `Opts.gap_tol` in `bench/ab.zig`). For a change whose
   effect lives below the suite's tolerance — the negative-gap class
   (tests/neg_gap_test.zig).
-- The report's `gap shift` line is the largest move of the certified gap
-  among rows the diff does *not* flag, and each tally ends in `min gap`,
-  the smallest certified gap among its converged cases — sign included.
-  Numbers for a PR body, not gates (see "The PR procedure, and what
+- The corpus table's `gap shift` figure is the largest move of the
+  certified gap among rows the diff does *not* flag — a number for a PR
+  body, not a gate (see "The PR procedure, and what
   gates" below).
 - `just ab --inject-2x` / `--inject-tol` — self-tests. The first must report
   ~2.0, the second must produce deterministic diffs (and `skipped` batch rows,
@@ -492,8 +496,8 @@ branch. A change that trades tier-0 speed for edge-case robustness
 is backwards by default — accepting one needs the case made in the
 PR body.
 
-For scale, a clean report reads: deterministic diff `none`, gap shift
-≤ 1.5e-24, timing ratios 0.987–1.012 against a roughly-1% per-row
+For scale, a clean report reads: a `deterministic diff: none` headline,
+gap shift ≤ 1.5e-24, timing ratios 0.987–1.012 against a roughly-1% per-row
 `--aa` floor — from the gap-formula change this procedure was
 calibrated on (that report, a corpus-growth report, and a CI-timing
 investigation are in their PRs). The gate is row-agnostic: report
