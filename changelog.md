@@ -9,7 +9,7 @@ commit that carries the full detail.
   (converges / infeasible / rejects / none) instead of `Expected`; tests
   derive their obligations from the pair, and the A/B report groups
   timing by tier and labels diff rows `[t1]`/`[t2]`/`[t3]`. Details in
-  PR_LINK_TBD.
+  [#74](https://github.com/ajfriend/csar_zig/pull/74).
 
 - The certified gap is now measured against the normalized dual — a
   never-looser bound; behavior otherwise unchanged (deterministic diff
