@@ -5,7 +5,7 @@
 //!     .description = "...",
 //!     .tags = .{ "...", ... },
 //!     .points = .{ .{x, y, z}, ... },
-//!     .expected = .{ .converged = .{ .ar = 1.234 } }  // or .infeasible
+//!     .expected = .{ .converged = .{ .ar = 1.234 } }  // or .infeasible / .hard
 //!   }
 //!
 //! Everything below is compiled into the binary at build time — no
@@ -46,6 +46,17 @@ pub const Expected = union(enum) {
     /// (λ ≥ 0, ∑λ ≈ 1, ‖∑ λᵢ xᵢ‖ ≈ residual) live in the test loop;
     /// no per-case residual value is stored.
     infeasible,
+    /// A case at or beyond the solver's current frontier: no outcome is
+    /// asserted — the solve must merely return (not error). These exist
+    /// for the A/B harness, which runs every fixture under both the
+    /// working tree and the pinned baseline and reports outcome,
+    /// iteration, and timing shifts; an improvement that makes one
+    /// converge shows up there, and the case is then promoted to
+    /// `.converged` (with its freshly certified AR) in that PR. Their
+    /// status can sit at FP-noise level (CLAUDE.md "Performance &
+    /// regression monitoring"), which is exactly why nothing blocks
+    /// on it.
+    hard,
 };
 
 pub const Case = struct {
@@ -61,6 +72,7 @@ pub const Entry = struct {
 };
 
 pub const all: []const Entry = &.{
+    .{ .name = "band_S150_w0.00001", .case = @import("zon/band_S150_w0.00001.zon") },
     .{ .name = "dnc_small_wide", .case = @import("zon/dnc_small_wide.zon") },
     .{ .name = "exact_min3_ar5", .case = @import("zon/exact_min3_ar5.zon") },
     .{ .name = "exact_tiny_ar3", .case = @import("zon/exact_tiny_ar3.zon") },
@@ -126,6 +138,11 @@ pub const all: []const Entry = &.{
     .{ .name = "oct_n0", .case = @import("zon/oct_n0.zon") },
     .{ .name = "oct_n1", .case = @import("zon/oct_n1.zon") },
     .{ .name = "oct_n2", .case = @import("zon/oct_n2.zon") },
+    .{ .name = "sliver_S150_d0.000001", .case = @import("zon/sliver_S150_d0.000001.zon") },
+    .{ .name = "sliver_S175_d0.0001", .case = @import("zon/sliver_S175_d0.0001.zon") },
+    .{ .name = "sliver_S175_d0.000001", .case = @import("zon/sliver_S175_d0.000001.zon") },
+    .{ .name = "sliver_S179_d0.000001", .case = @import("zon/sliver_S179_d0.000001.zon") },
+    .{ .name = "sliver_S90_d0.000001", .case = @import("zon/sliver_S90_d0.000001.zon") },
     .{ .name = "oct_n3", .case = @import("zon/oct_n3.zon") },
     .{ .name = "oct_s0", .case = @import("zon/oct_s0.zon") },
     .{ .name = "oct_s1", .case = @import("zon/oct_s1.zon") },

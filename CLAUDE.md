@@ -60,6 +60,16 @@ cells) — which solve in ~1–2 outer iterations and a few µs. Protect them:
 - **A small, stable ratio shift (≈1%, same sign across rows, diff empty) is
   not yet a finding.** Diff the disassembly before reasoning about it —
   dev.md "Reading a small stable shift".
+- **Tests assert answers and bounds; exact trajectory stats are the A/B
+  harness's job.** Fixture pins carry outcomes and ARs; capability guards
+  (e.g. the wide-cap iteration ceilings in `tests/methods_test.zig`) are
+  upper bounds that only fire on regression. Never equality-pin an
+  iteration count, gap-eval count, or timing in a test — `just ab`
+  computes and diffs those against the pinned baseline for review.
+  Frontier inputs belong in the corpus as `.hard` fixtures (no asserted
+  outcome, nothing blocks): the A/B report is where their status flips
+  and timing shifts surface, and a case that starts converging is
+  promoted to `.converged` in that PR.
 
 When changing the solver, the full check is: `just ci` green (suite + coverage
 gate + both backends where supported) + **`just ab`**, which measures the
