@@ -62,6 +62,6 @@ fn report(allocator: std.mem.Allocator, name: []const u8, points: []const [3]f64
         .infeasible => |i| std.debug.print("{s:22}  infeasible  residual={e:.3}  active={d}\n", .{
             name, i.residual, i.cert.indices.len,
         }),
-        .did_not_converge, .precision_floor => |p| std.debug.print("{s:22}  {s}  gap={e:.3}  iters={d}\n", .{ name, @tagName(outcome), p.gap, p.diag.totalIters() }), // kcov-excl: every bundled fixture certifies at the default tolerance (the #1/#2 floor inputs live in tests/neg_gap_test.zig, not in cases/)
+        .did_not_converge, .precision_floor => |p| std.debug.print("{s:22}  {s}  gap={e:.3}  iters={d}\n", .{ name, @tagName(outcome), p.gap, p.diag.totalIters() }), // covered by the .hard frontier fixtures — if this goes uncovered, replenish the frontier (Expected.hard, cases/cases.zig), don't re-exclude
     }
 }

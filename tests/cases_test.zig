@@ -84,6 +84,10 @@ test "all cases match expected outcome" {
                 // residual matches the computed witness magnitude (to a couple of ulp).
                 try std.testing.expect(@abs(inf.residual - z.norm()) < 1e-6);
             },
+            .hard => {
+                // Frontier case: no outcome asserted (see Expected.hard) —
+                // the `try` on solve above is the whole check.
+            },
         }
     }
 }

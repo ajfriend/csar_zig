@@ -210,7 +210,10 @@ first is a question, not a technique, and it comes first:
   wide-cap eager certificate fails by construction) so both arms
   execute on every platform.
 
-Nothing in `src/` or `tests/` is excluded. Historical
+Nothing anywhere is currently excluded — the ledger is empty (the
+last marker, on `examples/cases.zig`'s DNC print, was retired when
+the `.hard` frontier fixtures made that line genuinely covered).
+Historical
 evidence for the polish-bail
 counters staying untriggerable in context: the full fixture library ×
 option grids, ~100 synthetic shape families, direct far-field
@@ -218,9 +221,10 @@ option grids, ~100 synthetic shape families, direct far-field
 the real-world states + countries surveys (227 regions, zero polish
 failures).
 
-**The ledger is tracked over time, and cross-checked.** `just
-test-slow` prints an `excluded lines:` section — the count in the
-header, and per file the line numbers the exclusion rules removed — and
+**The ledger is tracked over time, and cross-checked.** When any
+exclusions exist, `just test-slow` prints an `excluded lines:`
+section — the count in the header, and per file the line numbers the
+exclusion rules removed (no section means an empty ledger) — and
 CI posts the gate's whole report as a comment on every PR, green or
 red, so growth is visible in review and a reviewer can go look at each
 marker. On a red run the report also says why: `failed runs`, `ledger

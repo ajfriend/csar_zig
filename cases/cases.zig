@@ -5,7 +5,7 @@
 //!     .description = "...",
 //!     .tags = .{ "...", ... },
 //!     .points = .{ .{x, y, z}, ... },
-//!     .expected = .{ .converged = .{ .ar = 1.234 } }  // or .infeasible
+//!     .expected = .{ .converged = .{ .ar = 1.234 } }  // or .infeasible / .hard
 //!   }
 //!
 //! Everything below is compiled into the binary at build time — no
@@ -46,6 +46,20 @@ pub const Expected = union(enum) {
     /// (λ ≥ 0, ∑λ ≈ 1, ‖∑ λᵢ xᵢ‖ ≈ residual) live in the test loop;
     /// no per-case residual value is stored.
     infeasible,
+    /// A case at or beyond the solver's current frontier: no outcome is
+    /// asserted — the solve must merely return (not error). Carried for
+    /// the A/B harness (`just ab`), which diffs outcome, iterations,
+    /// and AR against the pinned baseline; status here can sit at
+    /// FP-noise level (CLAUDE.md "Performance & regression
+    /// monitoring"), which is why nothing blocks on it. A case that
+    /// starts converging is promoted to `.converged` (with its freshly
+    /// certified AR) in that PR — and the frontier replenished (e.g.
+    /// thinner slivers), because these fixtures are also what
+    /// exercises the non-converged reporting path: the coverage gate
+    /// trips on examples/cases.zig's DNC print if the last one
+    /// converges. That failure means "add new frontier cases", not
+    /// "delete the branch".
+    hard,
 };
 
 pub const Case = struct {
@@ -61,6 +75,7 @@ pub const Entry = struct {
 };
 
 pub const all: []const Entry = &.{
+    .{ .name = "band_S150_w1em5", .case = @import("zon/band_S150_w1em5.zon") },
     .{ .name = "dnc_small_wide", .case = @import("zon/dnc_small_wide.zon") },
     .{ .name = "exact_min3_ar5", .case = @import("zon/exact_min3_ar5.zon") },
     .{ .name = "exact_tiny_ar3", .case = @import("zon/exact_tiny_ar3.zon") },
@@ -131,6 +146,11 @@ pub const all: []const Entry = &.{
     .{ .name = "oct_s1", .case = @import("zon/oct_s1.zon") },
     .{ .name = "oct_s2", .case = @import("zon/oct_s2.zon") },
     .{ .name = "oct_s3", .case = @import("zon/oct_s3.zon") },
+    .{ .name = "sliver_S150_d1em6", .case = @import("zon/sliver_S150_d1em6.zon") },
+    .{ .name = "sliver_S175_d1em4", .case = @import("zon/sliver_S175_d1em4.zon") },
+    .{ .name = "sliver_S175_d1em6", .case = @import("zon/sliver_S175_d1em6.zon") },
+    .{ .name = "sliver_S179_d1em6", .case = @import("zon/sliver_S179_d1em6.zon") },
+    .{ .name = "sliver_S90_d1em6", .case = @import("zon/sliver_S90_d1em6.zon") },
     .{ .name = "wide_cap82", .case = @import("zon/wide_cap82.zon") },
     .{ .name = "wide_cap85", .case = @import("zon/wide_cap85.zon") },
     .{ .name = "wide_cap89", .case = @import("zon/wide_cap89.zon") },
