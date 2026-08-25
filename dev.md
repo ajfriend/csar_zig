@@ -360,21 +360,21 @@ a **headline** carrying the gate's verdict (a deterministic diff over
 every fixture and every batch cell — status, iterations and aspect ratio;
 the certified gap is deliberately not compared, see `differs` in
 `bench/core.zig`), followed immediately by the differing rows (capped per
-group) when there are any; then interleaved timing, µs per solve,
+unit) when there are any; then interleaved **timing**, µs per solve,
 in two tier subsections (the timed-set rule and roles: the tier legend
 below): tier 0 — `hex` (the many-passes quantization canary) and the eight
 batches (the hot path — `cases/batches.zig`) — then tier 1, the regimes
-batches lack (`np100`, `ha_12`); then a **corpus** table, one outcome-tally row per
-unit with its gap-shift figure (a unit expands to per-side detail only
-when it differs, or when `below_model` fires — that counter is not
-diff-compared, so it is never assumed side-symmetric); then **meta**
-(mode, host, baseline, reps), trailing because it is context for numbers
-already read. A batch row is a mean over its ~1000
+batches lack (`np100`, `ha_12`). A batch row is a mean over its ~1000
 cells where a fixture row is one cell: less row noise, the same layout bias
-(below). The `solves` column is how many solves each timed interval spanned
-— the calibrated passes for a fixture, the cell count for a batch. A batch
-is timed only if both sides converged every cell (a DNC cell would time
-`max_outer`); otherwise its row says `skipped`.
+(below); the `solves` column is how many solves each timed interval spanned
+— the calibrated passes for a fixture, the cell count for a batch — and a
+batch is timed only if both sides converged every cell (a DNC cell would
+time `max_outer`; otherwise its row says `skipped`). Then a **corpus**
+table, one outcome-tally row per unit with its gap-shift figure (a unit
+expands to per-side detail only when it differs, or when `below_model`
+fires — that counter is not diff-compared, so it is never assumed
+side-symmetric); then **meta** (mode, host, baseline, reps), trailing
+because it is context for numbers already read.
 
 One binary rather than two processes is the point: a freshly built binary's
 first launch runs 2–5× slow and that survives warm-up and min-over-reps, so a

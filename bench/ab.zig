@@ -75,9 +75,9 @@ comptime {
 }
 
 /// What the report works on: a named list of cells. The deterministic pass
-/// diffs a unit as one group (one tally per side, one gap-shift line, the
-/// differing rows capped); the timing pass times it as one row. A fixture is a
-/// one-cell unit; the whole fixture corpus is one unit with per-row `names`;
+/// tallies a unit and buffers its capped differing rows; the corpus
+/// section renders the tallies and gap shift; the timing pass times it as
+/// one row. A fixture is a one-cell unit; the whole fixture corpus is one unit with per-row `names`;
 /// a batch is ~1000 cells named `name[idx]`.
 const Unit = struct {
     name: []const u8,
@@ -160,7 +160,7 @@ const TIMING_T1 = [_]Unit{
     timedFixture("ha_12", 1),
 };
 
-/// Differing rows printed per group before "… and k more". Fixtures never
+/// Differing rows printed per unit before "… and k more". Fixtures never
 /// reach it; a regressed batch would otherwise print a thousand rows.
 const MAX_DIFF_ROWS = 10;
 
@@ -268,7 +268,7 @@ fn report(comptime Base: type, init: std.process.Init, opts: Opts) !void {
         try out.print("tier 0 — the product; above-floor shifts here are the headline (batches are tier 0 by contract)\n", .{});
         try out.print("{s}\n", .{bc.timing_header});
         for (TIMING_T0) |unit| try timeUnit(out, &side_cur, &side_base, cur_mult, unit, null);
-        for (BATCHES, results[1..]) |unit, r| try timeUnit(out, &side_cur, &side_base, cur_mult, unit, r.tallies);
+        for (results[1..]) |r| try timeUnit(out, &side_cur, &side_base, cur_mult, r.unit, r.tallies);
         try out.print("tier 1 — correct at defaults; improved gladly, never at tier 0's expense\n", .{});
         try out.print("{s}\n", .{bc.timing_header});
         for (TIMING_T1) |unit| try timeUnit(out, &side_cur, &side_base, cur_mult, unit, null);
@@ -285,7 +285,7 @@ fn report(comptime Base: type, init: std.process.Init, opts: Opts) !void {
         const t = r.tallies;
         if (r.n_diff == 0 and t.cur.below_model == 0 and t.base.below_model == 0) {
             var obuf: [96]u8 = undefined;
-            try out.print("  {s:<9} {d:>5}  {s:<36} ", .{ r.unit.name, r.unit.cells.len, outcomes(t.cur, r.unit.cells.len, &obuf) });
+            try out.print("  {s:<9} {d:>5}  {s:<36} ", .{ r.unit.name, r.unit.cells.len, t.cur.outcomes(r.unit.cells.len, &obuf) });
             // A quiet zero: seven bulky "max |Δgap| 0.00e0 over 1000 rows"
             // lines are the low-density pattern this format exists to kill.
             if (r.shift.max == 0) try out.print("Δgap 0", .{}) else try out.print("{f}", .{r.shift});
@@ -354,27 +354,6 @@ fn diffUnit(diffs: *std.Io.Writer, side_cur: anytype, side_base: anytype, unit: 
     return r;
 }
 
-/// The one-row outcome summary: `all converged` for the common batch case,
-/// otherwise the nonzero counts only — zeros are padding, not information.
-fn outcomes(t: bc.Tally, cells: usize, buf: []u8) []const u8 {
-    if (t.converged == cells) return "all converged";
-    var w = std.Io.Writer.fixed(buf);
-    const parts = [_]struct { n: u32, label: []const u8 }{
-        .{ .n = t.converged, .label = "conv" },
-        .{ .n = t.did_not_converge, .label = "DNC" },
-        .{ .n = t.precision_floor, .label = "floor" },
-        .{ .n = t.infeasible, .label = "infeas" },
-        .{ .n = t.errored, .label = "err" },
-    };
-    var sep: []const u8 = "";
-    for (parts) |p| {
-        // The buffer fits the widest possible summary; a format error here
-        // is a programming bug, not a runtime condition.
-        if (p.n > 0) w.print("{s}{d} {s}", .{ sep, p.n, p.label }) catch unreachable;
-        if (p.n > 0) sep = " / ";
-    }
-    return w.buffered();
-}
 
 /// One timing row, paired and interleaved. A one-cell unit is warmed up and
 /// calibrated; a batch is neither — its deterministic pass (`tallies`) already

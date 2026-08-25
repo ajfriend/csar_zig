@@ -275,6 +275,34 @@ pub const Tally = struct {
         // Printed only when nonzero: it is a bug report, not a statistic.
         if (self.below_model > 0) try w.print(" / {d} BELOW ERROR MODEL", .{self.below_model});
     }
+
+    /// The corpus table's one-row summary: `all converged` for the common
+    /// batch case, otherwise the nonzero counts only — zeros are padding,
+    /// not information. The compact counterpart to `format` (the per-side
+    /// block form); rendered here beside the fields it enumerates so the
+    /// shape is a testable string and a new outcome can't silently miss
+    /// it. `below_model` is deliberately absent: the report expands to
+    /// the per-side form whenever it is nonzero.
+    pub fn outcomes(self: Tally, cells: usize, buf: []u8) []const u8 {
+        if (self.converged == cells) return "all converged";
+        var w = std.Io.Writer.fixed(buf);
+        const parts = [_]struct { n: u32, label: []const u8 }{
+            .{ .n = self.converged, .label = "conv" },
+            .{ .n = self.did_not_converge, .label = "DNC" },
+            .{ .n = self.precision_floor, .label = "floor" },
+            .{ .n = self.infeasible, .label = "infeas" },
+            .{ .n = self.errored, .label = "err" },
+        };
+        var sep: []const u8 = "";
+        for (parts) |p| {
+            if (p.n == 0) continue;
+            // A 96-byte buffer fits the widest possible summary; a format
+            // error here is a programming bug, not a runtime condition.
+            w.print("{s}{d} {s}", .{ sep, p.n, p.label }) catch unreachable;
+            sep = " / ";
+        }
+        return w.buffered();
+    }
 };
 
 /// The largest move of the certified gap among rows the diff does NOT flag:
