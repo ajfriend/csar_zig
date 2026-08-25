@@ -7,6 +7,7 @@ const std = @import("std");
 const csar = @import("../src/root.zig");
 const helpers = @import("helpers.zig");
 const test_options = @import("test_options");
+const cases_test = @import("cases_test.zig");
 const bc = @import("../bench/core.zig");
 
 test "OutcomeTag is the library's Outcome vocabulary, name for name" {
@@ -306,7 +307,7 @@ test "Side.metrics: a converged outcome carries iters, AR and gap" {
     try std.testing.expect(m.gap <= bc.GAP_TOL);
     // Same answer the suite gates on, at the suite's tolerance (the pin
     // table in cases_test.zig).
-    const expected = try @import("cases_test.zig").requirePin("np100");
+    const expected = try cases_test.requirePin("np100");
     try std.testing.expectApproxEqAbs(expected, m.ar, 1e-6);
 }
 

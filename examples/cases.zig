@@ -52,7 +52,11 @@ fn runAll(allocator: std.mem.Allocator) !void {
 }
 
 /// One line per case: the outcome tag and the one number that matters for
-/// it — or the refusal, for malformed input (the corpus's reject_* cases).
+/// it — or the error, as a row. The catch is deliberately broad (like
+/// bench/core.zig's Side.metrics): this is a display tool, and the test
+/// suite — which try-solves the same corpus — is where a solver error
+/// fails the build. In practice only the reject_* cases' InputErrors
+/// reach it.
 fn report(allocator: std.mem.Allocator, name: []const u8, points: []const [3]f64) !void {
     var outcome = csar.solve(allocator, points, .{}) catch |e| {
         std.debug.print("{s:22}  rejected  {s}\n", .{ name, @errorName(e) });

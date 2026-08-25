@@ -104,12 +104,10 @@ const FIXTURES: Unit = blk: {
     var names: [cases.all.len][]const u8 = undefined;
     var cells: [cases.all.len][]const [3]f64 = undefined;
     for (cases.all, 0..) |e, i| {
-        names[i] = switch (e.case.tier) {
-            0 => e.name,
-            1 => e.name ++ " [t1]",
-            2 => e.name ++ " [t2]",
-            3 => e.name ++ " [t3]",
-        };
+        names[i] = if (e.case.tier == 0)
+            e.name
+        else
+            e.name ++ std.fmt.comptimePrint(" [t{d}]", .{e.case.tier});
         cells[i] = e.case.points;
     }
     const n = names;
@@ -138,10 +136,10 @@ const BATCH_REPS = if (coverage) 1 else 30;
 /// `infeasible` and `rejects` rows ride the deterministic diff only (this is
 /// what removed `near_collinear`, formerly the timed set's one
 /// infeasible-regime row).
-fn timedFixture(comptime name: []const u8, comptime tier: u2) Unit {
+fn timedFixture(comptime name: []const u8, comptime tier: u1) Unit {
     const c = cases.get(name);
-    if (c.claim != .converges or c.tier > 1 or c.tier != tier)
-        @compileError("not a tier-" ++ .{'0' + tier} ++ " converges case: " ++ name);
+    if (c.claim != .converges or c.tier != tier)
+        @compileError(std.fmt.comptimePrint("not a tier-{d} converges case: {s}", .{ tier, name }));
     return fixture(name);
 }
 

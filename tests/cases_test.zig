@@ -194,7 +194,7 @@ test "the tier x claim loop: every case's claim enforced at its tier's settings"
         // (`rejects` must not solve at all — it asserts the refusal).
         switch (case.claim) {
             .rejects => |reject| {
-                const want: anyerror = switch (reject) {
+                const want: csar.InputError = switch (reject) {
                     .insufficient_points => error.InsufficientPoints,
                     .coplanar_input => error.CoplanarInput,
                 };

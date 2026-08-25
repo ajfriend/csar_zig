@@ -361,10 +361,11 @@ fixture and every batch cell (status, iterations and aspect ratio; the
 certified gap is printed but deliberately not compared — see `differs` in
 `bench/core.zig`), grouped — the fixtures as one group, each batch as one —
 with a per-side tally and a gap-shift line per group and differing rows
-capped per group; then interleaved timing in one table, µs per solve, over
-the eight batches (the hot path — `cases/batches.zig`) and the fixtures for
-the regimes batches lack (`np100`, `ha_12`, `near_collinear`, and `hex` as
-the many-passes quantization canary). A batch row is a mean over its ~1000
+capped per group; then interleaved timing, µs per solve,
+in two tier subsections (the timed-set rule and roles: the tier legend
+below): tier 0 — `hex` (the many-passes quantization canary) and the eight
+batches (the hot path — `cases/batches.zig`) — then tier 1, the regimes
+batches lack (`np100`, `ha_12`). A batch row is a mean over its ~1000
 cells where a fixture row is one cell: less row noise, the same layout bias
 (below). The `solves` column is how many solves each timed interval spanned
 — the calibrated passes for a fixture, the cell count for a batch. A batch
