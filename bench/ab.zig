@@ -95,12 +95,16 @@ fn fixture(comptime name: []const u8) Unit {
     return .{ .name = name, .cells = &.{cases.get(name).points} };
 }
 
-/// The fixture corpus as one unit, for the deterministic pass.
+/// The fixture corpus as one unit, for the deterministic pass. `.hard`
+/// frontier fixtures carry a ` [hard]` row label (#68): their rows only
+/// print when the sides differ, and a differing hard row — a status
+/// flip, above all — should read as "promote me" (Expected.hard in
+/// cases/cases.zig owns the protocol), not as a regression.
 const FIXTURES: Unit = blk: {
     var names: [cases.all.len][]const u8 = undefined;
     var cells: [cases.all.len][]const [3]f64 = undefined;
     for (cases.all, 0..) |e, i| {
-        names[i] = e.name;
+        names[i] = if (e.case.expected == .hard) e.name ++ " [hard]" else e.name;
         cells[i] = e.case.points;
     }
     const n = names;

@@ -49,7 +49,8 @@ pub const Expected = union(enum) {
     /// A case at or beyond the solver's current frontier: no outcome is
     /// asserted — the solve must merely return (not error). Carried for
     /// the A/B harness (`just ab`), which diffs outcome, iterations,
-    /// and AR against the pinned baseline; status here can sit at
+    /// and AR against the pinned baseline and labels these rows
+    /// `[hard]`; status here can sit at
     /// FP-noise level (CLAUDE.md "Performance & regression
     /// monitoring"), which is why nothing blocks on it. A case that
     /// starts converging is promoted to `.converged` (with its freshly
