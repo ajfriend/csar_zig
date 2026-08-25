@@ -437,10 +437,11 @@ fixtures-only PRs skip all of this:
    `cases/cases.zig`) and floor-marginal status flips (the FP-noise
    class of CLAUDE.md's monitoring notes — including when two
    machines disagree on such a row).
-3. **Wall time never gates.** Read ratios against the same session's
-   `--aa` floor — that is also how local and CI reports compare,
-   never by µs — and a small stable shift with an empty diff is not
-   yet a finding ("Reading a small stable shift" below).
+3. **Wall time never gates, but above-floor shifts get named** in the
+   PR body, for review to weigh. Read ratios against the same
+   session's `--aa` floor — that is also how local and CI reports
+   compare, never by µs — and a small stable shift with an empty diff
+   is not yet a finding ("Reading a small stable shift" below).
 
 For scale, a clean report reads: deterministic diff `none`, gap shift
 ≤ 1.5e-24, timing ratios 0.987–1.012 against a ~1–3% `--aa` floor —
