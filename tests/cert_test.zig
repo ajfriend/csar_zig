@@ -1,79 +1,19 @@
-//! Tests for `src/cert.zig` — certify/verify of foreign (A, b)
-//! candidates.
+//! Module-local tests for `src/cert.zig` — certify/verify of foreign
+//! (A, b) candidates. The per-case corpus obligations (re-certify,
+//! shipped-gap reproduction, round-trip) live in cases_test.zig's
+//! tier x claim loop, where tier-2 settings apply.
 //!
 //! Coverage:
-//!  - corpus reproduction: `certify` on every converged corpus solve
-//!    re-certifies at the solver's own tolerance, and `verify` on the
-//!    shipped certificate reproduces `Converged.gap`;
-//!  - round-trip: `verify` on `certify`'s own exported multipliers
-//!    reproduces its gap (they ship boundary-normalized);
 //!  - repair: the reported gap is invariant under scaling the
 //!    candidate's A (the uniform repair absorbs it into `scale`), and
 //!    an off-axis candidate still certifies with a valid gap;
-//!  - every `no_certificate` reason, from both entry points.
+//!  - every `no_certificate` reason, from both entry points;
+//!  - OOM on the last export alloc hits the `errdefer`.
 
 const std = @import("std");
 const csar = @import("../src/root.zig");
 const cert = csar.cert;
-const cases = @import("cases");
 const helpers = @import("helpers.zig");
-
-/// Gap-reproduction tolerance, for both `verify`-on-shipped-cert vs
-/// `Converged.gap` and the certify→verify round-trip. The routes share
-/// the construction but factor A differently (internal eigenbasis vs
-/// Cholesky of the materialized A), so agreement is limited by log-det
-/// conditioning on the worst corpus cases: measured worst 1.7e-9
-/// (extreme-aspect fixtures dominate). 50x headroom for platform
-/// variance; never loosen without a call-out.
-const GAP_REPRO_TOL: f64 = 1e-7;
-
-/// Scatter a shipped active-set cert into a full-length λ vector.
-fn scatter(lam_full: []f64, c: csar.Cert) void {
-    @memset(lam_full, 0);
-    for (c.indices, c.lambdas) |idx, l| lam_full[idx] = l;
-}
-
-test "corpus: certify re-certifies converged solves; verify reproduces shipped gaps" {
-    const allocator = std.testing.allocator;
-    for (cases.all) |entry| {
-        const case = entry.case;
-        if (case.claim != .converges) continue;
-        var outcome = try csar.solve(allocator, case.points, cases.pin(csar.SolveOptions));
-        defer outcome.deinit();
-        // Tier-2 cases need non-default settings to converge; whichever
-        // way a case lands, only certified cones are in scope here.
-        const c = switch (outcome) {
-            .converged => |c| c,
-            else => continue,
-        };
-
-        // certify: the cone re-certifies at the solver's tolerance.
-        const co = try cert.certify(allocator, case.points, c.A(), c.b());
-        var cd = co.certified;
-        defer cd.deinit();
-        try std.testing.expect(cd.gap >= -1e-9);
-        try std.testing.expect(cd.gap < cases.GAP_TOL);
-        // The shipped candidate is containment-tight: repair is a no-op.
-        try std.testing.expectApproxEqAbs(1.0, cd.scale, 1e-9);
-        // Exported multipliers sit on the boundary.
-        try std.testing.expectApproxEqAbs(3.0, helpers.xlamNorm(case.points, cd.cert), 1e-12);
-
-        // verify on the solver's shipped certificate reproduces its gap.
-        const lam_full = try allocator.alloc(f64, case.points.len);
-        defer allocator.free(lam_full);
-        scatter(lam_full, c.cert);
-        const v = cert.verify(case.points, c.A(), c.b(), lam_full).verified;
-        try std.testing.expectApproxEqAbs(c.gap, v.gap, GAP_REPRO_TOL);
-        try std.testing.expectApproxEqAbs(1.0, v.scale, 1e-9);
-        try std.testing.expectApproxEqAbs(1.0, v.dual_scale, 1e-9);
-
-        // Round-trip: verify on certify's own export reproduces its gap.
-        scatter(lam_full, cd.cert);
-        const rv = cert.verify(case.points, c.A(), c.b(), lam_full).verified;
-        try std.testing.expectApproxEqAbs(cd.gap, rv.gap, GAP_REPRO_TOL);
-        try std.testing.expectApproxEqAbs(1.0, rv.dual_scale, 1e-12);
-    }
-}
 
 test "repair: gap is invariant under scaling A; off-axis candidates still certify" {
     const allocator = std.testing.allocator;

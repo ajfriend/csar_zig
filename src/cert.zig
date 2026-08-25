@@ -4,39 +4,21 @@
 //! (`dualityGapConstructed`, csar.zig); this module makes the same
 //! certificate math reachable for a candidate produced elsewhere — a
 //! generic conic solver, a shipped certificate being re-checked, a
-//! hand-constructed cone. Two public functions share one core:
+//! hand-constructed cone. Two entry points, one core: `certify`
+//! manufactures a certificate for a cone ("how good is this cone?"),
+//! `verify` checks a supplied one ("does this certificate check
+//! out?") — and `certify` funnels through `verify`, so its output is
+//! checked by the identical path a third party would run.
 //!
-//!   - `certify(allocator, X, A, b)` — "how good is this cone?":
-//!     repair the candidate, run the inner-MVEE machinery at its axis
-//!     to manufacture multipliers, then `verify`. The best constructed
-//!     bound for the cone; needs an allocator for inner-solve scratch.
-//!   - `verify(X, A, b, lambda)` — "does this certificate check out?":
-//!     pure arithmetic, no solve — the bound this λ proves. For
-//!     third-party re-verification of shipped certificates and for
-//!     duals produced by other solvers.
-//!
-//! Both are total: every input yields either a `verified`/`certified`
-//! payload or an enumerated `no_certificate` reason — never an error
-//! (`certify` can also fail on allocation). Both repair rather than
-//! reject, by one mechanism per side, applied unconditionally:
-//!
-//!   - Primal: scale A by 1/s, s = max_i ‖A xᵢ‖ / (b·xᵢ), so the worst
-//!     containment constraint holds with equality. A violating
-//!     candidate is charged 3·log s in the reported gap, never
-//!     footnoted; a strictly interior one is tightened for free. The
-//!     aspect ratio is scale-invariant, so the certified cone keeps
-//!     the candidate's geometry.
-//!   - Dual: rescale λ onto the normalized dual's constraint boundary
-//!     (‖Xλ‖₂ = 3), from either side — always feasible (the SOC
-//!     constraints are homogeneous), never a worse bound. This is what
-//!     absorbs the ulp a shipped boundary-normalized certificate can
-//!     sit either side of 3 by.
-//!
-//! The reported gap is measured against the normalized dual, the same
-//! closed form the solver uses (see the gap comment in
-//! `dualityGapConstructed`): gap = 3·log1p((‖Xλ‖−3)/3) + 3·log s
-//! − log det M, with M = Lᵀ·Z·L merging the two ill-conditioned
-//! log-dets into one well-conditioned one.
+//! Both are total: every input yields a payload or an enumerated
+//! `no_certificate` reason — never an error (`certify` can also fail
+//! on allocation). Both repair rather than reject, by one mechanism
+//! per side, applied unconditionally: a uniform primal rescale onto
+//! containment-tightness (`Verified.scale`) and a dual rescale onto
+//! the normalized dual's constraint boundary (`Verified.dual_scale`).
+//! The reported gap is the solver's own closed form against the
+//! normalized dual (the gap comment in `dualityGapConstructed`), plus
+//! the primal repair's 3·log s charge.
 
 const std = @import("std");
 
@@ -78,7 +60,8 @@ pub const Reason = enum {
 
 /// A checked certificate: the bound `lambda` proves for the repaired
 /// candidate. All values refer to the repaired pair — A/`scale` on the
-/// primal side, `dual_scale`·λ on the dual side.
+/// primal side, `dual_scale`·λ on the dual side — and
+/// `gap = primal − dual` by construction.
 pub const Verified = struct {
     /// Certified duality gap of the repaired pair: primal − dual ≥ 0
     /// up to f64 roundoff (weak duality).
@@ -109,10 +92,11 @@ pub const VerifyOutcome = union(enum) {
 /// same invariant as a solver-shipped `Cert` — see api.zig) so `verify`
 /// accepts them without repair.
 pub const Certified = struct {
+    // Scalars as in `Verified`; `dual_scale` is absent because the
+    // exported multipliers are already boundary-normalized.
     gap: f64,
     primal: f64,
     dual: f64,
-    /// Primal repair factor (see `Verified.scale`).
     scale: f64,
     /// Active-set certificate in the caller's `X[]` indexing;
     /// multipliers on the normalized dual's constraint boundary.
@@ -174,7 +158,7 @@ pub fn verify(X: []const [3]f64, A: Mat3, b_raw: Vec3, lambda: []const f64) Veri
         if (!(bx > 0)) return .{ .no_certificate = .axis_not_interior };
         const ax = A.apply(xi);
         const na = ax.norm();
-        if (na / bx > s) s = na / bx;
+        s = @max(s, na / bx);
         if (li > 0) {
             Z.addSymRank2(li, xi, ax.scale(1.0 / na));
             xlam = Vec3.lincomb(1.0, xlam, li, xi);
@@ -185,9 +169,8 @@ pub fn verify(X: []const [3]f64, A: Mat3, b_raw: Vec3, lambda: []const f64) Veri
     // t > 0 structurally: b·Xλ = Σ λᵢ(b·xᵢ) with every term positive.
     const t = xlam.norm();
 
-    // M = Lᵀ·Z·L with L·Lᵀ = A. The Cholesky factor is lower-triangular
-    // row-major, so its raw storage is directly a Mat3 (upper zeros).
-    const Lmat = Mat3{ .m = La.m };
+    // M = Lᵀ·Z·L with L·Lᵀ = A.
+    const Lmat = La.asMat3();
     const M = Lmat.transpose().mul(Z).mul(Lmat).symmetrize();
     const Lm = M.cholesky() orelse return .{ .no_certificate = .dual_indefinite };
 
@@ -204,13 +187,6 @@ pub fn verify(X: []const [3]f64, A: Mat3, b_raw: Vec3, lambda: []const f64) Veri
         .dual_scale = 3.0 / t,
     } };
 }
-
-/// Inner-solve budget for `certify`. Off the hot path, so the budget
-/// is generous: pairwise FW converges linearly on the MVEE, and the
-/// tolerance is set well below any gap a caller would act on — the
-/// iteration cap is a backstop, not a tuning knob.
-const FW_MAX_ITER: u32 = 4096;
-const FW_INNER_TOL: f64 = 1e-10;
 
 /// Certify the cone (A, b): repair, run the inner-MVEE machinery at
 /// the candidate's axis to manufacture multipliers
@@ -231,15 +207,19 @@ pub fn certify(
     const b = b_raw.scale(1.0 / b_norm);
     const Xv: []const Vec3 = @ptrCast(X);
 
+    // All transient scratch on one arena (the `solve` idiom); only the
+    // exported cert arrays land on the parent allocator.
+    var arena_state = std.heap.ArenaAllocator.init(allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+
     // Gnomonic chart at the candidate's axis; rejects any b·xᵢ at or
     // below zero (the projection divides by it).
-    const P_buf = try allocator.alloc([2]f64, n);
-    defer allocator.free(P_buf);
+    const P_buf = try arena.alloc([2]f64, n);
     if (!halfspace.projectGnomonic(Xv, b, b.orthoBasis(), P_buf, tol.TINY)) {
         return .{ .no_certificate = .axis_not_interior };
     }
-    const Ps = try allocator.alloc([2]f64, n);
-    defer allocator.free(Ps);
+    const Ps = try arena.alloc([2]f64, n);
     _ = core.rescaleP(P_buf, Ps);
 
     // Inner MVEE at fixed axis: the D-optimal weights are invariant
@@ -247,24 +227,20 @@ pub fn certify(
     // directly. A degenerate design (collinear chart points) makes FW
     // stop on its Cholesky guard; the thin multipliers then surface as
     // `dual_indefinite` from `verify` — total either way.
-    const w = try allocator.alloc(f64, n);
-    defer allocator.free(w);
-    const Ql = try allocator.alloc(Vec3, n);
-    defer allocator.free(Ql);
+    const w = try arena.alloc(f64, n);
+    const Ql = try arena.alloc(Vec3, n);
     core.initWeights(Ps, w);
-    core.mveeFw(Ps, FW_MAX_ITER, FW_INNER_TOL, Ql, w);
+    core.mveeFw(Ps, config.cert.FW_MAX_ITER, config.cert.FW_INNER_TOL, Ql, w);
 
     // Conic multipliers from the design weights, on the solver's
     // active-set cutoff.
-    const lam_full = try allocator.alloc(f64, n);
-    defer allocator.free(lam_full);
+    const lam_full = try arena.alloc(f64, n);
+    @memset(lam_full, 0);
     var k: usize = 0;
     for (w, 0..) |wi, i| {
         if (wi > algo.ACTIVE_THRESH) {
             lam_full[i] = 3.0 * wi / b.dot(Xv[i]);
             k += 1;
-        } else {
-            lam_full[i] = 0;
         }
     }
 
@@ -274,7 +250,9 @@ pub fn certify(
     };
 
     // Export the active pairs boundary-normalized, matching the
-    // shipped-`Cert` invariant.
+    // shipped-`Cert` invariant. A second pass over lam_full is forced:
+    // the normalization factor `v.dual_scale` exists only after
+    // `verify` has seen the full vector.
     const indices = try allocator.alloc(u32, k);
     errdefer allocator.free(indices);
     const lambdas = try allocator.alloc(f64, k);

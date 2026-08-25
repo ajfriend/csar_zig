@@ -25,6 +25,20 @@ const settings = [_]Setting{
     .{ .name = "sliver_S90_d1em6", .gap_tol = 1e-3 },
 };
 
+/// Gap-reproduction tolerance for the cert.zig obligations: the
+/// internal gap route and `cert.verify` factor A differently (internal
+/// eigenbasis vs Cholesky of the materialized matrix), so agreement is
+/// limited by log-det conditioning on the worst cases. Measured worst
+/// 1.7e-9 on tiers 0-1; headroom for the tier-2 slivers and platform
+/// variance. Never loosen without a call-out.
+const GAP_REPRO_TOL: f64 = 1e-7;
+
+/// Scatter a shipped active-set cert into a full-length λ vector.
+fn scatter(lam_full: []f64, c: csar.Cert) void {
+    @memset(lam_full, 0);
+    for (c.indices, c.lambdas) |idx, l| lam_full[idx] = l;
+}
+
 test "settings table carries no stale keys" {
     // The other direction — a tier-2 case missing its entry — fails loudly
     // in the tier x claim loop via requireSettings; this catches the
@@ -131,6 +145,39 @@ test "the tier x claim loop: every case's claim enforced at its tier's settings"
                 // normalized dual's constraint boundary (api.zig `Cert`).
                 for (c.cert.lambdas) |l| try std.testing.expect(l >= 0);
                 try std.testing.expectApproxEqAbs(3.0, helpers.xlamNorm(case.points, c.cert), 1e-12);
+
+                // cert.zig obligations (module-local tests live in
+                // cert_test.zig; the per-case ones belong to this loop
+                // so tier-2 settings apply). certify on the shipped
+                // (A, b) re-certifies at the case's tolerance, with a
+                // near-no-op repair and a boundary-normalized export.
+                // Repair tolerance: the shipped A_perp is
+                // budget-feasible only to kappa(M)*eps (the #54 class);
+                // measured worst |scale - 1| = 2.3e-6 on the tier-2
+                // slivers, ~1e-12 on tiers 0-1.
+                const co = try csar.cert.certify(allocator, case.points, c.A(), c.b());
+                var cd = co.certified;
+                defer cd.deinit();
+                try std.testing.expect(@abs(cd.gap) < tol);
+                try std.testing.expectApproxEqAbs(1.0, cd.scale, 1e-4);
+                try std.testing.expectApproxEqAbs(3.0, helpers.xlamNorm(case.points, cd.cert), 1e-12);
+
+                // verify reproduces the certified gap from the shipped
+                // parts alone — up to the repair charge 3*log(scale),
+                // which verify levies on the shipped iterate's
+                // kappa(M)*eps containment slack (the #54 class) and
+                // the solver's internal gap does not — and round-trips
+                // certify's own export.
+                const lam_full = try allocator.alloc(f64, case.points.len);
+                defer allocator.free(lam_full);
+                scatter(lam_full, c.cert);
+                const v = csar.cert.verify(case.points, c.A(), c.b(), lam_full).verified;
+                try std.testing.expectApproxEqAbs(c.gap + 3.0 * @log(v.scale), v.gap, GAP_REPRO_TOL);
+                try std.testing.expectApproxEqAbs(1.0, v.scale, 1e-4);
+                try std.testing.expectApproxEqAbs(1.0, v.dual_scale, 1e-9);
+                scatter(lam_full, cd.cert);
+                const rv = csar.cert.verify(case.points, c.A(), c.b(), lam_full).verified;
+                try std.testing.expectApproxEqAbs(cd.gap, rv.gap, GAP_REPRO_TOL);
 
                 // Tiers 0-1 additionally pin the AR. The certified duality
                 // gap is the source of truth for correctness; AR agreement

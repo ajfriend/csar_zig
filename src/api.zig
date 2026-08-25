@@ -36,6 +36,8 @@ const linalg = @import("linalg.zig");
 const Vec3 = linalg.Vec3;
 const Mat3 = linalg.Mat3;
 
+const cert = @import("cert.zig");
+
 /// Internal-correctness errors. Distinct from `Allocator.Error` (the
 /// host couldn't allocate) — these mean the library produced a result
 /// that violates a theorem and the bug needs to be surfaced loudly.
@@ -418,5 +420,5 @@ pub const Outcome = union(enum) {
 /// at the switch site. Callers reach this via `outcome.converged` after
 /// switching on the union tag.
 pub fn checkFeasibility(c: Converged, X: []const [3]f64) f64 {
-    return @import("cert.zig").primalViolation(X, c.A(), c.b());
+    return cert.primalViolation(X, c.A(), c.b());
 }
