@@ -1,9 +1,9 @@
-//! The #1 / #2 repros (#6): inputs whose certificate gap goes negative at
+//! The negative-gap repros: inputs whose certificate gap goes negative at
 //! the certification boundary. `solve` returns an `Outcome` for them —
 //! `.precision_floor` when the requested tolerance is below what f64 can
 //! certify for that geometry — and the error model behind that verdict
 //! (`csar.gapFloor`) is pinned to the inputs that motivated it. The
-//! batches at `gap_tol = 1e-9` cover the #2 class at scale
+//! batches at `gap_tol = 1e-9` cover the close-pair class at scale
 //! (`just ab --gap-tol=1e-9`); these are the named originals. `HEX1` is
 //! also `examples/status.zig`'s floor input (a second copy on purpose:
 //! `cases/` holds only inputs that certify at the default tolerance).
@@ -15,7 +15,7 @@ const halfspace = @import("../src/halfspace.zig");
 const helpers = @import("helpers.zig");
 const Vec3 = csar.Vec3;
 
-/// #1: a hex9 r20 cell, ~4e-10 rad across. σ_max ≈ 5e9, so the gap's
+/// A hex9 r20 cell, ~4e-10 rad across. σ_max ≈ 5e9, so the gap's
 /// evaluation noise is ~1e-6 — above the default tolerance.
 const HEX1: []const [3]f64 = &.{
     .{ 0.6746833027403286, 0.7369617968776201, -0.04110658032859652 },
@@ -26,7 +26,7 @@ const HEX1: []const [3]f64 = &.{
     .{ 0.6746833027899399, 0.7369617968215336, -0.04110658051984987 },
 };
 
-/// #2: close-pair triples; κ(M) ~ 1e9, where the certificate's A_perp is
+/// Close-pair triples; κ(M) ~ 1e9, where the certificate's A_perp is
 /// feasible only to κ(M)·ε and a gap at 1e-9 comes out negative by
 /// about that; the floor (`gapFloor`) is ~1.4e-7.
 const PAIR: []const [3]f64 = &.{
@@ -35,7 +35,7 @@ const PAIR: []const [3]f64 = &.{
     .{ 0.44837395964677834, -0.775982462532212, 0.44363499653782196 },
 };
 
-test "#1 hexagon: precision_floor at the default, gap inside the error model" {
+test "hexagon repro: precision_floor at the default, gap inside the error model" {
     var o = try csar.solve(std.testing.allocator, HEX1, .{});
     defer o.deinit();
     const d = o.precision_floor;
@@ -44,7 +44,7 @@ test "#1 hexagon: precision_floor at the default, gap inside the error model" {
     try std.testing.expectEqual(@as(u32, 0), d.diag.trust.gaps_below_model);
 }
 
-test "#2 close pair: converges at 1e-9 where it used to raise, precision-floored at 1e-10" {
+test "close pair repro: converges at 1e-9 where it used to raise, precision-floored at 1e-10" {
     // The negative gap at 1e-9 was a transient: once it no longer aborts
     // the solve, the next iterate certifies at 9e-10.
     var a = try csar.solve(std.testing.allocator, PAIR, .{ .gap_tol = 1e-9 });

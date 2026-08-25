@@ -33,7 +33,7 @@ pub fn pin(comptime Options: type) Options {
 }
 
 /// The batch fixtures (cases/batches/*.zon): the timing workload for
-/// `csar-ab` (#37); contract and rationale in `batches.zig`. Nothing but
+/// `csar-ab`; contract and rationale in `batches.zig`. Nothing but
 /// the tests and `bench/` reference this, so lazy analysis keeps the
 /// data out of the examples.
 pub const batches = @import("batches.zig");

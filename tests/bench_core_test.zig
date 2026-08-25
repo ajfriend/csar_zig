@@ -328,8 +328,9 @@ test "Side.metrics: did_not_converge still reports the iterate's AR" {
 }
 
 test "Side.metrics: a solve error becomes a status, not a crash" {
-    // Invalid input rather than a #1/#2 repro, so this keeps reaching the
-    // branch after #6 makes every valid input return an Outcome.
+    // Invalid input rather than a negative-gap repro (tests/neg_gap_test.zig),
+    // so this keeps reaching the error branch now that every valid input
+    // returns an Outcome.
     const m = side(&.{}).metrics(&.{});
     try std.testing.expectEqualStrings("InsufficientPoints", m.status);
     try std.testing.expect(!bc.isOutcome(m.status));

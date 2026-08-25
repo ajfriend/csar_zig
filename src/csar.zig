@@ -937,7 +937,7 @@ pub fn gapConverged(gap: f64, gap_tol: f64) bool {
 
 /// The error model: how far below zero a valid certificate's computed
 /// gap can fall at this precision, for this geometry. Two measured
-/// sources (#6), with coefficients in units of ε so a higher-precision
+/// sources, with coefficients in units of ε so a higher-precision
 /// instantiation need only supply its own `floatEps` and κ:
 ///   - evaluating the gap costs ≈ σ_max·ε (4–7× measured; the factor
 ///     `tol.NEG_GAP_SIGMA` = 64 gives headroom);

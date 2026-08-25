@@ -56,8 +56,8 @@ pub fn build(b: *std.Build) void {
     b.step("ab", "A/B the working tree against the pinned baseline").dependOn(&run.step);
 
     // Compile-only, so the root `just check` keeps this package from rotting
-    // the way examples/ did before #12. The real binary, against the real
-    // baseline: if the pinned API drifts from what `Side` expects, this is
-    // where it shows.
+    // the way examples/ once did — breaking silently until built. The
+    // real binary, against the real baseline: if the pinned API drifts
+    // from what `Side` expects, this is where it shows.
     b.step("check", "Compile the harness without running it").dependOn(&exe.step);
 }
