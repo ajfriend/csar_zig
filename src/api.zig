@@ -418,13 +418,5 @@ pub const Outcome = union(enum) {
 /// at the switch site. Callers reach this via `outcome.converged` after
 /// switching on the union tag.
 pub fn checkFeasibility(c: Converged, X: []const [3]f64) f64 {
-    const A = c.A();
-    const bv = c.b();
-    var max_viol: f64 = -1e30;
-    const Xv: []const Vec3 = @ptrCast(X);
-    for (Xv) |xi| {
-        const viol = A.apply(xi).norm() - bv.dot(xi);
-        if (viol > max_viol) max_viol = viol;
-    }
-    return max_viol;
+    return @import("cert.zig").primalViolation(X, c.A(), c.b());
 }

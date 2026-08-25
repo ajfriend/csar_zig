@@ -40,3 +40,10 @@ pub const checkFeasibility = api.checkFeasibility;
 
 // Solver entry point (`src/csar.zig`).
 pub const solve = csar.solve;
+
+// Certify / verify foreign (A, b) candidates (`src/cert.zig`):
+// `cert.certify` manufactures a certificate for a cone from any
+// source; `cert.verify` checks a supplied one without solving.
+// Namespaced — `cert.certify` — to stay unambiguous next to the
+// solver's internal certification.
+pub const cert = @import("cert.zig");
