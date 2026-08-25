@@ -5,6 +5,8 @@ commit that carries the full detail.
 
 ## [Unreleased]
 
+## [0.5.0]
+
 - The A/B report leads with the gate's verdict and the timing tables;
   per-unit detail collapses to a corpus table when clean (`min gap` is
   gone — `below_model` remains the anomaly flag). Details in [#81](https://github.com/ajfriend/csar_zig/pull/81).
