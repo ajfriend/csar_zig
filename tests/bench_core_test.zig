@@ -101,22 +101,31 @@ test "calibrate: the passes come from the min of the probes" {
 
 test "Tally counts each outcome, and anything unrecognised as an error" {
     var t: bc.Tally = .{};
-    t.add(.{ .status = "converged", .gap = 3e-8 });
-    t.add(.{ .status = "converged", .gap = -1e-9 });
+    t.add(.{ .status = "converged" });
+    t.add(.{ .status = "converged" });
     t.add(.{ .status = "infeasible" });
-    t.add(.{ .status = "did_not_converge", .gap = -5.0 }); // not converged: does not count
-    t.add(.{ .status = "precision_floor", .gap = -2e-7 }); // nor this
+    t.add(.{ .status = "did_not_converge" });
+    t.add(.{ .status = "precision_floor" });
     // An @errorName from a failed solve — the reason `status` is a string.
     t.add(.{ .status = "SingularMoment" });
 
-    // min gap is over converged entries only, and keeps its sign.
-    try std.testing.expectFmt("2 converged / 1 DNC / 1 floor / 1 infeasible / 1 errored / min gap -1.00e-9", "{f}", .{t});
+    try std.testing.expectFmt("2 converged / 1 DNC / 1 floor / 1 infeasible / 1 errored", "{f}", .{t});
 }
 
-test "Tally: min gap is inf when nothing converged" {
+test "Tally: below_model is a bug report — printed only when nonzero" {
     var t: bc.Tally = .{};
+    t.add(.{ .status = "converged", .below_model = 2 });
+    try std.testing.expectFmt("1 converged / 0 DNC / 0 floor / 0 infeasible / 0 errored / 2 BELOW ERROR MODEL", "{f}", .{t});
+}
+
+test "Tally.outcomes: zeros dropped, the all-converged case collapsed" {
+    var t: bc.Tally = .{};
+    t.add(.{ .status = "converged" });
+    var buf: [96]u8 = undefined;
+    try std.testing.expectEqualStrings("all converged", t.outcomes(1, &buf));
     t.add(.{ .status = "infeasible" });
-    try std.testing.expectFmt("0 converged / 0 DNC / 0 floor / 1 infeasible / 0 errored / min gap inf", "{f}", .{t});
+    t.add(.{ .status = "NoSpaceLeft" });
+    try std.testing.expectEqualStrings("1 conv / 1 infeas / 1 err", t.outcomes(3, &buf));
 }
 
 test "GapShift: identical sides count as a row and do not move" {

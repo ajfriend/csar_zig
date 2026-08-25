@@ -242,12 +242,9 @@ pub const Tally = struct {
     precision_floor: u32 = 0,
     infeasible: u32 = 0,
     errored: u32 = 0,
-    /// Smallest certified gap among the converged entries; `inf` when there
-    /// are none. A negative value is a `converged` outcome whose certificate
-    /// sits below zero — the negative-gap anomaly (tests/neg_gap_test.zig)
-    /// — so the sign is the point.
-    min_gap: f64 = std.math.inf(f64),
     /// Sum of `Metrics.below_model`: should be 0; printed only otherwise.
+    /// Not compared by `differs` (it derives from `gap`), so it is never
+    /// assumed side-symmetric — the report prints it per side.
     below_model: u32 = 0,
 
     pub fn add(self: *Tally, m: Metrics) void {
@@ -259,10 +256,7 @@ pub const Tally = struct {
         };
         self.below_model += m.below_model;
         switch (tag) {
-            .converged => {
-                self.converged += 1;
-                self.min_gap = @min(self.min_gap, m.gap);
-            },
+            .converged => self.converged += 1,
             .infeasible => self.infeasible += 1,
             .did_not_converge => self.did_not_converge += 1,
             .precision_floor => self.precision_floor += 1,
@@ -271,16 +265,43 @@ pub const Tally = struct {
 
     /// zig's `{f}` formatting hook.
     pub fn format(self: Tally, w: *std.Io.Writer) std.Io.Writer.Error!void {
-        try w.print("{d} converged / {d} DNC / {d} floor / {d} infeasible / {d} errored / min gap {e:.2}", .{
+        try w.print("{d} converged / {d} DNC / {d} floor / {d} infeasible / {d} errored", .{
             self.converged,
             self.did_not_converge,
             self.precision_floor,
             self.infeasible,
             self.errored,
-            self.min_gap,
         });
         // Printed only when nonzero: it is a bug report, not a statistic.
         if (self.below_model > 0) try w.print(" / {d} BELOW ERROR MODEL", .{self.below_model});
+    }
+
+    /// The corpus table's one-row summary: `all converged` for the common
+    /// batch case, otherwise the nonzero counts only — zeros are padding,
+    /// not information. The compact counterpart to `format` (the per-side
+    /// block form); rendered here beside the fields it enumerates so the
+    /// shape is a testable string and a new outcome can't silently miss
+    /// it. `below_model` is deliberately absent: the report expands to
+    /// the per-side form whenever it is nonzero.
+    pub fn outcomes(self: Tally, cells: usize, buf: []u8) []const u8 {
+        if (self.converged == cells) return "all converged";
+        var w = std.Io.Writer.fixed(buf);
+        const parts = [_]struct { n: u32, label: []const u8 }{
+            .{ .n = self.converged, .label = "conv" },
+            .{ .n = self.did_not_converge, .label = "DNC" },
+            .{ .n = self.precision_floor, .label = "floor" },
+            .{ .n = self.infeasible, .label = "infeas" },
+            .{ .n = self.errored, .label = "err" },
+        };
+        var sep: []const u8 = "";
+        for (parts) |p| {
+            if (p.n == 0) continue;
+            // A 96-byte buffer fits the widest possible summary; a format
+            // error here is a programming bug, not a runtime condition.
+            w.print("{s}{d} {s}", .{ sep, p.n, p.label }) catch unreachable;
+            sep = " / ";
+        }
+        return w.buffered();
     }
 };
 
