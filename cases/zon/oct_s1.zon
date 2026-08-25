@@ -1,6 +1,5 @@
 .{
     .description = "octahedron face: S pole + equator at (90°, 180°); covers 1/8 of sphere; AR = 1 by symmetry",
-    .tags = .{ "small", "symmetric", "wide_angle" },
     .points = .{
         .{ 0, 0, -1 },
         .{ 6.123233995736766e-17, 1, 0 },

@@ -1,6 +1,5 @@
 .{
     .description = "six exactly-unit points on the equator (Pythagorean triples), spanning a 90° arc — a feasible axis exists, so it is the coplanarity check that must refuse with CoplanarInput (exact rank-deficiency rejects at any tolerance)",
-    .tags = .{ "reject" },
     .points = .{
         .{ 1, 0, 0 },
         .{ 0.923076923076923077, 0.384615384615384615, 0 },

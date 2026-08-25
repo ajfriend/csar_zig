@@ -52,7 +52,7 @@ fn requireSettings(name: []const u8) !Setting {
 test "requireAr and requireSettings fail loudly on a case without an entry" {
     helpers.quiet_diagnostics = true;
     defer helpers.quiet_diagnostics = false;
-    const bare: cases.Case = .{ .description = "", .tags = &.{}, .points = &.{}, .tier = 1, .claim = .converges };
+    const bare: cases.Case = .{ .description = "", .points = &.{}, .tier = 1, .claim = .converges };
     try std.testing.expectError(error.MissingAr, requireAr("synthetic", bare));
     try std.testing.expectError(error.MissingSettings, requireSettings("not_a_tier2_case"));
 }

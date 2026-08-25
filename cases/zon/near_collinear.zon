@@ -1,6 +1,5 @@
 .{
     .description = "50 points nearly on a great circle; halfspace check should fail",
-    .tags = .{ "infeasible_expected" },
     .points = .{
         .{ -0.65201625990790479, 3.57380410658956e-05, -0.75820497593889469 },
         .{ -0.12400357017050856, -0.00012083186322821716, 0.99228175937312713 },

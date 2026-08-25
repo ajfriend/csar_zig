@@ -11,7 +11,7 @@ pub fn build(b: *std.Build) void {
     // Forced, not `standardOptimizeOption`: as its own package this would
     // default to Debug, and the ROOT module's optimize mode governs codegen
     // for the whole compilation — so a Debug root would silently benchmark a
-    // Debug solver on both sides. `build.zig` forces this for ex-bench too.
+    // Debug solver on both sides.
     // `-Dcoverage=true` builds Debug, with LLVM, for the kcov gate (dev.md "Coverage").
     const coverage = b.option(bool, "coverage", "Build for the coverage gate (Debug)") orelse false;
     const optimize: std.builtin.OptimizeMode = if (coverage) .Debug else .ReleaseFast;

@@ -35,7 +35,6 @@ problem). Core: `src/csar.zig` (`solve`, the outer loop, `mveeFw` inner MVEE),
   structurally cannot make; dev.md "Coverage").
 - The suite must pass under BOTH zig backends (LLVM and self-hosted); CI runs
   both. See dev.md "Two backends".
-- `zig build ex-bench` — per-case timing (ReleaseFast, 100 reps).
 - `zig build states-aspect` / `countries-aspect` — standalone survey execs over
   `scripts/*/data/*.json` (per-cell aspect ratios + outcome counts).
 - Full workflow detail (toolchain setup, commands, coverage machinery): dev.md.
@@ -48,10 +47,6 @@ iterations and a few µs. (The *extremely* small, finest-resolution S2/A5
 cells are not this tier: they sit near the f64 floor, below, and belong to
 tiers 2-3 of dev.md's tier legend.) Protect the hot path:
 
-- **Do NOT judge a solver change by `ex-bench`'s `TOTAL` line.** It sums
-  wall-times and is dominated by the large synthetic cases (np400, ha_*), so a
-  real small-cell regression hides in it. µs-scale wall-time on a 6-point cell is
-  mostly noise anyway. Read the **per-case rows** (small vs large separately).
 - The small-cell fixtures in `cases/zon/` (the `h3_*` / `hex` cases,
   driven through `tests/cases_test.zig`) are the deterministic guard —
   a shift in their per-case outcome is a **regression signal**: understand what
@@ -62,7 +57,7 @@ tiers 2-3 of dev.md's tier legend.) Protect the hot path:
   the iteration (it did when the alternating path was retired) — a shift
   there is not by itself a regression.
 - **Discard the first launch of a freshly built binary.** It can run several
-  times slower than steady state, and `bench.zig`'s in-process warm-up does not
+  times slower than steady state, and `bench/core.zig`'s in-process warm-up does not
   cover it — the penalty survives min-over-reps. Comparing a first launch
   against a warm one invents small-cell regressions that aren't there.
 - **A small, stable ratio shift (≈1%, same sign across rows, diff empty) is

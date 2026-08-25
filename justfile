@@ -55,10 +55,6 @@ _ci-selfhosted: test-selfhosted
 _ci-selfhosted:
     @echo "note: skipping the self-hosted backend suite — unsupported on aarch64-macos; CI covers it (dev.md 'Two backends')"
 
-# Per-case timing (always ReleaseFast, via build.zig).
-bench:
-    zig build ex-bench
-
 # Remove build artifacts and coverage output (survey data: `just surveys::clean`).
 # `bench/zig-pkg/` is the baseline unpacked next to the manifest that pins it.
 # Removing it costs an unpack, not a fetch — the tarball stays in zig's global

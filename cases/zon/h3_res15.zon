@@ -1,6 +1,5 @@
 .{
     .description = "H3 resolution-15 hex: ~50cm edge length (object scale)",
-    .tags = .{ "dggs", "small_scale" },
     .points = .{
         .{ 8.6328676816826145e-08, 0, 0.99999999999999623 },
         .{ 3.9240307644011896e-08, 6.7966206544061975e-08, 0.99999999999999689 },

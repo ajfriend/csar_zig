@@ -1,6 +1,5 @@
 .{
     .description = "width 89°, AR 2.001 — extreme width; optimum known in closed form (scripts/exact_cases.py)",
-    .tags = .{ "exact", "wide_angle" },
     .points = .{
         .{ -0.14906202494163573, 0.97941087843437624, -0.13614273364635596 },
         .{ 0.62331357213769822, 0.75189037511693779, 0.21480468941681216 },

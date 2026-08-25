@@ -22,7 +22,7 @@ the standing user preference.
 ## A. Hot inner loops with FMA wins
 
 These are the highest-payoff sites — tight loops where the cost
-shows up directly in `ex-bench` and the precision improvement
+shows up directly in the A/B per-case rows and the precision improvement
 propagates through many iterations.
 
 ### A1. `mveeFw` rank-1 accumulation (`src/csar.zig:207-212`)

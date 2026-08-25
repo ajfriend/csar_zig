@@ -1,6 +1,5 @@
 .{
     .description = "H3 res-9 hex at (0°, 0°); at small scales this geometry exposes solver stress",
-    .tags = .{ "dggs", "stress" },
     .points = .{
         .{ 0.99999999998380018, 1.7114918944033743e-06, -5.4286636865353231e-06 },
         .{ 0.99999999970857467, 6.3252775016793745e-06, 2.3298960899795916e-05 },

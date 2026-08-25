@@ -19,7 +19,7 @@ question:
    at strict tol) — lives in the *certificate arithmetic*, not the MVEE. A
    better inner solver does nothing for it.
 3. **The small-cell hot path** — already at parity (0.89–1.02×). Protect
-   (CANARY pins, ex-bench per-case), don't optimize.
+   (CANARY pins, `just ab` per-case rows), don't optimize.
 
 In the h framing: the outer methods now buy (value, gradient) pairs only when
 needed; what's left is making each pair cheaper (items 1–3, 5) and making the
@@ -54,7 +54,7 @@ part 2): Schur square of a rank-3 Gram.
   that produces "corrupted state at a converged design."
 
 Touches the shared polish ⇒ full gauntlet (slow suite with CANARY discipline,
-ex-bench per-case, a5_res0, geographies, rotations). But it's derived
+`just ab` per-case rows, a5_res0, geographies, rotations). But it's derived
 structure, not a heuristic — the enabling math is written and validated in
 trust.zig.
 

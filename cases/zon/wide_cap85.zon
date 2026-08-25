@@ -1,6 +1,5 @@
 .{
     .description = "85° cap radius, seed 1 — 200 random points, randomly rotated. Alternating limit-cycles; trust path (default) solves it. Clarabel-cross-checked (see tests/methods_test.zig).",
-    .tags = .{ "wide", "dense", "trust-only" },
     .points = .{
         .{ 0.17571704770734614, 0.5437305063735884, 0.8206586717897615 },
         .{ 0.8979179238749654, 0.01864496034140784, 0.4397678563036857 },

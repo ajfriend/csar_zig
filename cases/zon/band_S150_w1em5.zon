@@ -1,6 +1,5 @@
 .{
     .description = "150° band, width 1e-5 — frontier case, stationary short of the predicted floor (#62)",
-    .tags = .{ "hard_expected", "band", "wide_angle" },
     .points = .{
         .{ 0.77820723475947273, -0.50558665672633318, -0.37252601561274074 },
         .{ -0.71267436550507002, 0.10444118356020299, -0.69367664507931182 },
