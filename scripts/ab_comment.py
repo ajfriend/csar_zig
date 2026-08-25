@@ -19,13 +19,15 @@ import subprocess
 from pathlib import Path
 
 host = os.environ.get('ImageOS') or platform.system()
+ab_text = Path('ab-report.txt').read_text()
+aa_text = Path('aa-report.txt').read_text()
 comment = (
     f'**A/B report** ({host}; read ratios against the A/A floor'
     ' below — dev.md "The PR procedure, and what gates"):\n'
     '<details><summary>just ab</summary>\n\n```\n'
-    + Path('ab-report.txt').read_text()
+    + ab_text
     + '```\n</details>\n<details><summary>just ab --aa</summary>\n\n```\n'
-    + Path('aa-report.txt').read_text()
+    + aa_text
     + '```\n</details>\n'
 )
 
@@ -36,6 +38,14 @@ if not summary:
 
 with open(summary, 'a') as fh:
     fh.write(comment)
+
+# A non-empty deterministic diff raises a checks-UI warning — visible from
+# the merge button without turning anything red (dev.md: nothing mechanical
+# acts on the diff; full gating stays an open question). An A/A headline
+# that is not 'none' is a harness invariant violation and warns doubly.
+for headline in (ab_text.splitlines()[0], aa_text.splitlines()[0]):
+    if 'deterministic diff: none' not in headline:
+        print(f'::warning title=deterministic diff::{headline}')
 
 # On pull_request events CI passes PR_NUMBER (the ref is N/merge there, so
 # a branch lookup cannot work — and falling through to it would end in the

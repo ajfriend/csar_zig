@@ -433,7 +433,8 @@ dependency — consumers can't inherit it, and nothing under `bench/` ships
 The aim is legible joint review — human and agent reading the same
 report in the same PR. The report showing a change is produced and
 posted mechanically; nothing mechanical *acts* on it — a non-empty
-diff fails no check — and whether it should is open. The procedure
+diff raises a checks-UI warning (scripts/ab_comment.py) but fails no
+check — and whether it should gate is open. The procedure
 applies to any PR that touches the report's inputs — the solve path
 (`src/`), the harness and baseline pin (`bench/`), the corpus
 (`cases/`), the build files — or its delivery mechanism; only
