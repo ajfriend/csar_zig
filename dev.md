@@ -425,22 +425,28 @@ The pin advances in its own PR after each tag ("Releasing"); a
 mid-cycle re-pin records its reason in the PR that moves it.
 It is a separate package so the library's manifest never carries a benchmark
 dependency — consumers can't inherit it, and nothing under `bench/` ships
-(see "Packaging"). Reports are for pasting into a PR;
-nothing is written to disk.
+(see "Packaging"). Reports go to stdout — CI posts them to the PR
+(step 1 below); nothing is written to disk.
 
 ### The PR procedure, and what gates
 
 The aim is legible joint review — human and agent reading the same
-report in the same PR — so that when a change moves anything, it
-*likely* gets flagged; *likely*, because nothing mechanical enforces
-these signals yet, and whether we'd even want that is open. The
-procedure applies to any PR that touches the solve path (`src/`);
-docs-, CI-, and fixtures-only PRs skip all of this:
+report in the same PR. The report showing a change is produced and
+posted mechanically; a non-empty diff raises a checks-UI warning
+(scripts/ab_comment.py) but fails no check — whether CI should
+*enforce* the diff is open. The procedure
+applies to any PR that touches the report's inputs — the solve path
+(`src/`), the harness and baseline pin (`bench/`), the corpus
+(`cases/`), the build files — or its delivery mechanism; only
+docs-class PRs skip:
 
-1. **Run `just ab --aa`, then `just ab`, and paste both reports into
-   the PR body** (collapsed `<details>` blocks) — or trigger
-   the on-demand CI run, which posts both to the PR:
-   `gh workflow run ab --ref <branch>` (`.github/workflows/ab.yml`).
+1. **CI posts both reports as a PR comment** (`.github/workflows/ab.yml`
+   — its paths filter is the executable form of the scope above). Run `just ab --aa` +
+   `just ab` locally when iterating, or dispatch a re-run:
+   `gh workflow run ab --ref <branch>`. CI *timing* is coarse —
+   between-session runner variance is ~10x the within-run A/A floor
+   (#22) — so a CI-only ratio shift needs a second dispatch or a
+   local run before it is named in the PR body.
 2. **The deterministic diff is the gate.** A non-empty diff blocks
    the PR until every differing row is explained and accepted in the
    PR body. Exceptions — named in the PR body, no justification
