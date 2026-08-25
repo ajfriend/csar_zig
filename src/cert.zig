@@ -40,7 +40,7 @@ const Cert = api.Cert;
 /// Why no certificate could be produced. Every reason is a statement
 /// about the input, not a solver failure: the candidate (or its
 /// multipliers) sits outside the domain where the bound is defined.
-pub const Reason = enum {
+pub const NoCertReason = enum {
     /// A failed Cholesky: not (numerically) positive definite. The
     /// primal objective −log det A needs A ≻ 0.
     not_psd,
@@ -86,7 +86,7 @@ pub const Verified = struct {
 
 pub const DualOutcome = union(enum) {
     verified: Verified,
-    no_certificate: Reason,
+    no_certificate: NoCertReason,
 };
 
 /// A manufactured certificate: `cert_dual`'s payload plus the
@@ -113,7 +113,7 @@ pub const Certified = struct {
 
 pub const PrimalOutcome = union(enum) {
     certified: Certified,
-    no_certificate: Reason,
+    no_certificate: NoCertReason,
 };
 
 /// Worst containment violation of (A, b) over X: max_i ‖A xᵢ‖ − b·xᵢ.

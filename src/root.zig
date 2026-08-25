@@ -41,7 +41,15 @@ pub const checkFeasibility = api.checkFeasibility;
 // Solver entry point (`src/csar.zig`).
 pub const solve = csar.solve;
 
-// Certify foreign candidates (`src/cert.zig`): `cert.cert_primal`
-// from (A, b) alone, `cert.cert_dual` given multipliers as well;
-// namespaced next to the solver's internal certification.
-pub const cert = @import("cert.zig");
+// Foreign-candidate certification (`src/cert.zig`): certify (A, b)
+// cones from any source — `cert_primal` from the primal variables
+// alone, `cert_dual` given the dual multipliers as well.
+const cert = @import("cert.zig");
+pub const cert_primal = cert.cert_primal;
+pub const cert_dual = cert.cert_dual;
+pub const primal_violation = cert.primal_violation;
+pub const PrimalOutcome = cert.PrimalOutcome;
+pub const DualOutcome = cert.DualOutcome;
+pub const Certified = cert.Certified;
+pub const Verified = cert.Verified;
+pub const NoCertReason = cert.NoCertReason;
