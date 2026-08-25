@@ -423,7 +423,11 @@ nothing is written to disk.
 
 ### The PR procedure, and what gates
 
-For a PR that touches the solve path (`src/`); docs-, CI-, and
+The aim is legible joint review — human and agent reading the same
+report in the same PR — so that when a change moves anything, it
+*likely* gets flagged. Likely is the target: hard constraints on
+these signals don't exist yet, and whether we'd even want them is
+open. For a PR that touches the solve path (`src/`); docs-, CI-, and
 fixtures-only PRs skip all of this:
 
 1. **Run `just ab --aa`, then `just ab`, and paste both reports into
