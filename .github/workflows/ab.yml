@@ -38,10 +38,13 @@ jobs:
         run: |
           just ab --aa | tee aa-report.txt
           just ab | tee ab-report.txt
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: false # nothing to cache: the script declares no deps
       - name: Post both reports
-        # All logic in scripts/ab_comment.sh (also runnable locally to
+        # All logic in scripts/ab_comment.py (also runnable locally to
         # produce the same block for a manual PR-body paste); everything
         # it needs travels as environment.
         env:
           GH_TOKEN: ${{ github.token }}
-        run: scripts/ab_comment.sh
+        run: uv run scripts/ab_comment.py
