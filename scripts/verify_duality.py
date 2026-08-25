@@ -20,10 +20,9 @@ structural identity the solver and its certificate construction rely on:
  11. homogeneity: h(cb) = h(b) - 3 log c
  12. the Lagrangian and normalized duals agree: dN* = d* = p*, with
      ||X lam|| = 3 binding at the normalized optimum
- 13. foreign-candidate verify: the unconditional rescale
-     lam <- 3 lam / ||X lam|| lands on the normalization boundary from
-     either side, never worsens the dual value, and the rescaled
-     log det Z lower-bounds p*
+ 13. foreign-candidate verify: unconditional rescale
+     lam <- 3 lam / ||X lam||: boundary from either side,
+     d_rescaled >= d_lagrangian, and d_rescaled <= p*
 
 Derivations: csar_paper, sections "Dual" and "Solution method: partial
 minimization" and the appendix ("Derivation of the dual", "Validity
@@ -51,6 +50,17 @@ def make_points(rng, n):
     return np.array(pts).T  # 3 x n
 
 
+def sym_Z(X, Gam):
+    'Dual-variable-to-Z map: Z = (X Gam^T + Gam X^T) / 2.'
+    return 0.5 * (X @ Gam.T + Gam @ X.T)
+
+
+def recipe_gamma(X, A, lam):
+    'Constructed-certificate recipe: gamma_i = lam_i A x_i / ||A x_i||.'
+    AX = A @ X
+    return lam * AX / np.linalg.norm(AX, axis=0)
+
+
 def solve_primal(X):
     n = X.shape[1]
     A = cp.Variable((3, 3), symmetric=True)
@@ -67,7 +77,7 @@ def solve_dual(X):
     n = X.shape[1]
     Gam = cp.Variable((3, n))
     lam = cp.Variable(n)
-    Z = 0.5 * (X @ Gam.T + Gam @ X.T)
+    Z = sym_Z(X, Gam)
     cons = [cp.norm(Gam[:, i]) <= lam[i] for i in range(n)]
     prob = cp.Problem(cp.Maximize(cp.log_det(Z) + 3 - cp.norm(X @ lam)), cons)
     prob.solve(solver=cp.SCS, eps=1e-9, max_iters=200000)
@@ -79,7 +89,7 @@ def solve_dual_normalized(X):
     n = X.shape[1]
     Gam = cp.Variable((3, n))
     lam = cp.Variable(n)
-    Z = 0.5 * (X @ Gam.T + Gam @ X.T)
+    Z = sym_Z(X, Gam)
     cons = [cp.norm(Gam[:, i]) <= lam[i] for i in range(n)]
     cons.append(cp.norm(X @ lam) <= 3)
     prob = cp.Problem(cp.Maximize(cp.log_det(Z)), cons)
@@ -115,7 +125,7 @@ def main():
     print(f'eigs(A) = {evals}   1/sqrt(3) = {1 / np.sqrt(3):.10f}')
     print(f'|Q^T b| (alignment) = {np.abs(evecs.T @ b_)}')
 
-    Z_ = 0.5 * (X @ G_.T + G_ @ X.T)
+    Z_ = sym_Z(X, G_)
     print(f'||Z - inv(A)||_F = {np.linalg.norm(Z_ - np.linalg.inv(A_)):.2e}')
     print(f'||X lam|| = {np.linalg.norm(X @ lam_):.10f}  (want 3)')
     print(f'||b - X lam / 3|| = {np.linalg.norm(b_ - X @ lam_ / 3):.2e}')
@@ -124,10 +134,8 @@ def main():
     A2inv = np.linalg.inv(A_ @ A_)
     print(f'||W - A^-2|| / ||A^-2|| = {np.linalg.norm(W - A2inv) / np.linalg.norm(A2inv):.2e}')
 
-    err = max(
-        np.linalg.norm(lam_[i] * (A_ @ X[:, i]) / np.linalg.norm(A_ @ X[:, i]) - G_[:, i])
-        for i in range(n) if lam_[i] > 1e-6
-    )
+    Grec = recipe_gamma(X, A_, lam_)
+    err = max(np.linalg.norm(Grec[:, i] - G_[:, i]) for i in range(n) if lam_[i] > 1e-6)
     n_active = int(np.sum(lam_ > 1e-6))
     print(f'recipe error on active set = {err:.2e}   active = {n_active} (want <= 6)')
 
@@ -165,33 +173,36 @@ def main():
     # (a) From above: the recipe multipliers at the perturbed axis have
     # ||X lam|| > 3 (off-centering); with the aligned Gamma at the
     # inner-optimal A they are Lagrangian-feasible but violate the
-    # normalized dual's ||X lam|| <= 3. The verifier rescale
-    # lam <- 3 lam / ||X lam|| lands on the boundary, and the rescaled
-    # log det Z is a valid bound, no worse than the Lagrangian value.
+    # normalized dual's ||X lam|| <= 3.
     def rescale_check(tag, Z, t):
-        s = 3.0 / t
-        sign, logdet = np.linalg.slogdet(s * Z)
-        d_resc = logdet if sign > 0 else -np.inf
-        d_lagr = np.linalg.slogdet(Z)[1] + 3 - t
+        sign, logdet = np.linalg.slogdet(Z)
+        if sign <= 0:
+            print(f'{tag}: Z not PD -- no bound to check')
+            return
+        d_resc = logdet + 3 * np.log(3.0 / t)
+        d_lagr = logdet + 3 - t
         print(
             f'{tag}: ||X lam|| = {t:.6f} -> 3;  d_rescaled = {d_resc:.8f}'
             f'  >= d_lagrangian by {d_resc - d_lagr:.2e} (want >= 0)'
             f';  p* - d_rescaled = {p_star - d_resc:.2e} (want >= 0)'
         )
 
-    G0 = np.stack(
-        [lam0[i] * (A0 @ X[:, i]) / np.linalg.norm(A0 @ X[:, i]) for i in range(n)],
-        axis=1,
+    rescale_check(
+        'rescale down', sym_Z(X, recipe_gamma(X, A0, lam0)), np.linalg.norm(X @ lam0)
     )
-    Z0 = 0.5 * (X @ G0.T + G0 @ X.T)
-    rescale_check('rescale down', Z0, np.linalg.norm(X @ lam0))
 
-    # (b) From below: shrink the optimal dual point strictly inside the
-    # normalization ball (feasible, slack constraint); rescaling UP is
-    # equally feasible -- the SOC constraints are homogeneous -- and
-    # improves the bound (by t - 3 - 3 log(t/3) at t = 2.7, vs the
-    # point's Lagrangian value). Z_ from the Z = inv(A) check above.
-    rescale_check('rescale up  ', 0.9 * Z_, 0.9 * np.linalg.norm(X @ lam_))
+    # (b) From below: a truncated variant of the optimal dual point --
+    # zero its smallest active multiplier, Gamma column with it. The
+    # support shrinks and ||X lam|| falls below 3; rescaling UP is
+    # equally feasible (the SOC constraints are homogeneous) and
+    # improves the bound.
+    act = np.flatnonzero(lam_ > 1e-6)
+    k = act[np.argmin(lam_[act])]
+    lam_t = lam_.copy()
+    G_t = G_.copy()
+    lam_t[k] = 0.0
+    G_t[:, k] = 0.0
+    rescale_check('rescale up', sym_Z(X, G_t), np.linalg.norm(X @ lam_t))
 
 
 main()
