@@ -104,10 +104,15 @@ const FIXTURES: Unit = blk: {
     var names: [cases.all.len][]const u8 = undefined;
     var cells: [cases.all.len][]const [3]f64 = undefined;
     for (cases.all, 0..) |e, i| {
-        names[i] = if (e.case.tier == 0)
-            e.name
-        else
-            e.name ++ std.fmt.comptimePrint(" [t{d}]", .{e.case.tier});
+        // An explicit switch, not comptimePrint: ~80 comptime format calls
+        // blow the eval branch quota, and exhaustiveness over u2 means a
+        // widened tier range fails to compile here rather than mislabeling.
+        names[i] = switch (e.case.tier) {
+            0 => e.name,
+            1 => e.name ++ " [t1]",
+            2 => e.name ++ " [t2]",
+            3 => e.name ++ " [t3]",
+        };
         cells[i] = e.case.points;
     }
     const n = names;
