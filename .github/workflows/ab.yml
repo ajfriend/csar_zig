@@ -39,23 +39,9 @@ jobs:
           just ab --aa | tee aa-report.txt
           just ab | tee ab-report.txt
       - name: Post both reports
-        # To the step summary always; to the branch's open PR (if any) as a
-        # NEW comment per run — deliberately not `--edit-last`, which edits
-        # the bot's most recent comment and would clobber the coverage
-        # ledger (same bot identity). On-demand runs are rare and each
-        # report is a measurement worth keeping; the PR is the archive.
+        # All logic in scripts/ab_comment.sh (also runnable locally to
+        # produce the same block for a manual PR-body paste); everything
+        # it needs travels as environment.
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          { printf '**A/B report** (on-demand, %s; read ratios against the A/A floor below — dev.md "The PR procedure, and what gates"):\n' "${ImageOS:-ubuntu}"
-            printf '<details><summary>just ab</summary>\n\n```\n'
-            cat ab-report.txt
-            printf '```\n</details>\n<details><summary>just ab --aa</summary>\n\n```\n'
-            cat aa-report.txt
-            printf '```\n</details>\n'
-          } > ab-comment.md
-          cat ab-comment.md >> "$GITHUB_STEP_SUMMARY"
-          pr=$(gh pr list --head "${GITHUB_REF_NAME}" --state open --json number --jq '.[0].number' || true)
-          if [ -n "$pr" ]; then
-            gh pr comment "$pr" --body-file ab-comment.md
-          fi
+        run: scripts/ab_comment.sh
