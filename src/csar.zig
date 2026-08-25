@@ -670,14 +670,12 @@ pub fn dualityGapConstructed(
     const xlam_norm = w_sum.norm();
 
     // Export the multipliers rescaled onto the normalized dual's
-    // constraint boundary (‖Xλ‖ = 3), so a shipped certificate satisfies
-    // the stated feasible set literally — a verifier doing the dual's
-    // feasibility checks accepts it without repair. Only the exported
-    // copy is scaled: the gap below is already the rescaled pair's gap
-    // (scaling λ by 3/‖Xλ‖ scales M with it, and the closed-form
-    // 3·log(‖Xλ‖/3) term is exactly that scaling's −log det), and the
-    // raw `lam` keeps the exact identity λᵢ·(b·xᵢ) = 3wᵢ. No zero
-    // guard: ‖Xλ‖ ≥ b·Xλ = 3·Σ_active wᵢ ≈ 3 whenever k > 0.
+    // constraint boundary (‖Xλ‖ = 3), so a shipped certificate
+    // satisfies the stated feasible set literally. Only the exported
+    // copy is scaled: the gap below already prices in the rescale (see
+    // the gap comment), and the raw `lam` keeps the exact identity
+    // λᵢ·(b·xᵢ) = 3wᵢ. No zero guard: ‖Xλ‖ ≥ b·Xλ = 3·Σ_active wᵢ ≈ 3
+    // whenever k > 0.
     const cert_scale = 3.0 / xlam_norm;
     for (0..k) |i| {
         cert_active_out[i] = active_idx[i];

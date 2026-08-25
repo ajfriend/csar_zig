@@ -8,9 +8,10 @@
 //!    within iteration ceilings, matching the Clarabel SDP cross-check;
 //!  - `.auto` is a pure alias for `Method.recommended` (currently
 //!    `.trust`) — identical outcomes, and the resolution pinned;
-//!  - certificate sanity on a trust solve (λ ≥ 0, ‖Σ λᵢxᵢ‖ = 3 on
-//!    certified AND uncertified certs, certified gap in
-//!    [−gap_tol, gap_tol], primal feasibility ≤ roundoff).
+//!  - certificate sanity on a trust solve (λ ≥ 0, certified gap in
+//!    [−gap_tol, gap_tol], primal feasibility ≤ roundoff), plus
+//!    ‖Σ λᵢxᵢ‖ = 3 on an uncertified cert (the certified side is
+//!    corpus-swept in cases_test.zig).
 
 const std = @import("std");
 const csar = @import("../src/root.zig");
@@ -159,18 +160,6 @@ test "initWeights: fully degenerate input falls back to uniform weights" {
     for (w) |wi| try std.testing.expectApproxEqAbs(1.0 / @as(f64, n), wi, 1e-15);
 }
 
-/// ‖Σ λᵢxᵢ‖ over a certificate, in the caller's indexing. The exported
-/// multipliers sit on the normalized dual's constraint boundary, so
-/// this is 3 (up to roundoff) on every shipped cert — certified or not
-/// (src/csar.zig, `dualityGapConstructed`).
-fn xlamNorm(pts: []const [3]f64, cert: csar.Cert) f64 {
-    var xlam = [3]f64{ 0, 0, 0 };
-    for (cert.indices, cert.lambdas) |idx, lam| {
-        for (0..3) |d| xlam[d] += lam * pts[idx][d];
-    }
-    return @sqrt(xlam[0] * xlam[0] + xlam[1] * xlam[1] + xlam[2] * xlam[2]);
-}
-
 test "trust: certificate sanity on a wide-cap solve" {
     const allocator = std.testing.allocator;
     const pts = helpers.casePoints("wide_cap85");
@@ -183,8 +172,6 @@ test "trust: certificate sanity on a wide-cap solve" {
     // the >= 3 points any non-degenerate cone needs.
     try std.testing.expect(c.cert.indices.len >= 3);
     for (c.cert.lambdas) |lam| try std.testing.expect(lam >= 0);
-    // Boundary normalization: ‖Σ λᵢxᵢ‖ = 3.
-    try std.testing.expectApproxEqAbs(3.0, xlamNorm(pts, c.cert), 1e-12);
     // Indices point into the caller's array.
     for (c.cert.indices) |idx| try std.testing.expect(idx < pts.len);
 }
@@ -194,11 +181,12 @@ test "trust: uncertified certificates are boundary-normalized too" {
     // An irregular triple on a one-iteration budget stops at an
     // off-stationary iterate, where the raw recipe multipliers have
     // ‖Σ λᵢxᵢ‖ > 3 (the off-centering the gap measures; ≈ 3.001 here).
-    // The export rescale must land them on the boundary anyway.
+    // The export rescale must land them on the boundary anyway. (The
+    // certified-cert side of this invariant is asserted for the whole
+    // corpus in cases_test.zig.)
     const pts = [_][3]f64{ .{ 1, 0, 0 }, .{ 0.1, 0.97, 0.2 }, .{ -0.2, 0.3, 0.93 } };
     var outcome = try csar.solve(allocator, &pts, .{ .max_outer = 1 });
     defer outcome.deinit();
     const u = outcome.did_not_converge;
-    try std.testing.expect(u.cert.indices.len >= 3);
-    try std.testing.expectApproxEqAbs(3.0, xlamNorm(&pts, u.cert), 1e-12);
+    try std.testing.expectApproxEqAbs(3.0, helpers.xlamNorm(&pts, u.cert), 1e-12);
 }
