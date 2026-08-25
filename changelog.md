@@ -7,7 +7,7 @@ commit that carries the full detail.
 
 - `ex-bench` is retired — `just ab` is the timing tool — and fixtures no
   longer carry a `tags` field (tier + claim + description say everything
-  it did). Details in PR_LINK_19.
+  it did). Details in [#75](https://github.com/ajfriend/csar_zig/pull/75).
 
 - Corpus fixtures now carry a commitment tier (0-3) and a claim
   (converges / infeasible / rejects / none) instead of `Expected`; tests
