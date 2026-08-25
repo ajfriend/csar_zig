@@ -306,7 +306,7 @@ test "Side.metrics: a converged outcome carries iters, AR and gap" {
     try std.testing.expect(m.iters > 0);
     try std.testing.expect(m.gap <= bc.GAP_TOL);
     // Same answer the suite gates on, at the suite's tolerance.
-    const expected = (cases.byName("np100") orelse unreachable).ar.?;
+    const expected = cases.get("np100").ar.?;
     try std.testing.expectApproxEqAbs(expected, m.ar, 1e-6);
 }
 

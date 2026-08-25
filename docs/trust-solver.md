@@ -183,7 +183,7 @@ Selected per-case rows (iterations / min µs):
 | np400 | 5 / 13 | 3 / 69 | oracle cost, see below |
 | ha_05 | 10 / 21 | **4** / 37 | |
 | ha_14 (80° cap) | 30 / 40 | **21** / 133 | |
-| dnc_small_wide | 11 / 72 | **6** / 53 | |
+| dnc_small_wide (now cap46_rot) | 11 / 72 | **6** / 53 | |
 | cap82_s1 … cap89_s3 (fixtures) | DNC forever | **14–34** / 84–367 | ARs match Clarabel to ≤ ~1e-4 rel |
 
 Reading the split: **iterations are ≤ the alternating path everywhere measured** —

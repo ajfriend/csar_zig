@@ -85,7 +85,9 @@ pub const Case = struct {
     claim: Claim,
     /// The claimed aspect ratio: a settings-independent fact of the
     /// geometry, so it lives with the points. Required (test-enforced) for
-    /// `converges` at tier <= 1, where the loop asserts it to `GAP_TOL`.
+    /// `converges` at tier <= 1, where the loop asserts it to `GAP_TOL` —
+    /// and permitted only there, so a demotion to tier 2/3 must delete
+    /// the value in the same edit rather than leave it looking enforced.
     /// Bump policy: `exact_*` ARs are closed-form from the fixture's
     /// construction and are NEVER bumped — a mismatch is a solver bug;
     /// all others are solver-derived and bumpable, but a bump is a

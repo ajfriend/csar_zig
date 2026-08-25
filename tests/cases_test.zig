@@ -96,7 +96,7 @@ test "the tier x claim loop: every case's claim enforced at its tier's settings"
         // Schema invariants (dev.md's tier legend).
         try std.testing.expect((case.claim == .none) == (case.tier == 3));
         if (case.claim == .rejects) try std.testing.expect(case.tier <= 1);
-        if (case.ar != null) try std.testing.expect(case.claim == .converges);
+        if (case.ar != null) try std.testing.expect(case.claim == .converges and case.tier <= 1);
 
         // The tier names the settings the claim is made under: defaults for
         // tiers 0-1 and 3, the recorded settings for tier 2.
