@@ -1,3 +1,7 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = []
+# ///
 '''Compose the coverage-gate report from coverage/summary.txt, append it to
 the job summary, and — on a PR — post it as a NEW comment. Append-only on
 purpose, like scripts/ab_comment.py: no comment is ever edited, so there is
@@ -16,11 +20,13 @@ report = (
     f'**Coverage gate** ({os.environ.get("ImageOS", "ubuntu")}; see dev.md "Coverage"):\n'
     '```\n' + Path('coverage/summary.txt').read_text() + '```\n'
 )
-Path('gate-report.md').write_text(report)
 
 with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as fh:
     fh.write(report)
 
 pr = os.environ.get('PR_NUMBER', '')
 if pr:
-    subprocess.run(['gh', 'pr', 'comment', pr, '--body-file', 'gate-report.md'], check=True)
+    subprocess.run(
+        ['gh', 'pr', 'comment', pr, '--body-file', '-'],
+        input=report, text=True, check=True,
+    )

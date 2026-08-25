@@ -1,3 +1,7 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = []
+# ///
 '''Compose the A/B + A/A report comment from ab-report.txt / aa-report.txt
 (in CWD), then: in CI (GITHUB_STEP_SUMMARY set), append it to the job summary
 and post it to the ref's open PR if there is one — a NEW comment per run:
@@ -25,7 +29,6 @@ comment = (
     + Path('aa-report.txt').read_text()
     + '```\n</details>\n'
 )
-Path('ab-comment.md').write_text(comment)
 
 summary = os.environ.get('GITHUB_STEP_SUMMARY')
 if not summary:
@@ -34,10 +37,16 @@ if not summary:
 
 with open(summary, 'a') as fh:
     fh.write(comment)
+
+# check=True separates "no open PR" (exit 0, empty output — skip quietly)
+# from "gh broke" (nonzero — fail the job); stderr flows to the job log.
 pr = subprocess.run(
     ['gh', 'pr', 'list', '--head', os.environ['GITHUB_REF_NAME'],
      '--state', 'open', '--json', 'number', '--jq', '.[0].number'],
-    capture_output=True, text=True,
+    stdout=subprocess.PIPE, text=True, check=True,
 ).stdout.strip()
 if pr:
-    subprocess.run(['gh', 'pr', 'comment', pr, '--body-file', 'ab-comment.md'], check=True)
+    subprocess.run(
+        ['gh', 'pr', 'comment', pr, '--body-file', '-'],
+        input=comment, text=True, check=True,
+    )

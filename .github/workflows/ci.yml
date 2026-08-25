@@ -82,7 +82,8 @@ jobs:
         # To the step summary, and on a PR as a comment — green or red, since
         # a failing gate is when the report matters most. No report means the
         # gate never measured (build failure, or its own precondition check);
-        # then the previous comment stands, stale, but the job is red.
+        # then this run posts no comment — the previous run's stands — but
+        # the job is red.
         if: always() && hashFiles('coverage/summary.txt') != ''
         env:
           GH_TOKEN: ${{ github.token }}
@@ -90,6 +91,5 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         # The report names the kcov build; the script names the image too,
         # the other thing that can move kcov's line classification and so
-        # the ledger. Append-only, one comment per run — no comment is ever
-        # edited, by either this or the ab workflow: scripts/gate_comment.py.
+        # the ledger. Comment mechanics (append-only): scripts/gate_comment.py.
         run: uv run scripts/gate_comment.py

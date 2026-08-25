@@ -32,19 +32,22 @@ jobs:
           version: 0.16.0
           cache-key: ab
       - uses: extractions/setup-just@v3
-      # --aa first, then the A/B — the calibration is what makes the A/B
-      # interpretable, and both come from the same binary in the same job.
-      - name: Run the A/A calibration, then the A/B
-        run: |
-          just ab --aa | tee aa-report.txt
-          just ab | tee ab-report.txt
       - uses: astral-sh/setup-uv@v10.0.1
         with:
           enable-cache: false # nothing to cache: the script declares no deps
+      # --aa first, then the A/B — the calibration is what makes the A/B
+      # interpretable, and both come from the same binary in the same job.
+      # Explicit bash for pipefail: the default shell would let tee's exit 0
+      # mask a failed run, and the next step would post the truncated report
+      # as if it were evidence.
+      - name: Run the A/A calibration, then the A/B
+        shell: bash
+        run: |
+          just ab --aa | tee aa-report.txt
+          just ab | tee ab-report.txt
       - name: Post both reports
-        # All logic in scripts/ab_comment.py (also runnable locally to
-        # produce the same block for a manual PR-body paste); everything
-        # it needs travels as environment.
+        # All logic in scripts/ab_comment.py — also runnable locally to
+        # produce the same block for a manual PR-body paste.
         env:
           GH_TOKEN: ${{ github.token }}
         run: uv run scripts/ab_comment.py
