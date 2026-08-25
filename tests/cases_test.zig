@@ -2,104 +2,16 @@
 //! the `cases` build module). Reached by the test target's root
 //! (`test_root.zig` → `tests/all.zig` → here).
 //!
-//! The data says what a case *is* (tier + claim); this file carries the
-//! claimed values — AR pins, tier-2 settings — and the loop that derives
-//! each case's obligations from tier x claim. Tier legend: dev.md.
+//! The data says what a case *is* (tier + claim + its settings-independent
+//! AR); this file carries the settings-dependent values — the tier-2
+//! settings table — and the loop that derives each case's obligations from
+//! tier x claim. Tier legend: dev.md.
 
 const std = @import("std");
 const csar = @import("../src/root.zig");
 const cases = @import("cases");
 const helpers = @import("helpers.zig");
 const Vec3 = csar.Vec3;
-
-const Pin = struct { name: []const u8, ar: f64 };
-
-/// Closed-form pins: the AR is a ground-truth data-fact from the fixture's
-/// construction (points on a known gnomonic-plane ellipse), stored test-side
-/// only for enforcement uniformity — one loop, one bump-policy site. NEVER
-/// bumped: a mismatch here is a solver bug, not drift.
-const exact_pins = [_]Pin{
-    .{ .name = "exact_min3_ar5", .ar = 5 },
-    .{ .name = "exact_tiny_ar3", .ar = 3 },
-    .{ .name = "exact_w76_ar20", .ar = 20 },
-    .{ .name = "exact_w82_ar1p4", .ar = 1.4230800000000001 },
-    .{ .name = "exact_w84_ar1000", .ar = 1000 },
-    .{ .name = "exact_w85_ar2", .ar = 2.0154109287112303 },
-    .{ .name = "exact_w85_ar2_fill", .ar = 2.0154109287112303 },
-    .{ .name = "exact_w88_ar10", .ar = 10 },
-    .{ .name = "exact_w88_ar1p5", .ar = 1.5007599182432787 },
-    .{ .name = "exact_w89_ar2", .ar = 2.0006285794105323 },
-};
-
-/// Measured pins: solver-derived, bumpable — but a bump is a reviewed change
-/// whose PR says why (CLAUDE.md "Performance & regression monitoring": a
-/// shift is a regression signal first). The grouping is the marking; there
-/// is no per-entry flag.
-const measured_pins = [_]Pin{
-    .{ .name = "dnc_small_wide", .ar = 2.345914858647444 },
-    .{ .name = "h3_r12_equator", .ar = 1.1747706650563783 },
-    .{ .name = "h3_r12_midLat", .ar = 1.0546757905476078 },
-    .{ .name = "h3_r12_pent", .ar = 1.000000000028632 },
-    .{ .name = "h3_r12_ring10", .ar = 1.0265391285748902 },
-    .{ .name = "h3_r15_equator", .ar = 1.1747700613978662 },
-    .{ .name = "h3_r15_midLat", .ar = 1.0546753510934872 },
-    .{ .name = "h3_r15_pent", .ar = 1.0000000014804105 },
-    .{ .name = "h3_r15_ring10", .ar = 1.2584076676894103 },
-    .{ .name = "h3_r5_equator", .ar = 1.1752958153842907 },
-    .{ .name = "h3_r5_midLat", .ar = 1.0545590295012641 },
-    .{ .name = "h3_r5_pent", .ar = 1.0000000000002196 },
-    .{ .name = "h3_r5_ring10", .ar = 1.243366353672534 },
-    .{ .name = "h3_r9_equator", .ar = 1.1747851119522874 },
-    .{ .name = "h3_r9_midLat", .ar = 1.054683064195106 },
-    .{ .name = "h3_r9_pent", .ar = 1.0000000000033948 },
-    .{ .name = "h3_r9_ring10", .ar = 1.2580981665189603 },
-    .{ .name = "h3_res05", .ar = 1.0666666878954056 },
-    .{ .name = "h3_res09", .ar = 1.0666666666762255 },
-    .{ .name = "h3_res12", .ar = 1.0666666666666949 },
-    .{ .name = "h3_res15", .ar = 1.0666666666666669 },
-    .{ .name = "ha_05", .ar = 1.0058545383400732 },
-    .{ .name = "ha_08", .ar = 1.0077908248743077 },
-    .{ .name = "ha_10", .ar = 1.0105582152823531 },
-    .{ .name = "ha_12", .ar = 1.0166530149054471 },
-    .{ .name = "ha_14", .ar = 1.0368555055771478 },
-    .{ .name = "hex", .ar = 1.0000000000000004 },
-    .{ .name = "ico_00", .ar = 1.0000000000000004 },
-    .{ .name = "ico_01", .ar = 1.0000000000000013 },
-    .{ .name = "ico_02", .ar = 1.0000000000000009 },
-    .{ .name = "ico_03", .ar = 1.0000000000000004 },
-    .{ .name = "ico_04", .ar = 1.0000000000000004 },
-    .{ .name = "ico_05", .ar = 1.0000000000000004 },
-    .{ .name = "ico_06", .ar = 1.0000000000000004 },
-    .{ .name = "ico_07", .ar = 1.0000000000000009 },
-    .{ .name = "ico_08", .ar = 1.0000000000000009 },
-    .{ .name = "ico_09", .ar = 1.0000000000000009 },
-    .{ .name = "ico_10", .ar = 1.0000000000000013 },
-    .{ .name = "ico_11", .ar = 1.0000000000000013 },
-    .{ .name = "ico_12", .ar = 1.0000000000000004 },
-    .{ .name = "ico_13", .ar = 1.0000000000000004 },
-    .{ .name = "ico_14", .ar = 1.0000000000000004 },
-    .{ .name = "ico_15", .ar = 1.0000000000000004 },
-    .{ .name = "ico_16", .ar = 1.0000000000000004 },
-    .{ .name = "ico_17", .ar = 1.0000000000000004 },
-    .{ .name = "ico_18", .ar = 1.0000000000000004 },
-    .{ .name = "ico_19", .ar = 1.0000000000000009 },
-    .{ .name = "np100", .ar = 1.0911969178517065 },
-    .{ .name = "np20", .ar = 1.0177775789268264 },
-    .{ .name = "np400", .ar = 1.0192804795923 },
-    .{ .name = "oct_n0", .ar = 1.0000000000000004 },
-    .{ .name = "oct_n1", .ar = 1.0000000000000004 },
-    .{ .name = "oct_n2", .ar = 1.0000000000000004 },
-    .{ .name = "oct_n3", .ar = 1.0000000000000004 },
-    .{ .name = "oct_s0", .ar = 1.0000000000000004 },
-    .{ .name = "oct_s1", .ar = 1.0000000000000004 },
-    .{ .name = "oct_s2", .ar = 1.0000000000000004 },
-    .{ .name = "oct_s3", .ar = 1.0000000000000004 },
-    .{ .name = "wide_cap82", .ar = 1.15963441886284510 },
-    .{ .name = "wide_cap85", .ar = 1.26918078287291670 },
-    .{ .name = "wide_cap89", .ar = 1.54199445138181850 },
-};
-
-const pins = exact_pins ++ measured_pins;
 
 /// Recorded settings for tier-2 cases: the adjustments under which the claim
 /// is made (fields not listed keep `cases.pin`'s values). All current entries
@@ -114,20 +26,20 @@ const settings = [_]Setting{
     .{ .name = "sliver_S90_d1em6", .gap_tol = 1e-3 },
 };
 
-test "pin and settings tables carry no stale keys" {
-    // The other direction — a case missing its entry — fails loudly in the
-    // tier x claim loop via requirePin/requireSettings; this catches the
+test "settings table carries no stale keys" {
+    // The other direction — a tier-2 case missing its entry — fails loudly
+    // in the tier x claim loop via requireSettings; this catches the
     // orphaned row a rename or deletion leaves behind.
-    for (pins) |p| try std.testing.expect(cases.byName(p.name) != null);
     for (settings) |s| try std.testing.expect(cases.byName(s.name) != null);
 }
 
-/// The pinned AR for a case, or a labeled hard failure: a tier <= 1
-/// `converges` case without a pin is a corpus bug, not a skip.
-pub fn requirePin(name: []const u8) !f64 {
-    for (pins) |p| if (std.mem.eql(u8, p.name, name)) return p.ar;
-    helpers.diagPrint("missing AR pin for case={s} (tests/cases_test.zig)\n", .{name});
-    return error.MissingPin;
+/// A case's claimed AR, or a labeled hard failure: a tier <= 1 `converges`
+/// case without one is a corpus bug, not a skip.
+fn requireAr(name: []const u8, case: cases.Case) !f64 {
+    return case.ar orelse {
+        helpers.diagPrint("missing .ar for case={s} (converges at tier <= 1 requires one)\n", .{name});
+        return error.MissingAr;
+    };
 }
 
 /// The recorded settings for a tier-2 case, or a labeled hard failure.
@@ -137,10 +49,11 @@ fn requireSettings(name: []const u8) !Setting {
     return error.MissingSettings;
 }
 
-test "requirePin and requireSettings fail loudly on an unlisted case" {
+test "requireAr and requireSettings fail loudly on a case without an entry" {
     helpers.quiet_diagnostics = true;
     defer helpers.quiet_diagnostics = false;
-    try std.testing.expectError(error.MissingPin, requirePin("not_a_pinned_case"));
+    const bare: cases.Case = .{ .description = "", .tags = &.{}, .points = &.{}, .tier = 1, .claim = .converges };
+    try std.testing.expectError(error.MissingAr, requireAr("synthetic", bare));
     try std.testing.expectError(error.MissingSettings, requireSettings("not_a_tier2_case"));
 }
 
@@ -183,6 +96,7 @@ test "the tier x claim loop: every case's claim enforced at its tier's settings"
         // Schema invariants (dev.md's tier legend).
         try std.testing.expect((case.claim == .none) == (case.tier == 3));
         if (case.claim == .rejects) try std.testing.expect(case.tier <= 1);
+        if (case.ar != null) try std.testing.expect(case.claim == .converges);
 
         // The tier names the settings the claim is made under: defaults for
         // tiers 0-1 and 3, the recorded settings for tier 2.
@@ -218,7 +132,7 @@ test "the tier x claim loop: every case's claim enforced at its tier's settings"
                 // gap is the source of truth for correctness; AR agreement
                 // is a cross-implementation / cross-version sanity check.
                 if (case.tier <= 1) {
-                    try checkArEq(entry.name, try requirePin(entry.name), c.aspectRatio(), tol);
+                    try checkArEq(entry.name, try requireAr(entry.name, case), c.aspectRatio(), tol);
                 }
             },
             .infeasible => {

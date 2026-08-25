@@ -33,8 +33,8 @@ test "trust: wide-cap iteration ceilings (CANARY-style) + Clarabel cross-check" 
     //
     // The AR is cross-checked against the CLARABEL reference from the
     // wide-cap investigation's SDP probe — independent provenance from
-    // the solver-derived AR pins the manifest loop checks on the same
-    // cases (measured_pins, tests/cases_test.zig). Explicit
+    // the solver-derived `.ar` pins the manifest loop
+    // (tests/cases_test.zig) checks on the same cases. Explicit
     // `.method = .trust` (not the default), so this keeps guarding the
     // trust path even if `.auto` is ever re-pointed.
     const allocator = std.testing.allocator;

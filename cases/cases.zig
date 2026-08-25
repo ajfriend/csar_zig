@@ -7,14 +7,16 @@
 //!     .points = .{ .{x, y, z}, ... },
 //!     .tier = 0,             // 0-3: the commitment ladder (legend: dev.md)
 //!     .claim = .converges,   // or .infeasible / .{ .rejects = ... } / .none
+//!     .ar = 1.234,           // converges at tier <= 1: the claimed AR
 //!   }
 //!
 //! The claim names the kind of correct answer; the tier names the settings
 //! under which it is claimed (defaults for tiers 0-1, recorded settings for
-//! tier 2) and how much the case's speed matters. Claimed *values* — AR pins,
-//! tier-2 settings — live test-side in `tests/cases_test.zig`, which derives
-//! each case's obligations from tier x claim and enforces the invariants
-//! (`claim = none <=> tier = 3`; `rejects` sits at tier <= 1).
+//! tier 2) and how much the case's speed matters. The AR is data — a
+//! settings-independent fact of the geometry. Settings-dependent values —
+//! the tier-2 settings — live test-side in `tests/cases_test.zig`, whose
+//! loop derives each case's obligations from tier x claim and enforces the
+//! invariants (`claim = none <=> tier = 3`; `rejects` sits at tier <= 1).
 //!
 //! Everything below is compiled into the binary at build time — no
 //! filesystem reads at runtime. Adding a case = drop a `.zon` file +
@@ -50,8 +52,7 @@ pub const batches = @import("batches.zig");
 /// never a measured value (an `InputError` name is a kind — definitional to
 /// the point set, never measured or bumped).
 pub const Claim = union(enum) {
-    /// A certified cone at the tier's settings. AR pins for tiers 0-1 live
-    /// in `tests/cases_test.zig`.
+    /// A certified cone at the tier's settings; tiers 0-1 also pin `ar`.
     converges,
     /// A certified rejection (Farkas). Universal sanity checks (λ ≥ 0,
     /// ∑λ ≈ 1, ‖∑ λᵢ xᵢ‖ ≈ residual) live in the test loop; no per-case
@@ -82,6 +83,15 @@ pub const Case = struct {
     /// lives in dev.md; it is the single home.
     tier: u2,
     claim: Claim,
+    /// The claimed aspect ratio: a settings-independent fact of the
+    /// geometry, so it lives with the points. Required (test-enforced) for
+    /// `converges` at tier <= 1, where the loop asserts it to `GAP_TOL`.
+    /// Bump policy: `exact_*` ARs are closed-form from the fixture's
+    /// construction and are NEVER bumped — a mismatch is a solver bug;
+    /// all others are solver-derived and bumpable, but a bump is a
+    /// reviewed change whose PR says why (CLAUDE.md "Performance &
+    /// regression monitoring": a shift is a regression signal first).
+    ar: ?f64 = null,
 };
 
 pub const Entry = struct {
@@ -91,7 +101,7 @@ pub const Entry = struct {
 
 pub const all: []const Entry = &.{
     .{ .name = "band_S150_w1em5", .case = @import("zon/band_S150_w1em5.zon") },
-    .{ .name = "dnc_small_wide", .case = @import("zon/dnc_small_wide.zon") },
+    .{ .name = "cap46_rot", .case = @import("zon/cap46_rot.zon") },
     .{ .name = "exact_min3_ar5", .case = @import("zon/exact_min3_ar5.zon") },
     .{ .name = "exact_tiny_ar3", .case = @import("zon/exact_tiny_ar3.zon") },
     .{ .name = "exact_w76_ar20", .case = @import("zon/exact_w76_ar20.zon") },

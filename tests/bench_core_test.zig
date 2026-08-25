@@ -5,9 +5,9 @@
 
 const std = @import("std");
 const csar = @import("../src/root.zig");
+const cases = @import("cases");
 const helpers = @import("helpers.zig");
 const test_options = @import("test_options");
-const cases_test = @import("cases_test.zig");
 const bc = @import("../bench/core.zig");
 
 test "OutcomeTag is the library's Outcome vocabulary, name for name" {
@@ -305,9 +305,8 @@ test "Side.metrics: a converged outcome carries iters, AR and gap" {
     try std.testing.expectEqualStrings("converged", m.status);
     try std.testing.expect(m.iters > 0);
     try std.testing.expect(m.gap <= bc.GAP_TOL);
-    // Same answer the suite gates on, at the suite's tolerance (the pin
-    // table in cases_test.zig).
-    const expected = try cases_test.requirePin("np100");
+    // Same answer the suite gates on, at the suite's tolerance.
+    const expected = (cases.byName("np100") orelse unreachable).ar.?;
     try std.testing.expectApproxEqAbs(expected, m.ar, 1e-6);
 }
 
@@ -322,7 +321,7 @@ test "Side.metrics: did_not_converge still reports the iterate's AR" {
     // runs at), so the solver honestly gives up.
     var s = side(&.{});
     s.gap_tol = 1e-13;
-    const m = s.metrics(helpers.casePoints("dnc_small_wide"));
+    const m = s.metrics(helpers.casePoints("cap46_rot"));
     try std.testing.expectEqualStrings("did_not_converge", m.status);
     try std.testing.expect(m.iters > 0);
     try std.testing.expect(std.math.isFinite(m.ar) and m.ar > 1.0);

@@ -12,4 +12,5 @@
     },
     .tier = 1,
     .claim = .converges,
+    .ar = 20,
 }
