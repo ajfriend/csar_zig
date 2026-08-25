@@ -21,7 +21,7 @@ from pathlib import Path
 
 host = os.environ.get('ImageOS') or platform.system()
 comment = (
-    f'**A/B report** (on-demand, {host}; read ratios against the A/A floor'
+    f'**A/B report** ({host}; read ratios against the A/A floor'
     ' below — dev.md "The PR procedure, and what gates"):\n'
     '<details><summary>just ab</summary>\n\n```\n'
     + Path('ab-report.txt').read_text()
