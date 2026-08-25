@@ -53,6 +53,11 @@ pub const Expected = union(enum) {
     /// `.converged` (with its freshly certified AR) in that PR. Status
     /// here can sit at FP-noise level (CLAUDE.md "Performance &
     /// regression monitoring"), which is why nothing blocks on it.
+    /// Keep the frontier populated: these are also what exercises the
+    /// non-converged reporting paths (the coverage gate trips on
+    /// examples/cases.zig's DNC print if the last one converges —
+    /// that failure means "add new frontier cases", e.g. thinner
+    /// slivers, not "delete the branch").
     hard,
 };
 
