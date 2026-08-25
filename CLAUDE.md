@@ -15,6 +15,11 @@ problem). Core: `src/csar.zig` (`solve`, the outer loop, `mveeFw` inner MVEE),
   (or the commit, if no PR was opened). Detail lives in the PR, not here.
 - Release names are just the version (`vX.Y.Z`); detail goes in the release body
   (which itself points to the PR). Procedure: dev.md "Releasing".
+- Tree files are self-contained: issue/PR numbers may reference **open**
+  work only. When work completes, the ref points at what it became (a
+  function, test, doc section) or the prose carries the fact — provenance
+  stays in the PR (git blame finds it). The PR that completes a referenced
+  issue retires the tree's refs to it.
 
 ## Build & test
 
