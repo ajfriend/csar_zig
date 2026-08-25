@@ -1,6 +1,6 @@
 .{
-    .description = "half-width 0.086 deg, AR 3 - fine-scale conditioning; optimum known in closed form (scripts/exact_cases.py)",
-    .tags = .{ "exact", "constructed", "small_scale" },
+    .description = "width 0.0859°, AR 3 — fine-scale conditioning; optimum known in closed form (scripts/exact_cases.py)",
+    .tags = .{ "exact", "small_scale", "small" },
     .points = .{
         .{ 0.82108794782555494, 0.32419801931194714, -0.46979806961058213 },
         .{ 0.82173911208257555, 0.32393460716483813, -0.46884027339244483 },

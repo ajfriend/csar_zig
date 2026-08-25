@@ -1,6 +1,6 @@
 .{
-    .description = "width 85 deg, AR 2.02 plus 180 interior points; optimum known in closed form (scripts/exact_cases.py)",
-    .tags = .{ "exact", "constructed", "wide_angle", "redundant" },
+    .description = "width 85°, AR 2.015 — 180 interior filler points; optimum known in closed form (scripts/exact_cases.py)",
+    .tags = .{ "exact", "wide_angle", "redundant" },
     .points = .{
         .{ -0.72909923752727124, -0.16879670973781385, -0.66326614011182583 },
         .{ -0.53813877468780902, 0.75189240363038401, -0.38087330247790729 },

@@ -2,7 +2,7 @@
 # requires-python = ">=3.11"
 # dependencies = ["numpy"]
 # ///
-'''Generate stress fixtures whose optimal TEEC is known in CLOSED FORM.
+"""Generate stress fixtures whose optimal TEEC is known in CLOSED FORM.
 
 No solver produces the expected values -- not csar, not a generic conic
 solver. The construction pins the optimum, so the pins stay valid
@@ -46,37 +46,45 @@ starting axis is already optimal, and the outer loop runs ZERO iterations --
 the fixture would exercise the inner MVEE and the certificate but never the
 axis search. AR depends only on (a1, a2), so parity does not move the pins.
 
-Writes cases/zon/exact_*.zon, and an examples/difftest-format listing to
-examples/difftest_exact.txt for cross-checking before registering them in
-cases/cases.zig.
-'''
+Writes cases/zon/exact_*.zon and prints the manifest lines for
+cases/cases.zig; cross-check by running the case suite (zig build test)
+after registering.
+
+Edit the constants below in place -- no CLI args by project convention.
+Run with:  uv run scripts/exact_cases.py
+"""
 import math
+from pathlib import Path
+
 import numpy as np
 
-OUT_DIR = 'cases/zon'
-VERIFY_TXT = 'examples/difftest_exact.txt'
+OUT_DIR = Path(__file__).resolve().parents[1] / 'cases' / 'zon'
 SEED = 20260822
-ROTATE = True
 
-# name -> (a1, a2, N_ring, n_interior, note)
+# name -> (a1, a2, N_ring, n_interior, note); the generated description is
+# 'width <atan max(a1,a2)>°, AR <a-ratio> — <note>'.
 CASES = {
-    'exact_w82_ar1p4':    (5.0000, 7.1154, 9,   0,   'width 82.0 deg, AR 1.42 - wide and near-circular'),
-    'exact_w85_ar2':      (5.6713, 11.430, 9,   0,   'width 85.0 deg, AR 2.02 - wide and near-circular'),
-    'exact_w88_ar1p5':    (19.081, 28.636, 11,  0,   'width 88.0 deg, AR 1.50 - very wide, near-circular'),
-    'exact_w89_ar2':      (28.636, 57.290, 11,  0,   'width 89.0 deg, AR 2.00 - extreme width'),
-    'exact_w88_ar10':     (3.0000, 30.000, 9,   0,   'width 88.1 deg, AR 10 - wide and elongated'),
-    'exact_w76_ar20':     (0.2000, 4.0000, 7,   0,   'width 76.0 deg, AR 20 - wide and elongated'),
-    'exact_w84_ar1000':   (0.0100, 10.000, 11,  0,   'width 84.3 deg, AR 1000 - wide and extreme AR'),
-    'exact_min3_ar5':     (0.4000, 2.0000, 3,   0,   'N = 3, AR 5 - minimal support set'),
+    'exact_w82_ar1p4':    (5.0000, 7.1154, 9,   0,   'wide and near-circular'),
+    'exact_w85_ar2':      (5.6713, 11.430, 9,   0,   'wide, moderate AR'),
+    'exact_w88_ar1p5':    (19.081, 28.636, 11,  0,   'very wide, near-circular'),
+    'exact_w89_ar2':      (28.636, 57.290, 11,  0,   'extreme width'),
+    'exact_w88_ar10':     (3.0000, 30.000, 9,   0,   'wide and elongated'),
+    'exact_w76_ar20':     (0.2000, 4.0000, 7,   0,   'wide and elongated'),
+    'exact_w84_ar1000':   (0.0100, 10.000, 11,  0,   'wide and extreme AR'),
+    'exact_min3_ar5':     (0.4000, 2.0000, 3,   0,   'minimal support set (N = 3)'),
     # Converges in 0 outer iterations regardless of parity: at this scale the
     # objective is flat enough in b that the starting axis is already optimal.
     # It pins fine-scale conditioning of the inner solve, not the axis search.
-    'exact_tiny_ar3':     (5.0e-4, 1.5e-3, 7,   0,   'half-width 0.086 deg, AR 3 - fine-scale conditioning'),
-    'exact_w85_ar2_fill': (5.6713, 11.430, 9,   180, 'width 85 deg, AR 2.02 plus 180 interior points'),
+    'exact_tiny_ar3':     (5.0e-4, 1.5e-3, 7,   0,   'fine-scale conditioning'),
+    'exact_w85_ar2_fill': (5.6713, 11.430, 9,   180, '180 interior filler points'),
 }
 
 
-def frame(b):
+def tangent_basis(b):
+    # NOT the argmin-axis pick of scripts/states/states_plot.py: changing the
+    # candidate axis (or anything else rng-visible below) changes every
+    # emitted fixture byte-for-byte, invalidating the deltas measured for the
+    # committed corpus. Keep the construction frozen.
     t = np.array([0.0, 0.0, 1.0]) if abs(b[2]) < 0.9 else np.array([1.0, 0.0, 0.0])
     f1 = np.cross(t, b)
     f1 /= np.linalg.norm(f1)
@@ -86,7 +94,7 @@ def frame(b):
 def build(a1, a2, n_ring, n_fill, rng):
     b = np.array([0.31, -0.22, 0.90])
     b /= np.linalg.norm(b)
-    f1, f2 = frame(b)
+    f1, f2 = tangent_basis(b)
     pts = []
     for k in range(n_ring):
         t = 2.0 * math.pi * k / n_ring
@@ -96,18 +104,18 @@ def build(a1, a2, n_ring, n_fill, rng):
         t = 2.0 * math.pi * rng.random()
         pts.append(b + r * a1 * math.cos(t) * f1 + r * a2 * math.sin(t) * f2)
     P = np.array([p / np.linalg.norm(p) for p in pts])
-    if ROTATE:
-        Q, R = np.linalg.qr(rng.normal(size=(3, 3)))
-        Q = Q * np.sign(np.diag(R))
-        if np.linalg.det(Q) < 0:
-            Q[:, 0] = -Q[:, 0]
-        P = np.array([p / np.linalg.norm(p) for p in P @ Q.T])
-    return P
+    # A fixed random rotation so no fixture is axis-aligned. (The Haar
+    # sign-fix is rng-visible; frozen, see tangent_basis.)
+    Q, R = np.linalg.qr(rng.normal(size=(3, 3)))
+    Q = Q * np.sign(np.diag(R))
+    if np.linalg.det(Q) < 0:
+        Q[:, 0] = -Q[:, 0]
+    return np.array([p / np.linalg.norm(p) for p in P @ Q.T])
 
 
-def zon(P, ar, tags, note):
+def zon(P, ar, tags, description):
     out = ['.{',
-           f'    .description = "{note}; optimum known in closed form (scripts/exact_cases.py)",',
+           f'    .description = "{description}; optimum known in closed form (scripts/exact_cases.py)",',
            '    .tags = .{ ' + ', '.join(f'"{t}"' for t in tags) + ' },',
            '    .points = .{']
     out += ['        .{ %s },' % ', '.join(f'{v:.17g}' for v in p) for p in P]
@@ -118,13 +126,14 @@ def zon(P, ar, tags, note):
 
 
 rng = np.random.default_rng(SEED)
-verify, manifest = [], []
+manifest = []
 print(f'{"case":<22}{"n":>5}{"width deg":>11}{"exact AR":>15}{"-logdetA":>12}')
 for name, (a1, a2, n_ring, n_fill, note) in CASES.items():
     P = build(a1, a2, n_ring, n_fill, rng)
     ar = max(a1, a2) / min(a1, a2)
     width = math.degrees(math.atan(max(a1, a2)))
-    tags = ['exact', 'constructed']
+    description = f'width {width:.3g}°, AR {ar:.4g} — {note}'
+    tags = ['exact']
     if width > 75:
         tags.append('wide_angle')
     if ar > 5:
@@ -133,18 +142,14 @@ for name, (a1, a2, n_ring, n_fill, note) in CASES.items():
         tags.append('redundant')
     if width < 1:
         tags.append('small_scale')
-    with open(f'{OUT_DIR}/{name}.zon', 'w') as fh:
-        fh.write(zon(P, ar, tags, note))
-    verify.append(f'{name} {len(P)}\n' + '\n'.join(
-        ' '.join(f'{v:.17g}' for v in p) for p in P))
+    if len(P) <= 10:
+        tags.append('small')
+    with open(OUT_DIR / f'{name}.zon', 'w') as fh:
+        fh.write(zon(P, ar, tags, description))
     manifest.append(f'    .{{ .name = "{name}", .case = @import("zon/{name}.zon") }},')
-    print(f'{name:<22}{len(P):>5}{width:>11.3f}{ar:>15.6f}{nld:>12.6f}'
-          if False else
-          f'{name:<22}{len(P):>5}{width:>11.3f}{ar:>15.6f}'
+    print(f'{name:<22}{len(P):>5}{width:>11.3f}{ar:>15.6f}'
           f'{math.log(a1 * a2) - 0.5 * math.log(4.0 / 27.0):>12.6f}')
 
-with open(VERIFY_TXT, 'w') as fh:
-    fh.write('\n'.join(verify) + '\n')
-print(f'\nwrote {len(CASES)} fixtures to {OUT_DIR}/ and {VERIFY_TXT} for cross-checking')
-print('\nmanifest lines for cases/cases.zig:')
-print('\n'.join(manifest))
+print(f'\nwrote {len(CASES)} fixtures to {OUT_DIR}/')
+print('\nmanifest lines for cases/cases.zig (sorted):')
+print('\n'.join(sorted(manifest)))
