@@ -46,7 +46,7 @@ The hot/common path is **normal-resolution DGGS cells** — 4–10 points, an H3
 cell at any resolution the type specimen — which solve in ~1–2 outer
 iterations and a few µs. (The *extremely* small, finest-resolution S2/A5
 cells are not this tier: they sit near the f64 floor, below, and belong to
-the robustness tier of dev.md's "Weigh rows by tier".) Protect the hot path:
+tiers 2-3 of dev.md's tier legend.) Protect the hot path:
 
 - **Do NOT judge a solver change by `ex-bench`'s `TOTAL` line.** It sums
   wall-times and is dominated by the large synthetic cases (np400, ha_*), so a
@@ -74,9 +74,9 @@ the robustness tier of dev.md's "Weigh rows by tier".) Protect the hot path:
   upper bounds that only fire on regression. Never equality-pin an
   iteration count, gap-eval count, or timing in a test — `just ab`
   computes and diffs those against the pinned baseline for review.
-  Frontier inputs go into the corpus as `.hard` fixtures — contract and
-  promotion protocol in `cases/cases.zig` (`Expected.hard`); the A/B
-  report is where their shifts surface.
+  Frontier inputs go into the corpus at tier 2/3 — schema in
+  `cases/cases.zig`, tier legend and promotion protocol in dev.md; the
+  A/B report is where their shifts surface, as `[t2]`/`[t3]` rows.
 
 When changing the solver, the full check is: `just ci` green (suite + coverage
 gate + both backends where supported) + **`just ab`**, which measures the

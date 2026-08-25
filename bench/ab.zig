@@ -95,16 +95,24 @@ fn fixture(comptime name: []const u8) Unit {
     return .{ .name = name, .cells = &.{cases.get(name).points} };
 }
 
-/// The fixture corpus as one unit, for the deterministic pass. `.hard`
-/// frontier fixtures get a ` [hard]` row label: rows print only
-/// when the sides differ, and a hard row that flips status is a
-/// promotion candidate, not a regression (see Expected.hard in
-/// cases/cases.zig for the protocol).
+/// The fixture corpus as one unit, for the deterministic pass. Rows carry
+/// their tier as a ` [t1]`/` [t2]`/` [t3]` label (tier 0 unmarked): rows
+/// print only when the sides differ, and the label says how to read one —
+/// a t2/t3 status flip is a promotion candidate, not a regression
+/// (promotion = a reviewed tier edit; the tier legend, dev.md).
 const FIXTURES: Unit = blk: {
     var names: [cases.all.len][]const u8 = undefined;
     var cells: [cases.all.len][]const [3]f64 = undefined;
     for (cases.all, 0..) |e, i| {
-        names[i] = if (e.case.expected == .hard) e.name ++ " [hard]" else e.name;
+        // An explicit switch, not comptimePrint: ~80 comptime format calls
+        // blow the eval branch quota, and exhaustiveness over u2 means a
+        // widened tier range fails to compile here rather than mislabeling.
+        names[i] = switch (e.case.tier) {
+            0 => e.name,
+            1 => e.name ++ " [t1]",
+            2 => e.name ++ " [t2]",
+            3 => e.name ++ " [t3]",
+        };
         cells[i] = e.case.points;
     }
     const n = names;
@@ -127,14 +135,29 @@ const BATCHES: [if (coverage) 1 else cases.batches.all.len]Unit = blk: {
 };
 const BATCH_REPS = if (coverage) 1 else 30;
 
-/// Timing rows beyond the batches: the regimes they lack — `np100` (mid-size),
-/// `ha_12` (hard/wide), `near_collinear` (infeasible) — and `hex`, the one row
-/// whose interval spans many passes, the quantization canary.
-const TIMING_FIXTURES = [_]Unit{
-    fixture("hex"),
-    fixture("np100"),
-    fixture("ha_12"),
-    fixture("near_collinear"),
+/// A timed case row, checked against the timed-set rule (the tier legend,
+/// dev.md): timing measures the optimization loop, so a timed row must claim
+/// `converges` at tier <= 1 — and must sit in the subsection its tier says.
+/// `infeasible` and `rejects` rows ride the deterministic diff only (this is
+/// what removed `near_collinear`, formerly the timed set's one
+/// infeasible-regime row).
+fn timedFixture(comptime name: []const u8, comptime tier: u1) Unit {
+    const c = cases.get(name);
+    if (c.claim != .converges or c.tier != tier)
+        @compileError(std.fmt.comptimePrint("not a tier-{d} converges case: {s}", .{ tier, name }));
+    return fixture(name);
+}
+
+/// Timed case rows beyond the batches, grouped by tier for the report's two
+/// timing subsections. Tier 0: `hex`, the one row whose interval spans many
+/// passes — the quantization canary. Tier 1: the regimes the batches lack —
+/// `np100` (mid-size), `ha_12` (hard/wide).
+const TIMING_T0 = [_]Unit{
+    timedFixture("hex", 0),
+};
+const TIMING_T1 = [_]Unit{
+    timedFixture("np100", 1),
+    timedFixture("ha_12", 1),
 };
 
 /// Differing rows printed per group before "… and k more". Fixtures never
@@ -242,9 +265,13 @@ fn report(comptime Base: type, init: std.process.Init, opts: Opts) !void {
 
     if (opts.gap_tol == null) {
         try out.print("timing (min of {d} reps, {d} for a batch; µs per solve — a batch row averages its cells)\n", .{ bc.N_REPS, BATCH_REPS });
+        try out.print("tier 0 — the product; above-floor shifts here are the headline (batches are tier 0 by contract)\n", .{});
         try out.print("{s}\n", .{bc.timing_header});
-        for (TIMING_FIXTURES) |unit| try timeUnit(out, &side_cur, &side_base, cur_mult, unit, null);
+        for (TIMING_T0) |unit| try timeUnit(out, &side_cur, &side_base, cur_mult, unit, null);
         for (BATCHES, batch_tallies) |unit, t| try timeUnit(out, &side_cur, &side_base, cur_mult, unit, t);
+        try out.print("tier 1 — correct at defaults; improved gladly, never at tier 0's expense\n", .{});
+        try out.print("{s}\n", .{bc.timing_header});
+        for (TIMING_T1) |unit| try timeUnit(out, &side_cur, &side_base, cur_mult, unit, null);
     } else {
         try out.print("timing: skipped under --gap-tol (see the header)\n", .{});
     }

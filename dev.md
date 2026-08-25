@@ -213,7 +213,7 @@ first is a question, not a technique, and it comes first:
 
 Nothing anywhere is currently excluded — the ledger is empty (the
 last marker, on `examples/cases.zig`'s DNC print, was retired when
-the `.hard` frontier fixtures made that line genuinely covered).
+the tier-2/3 frontier fixtures made that line genuinely covered).
 Historical
 evidence for the polish-bail
 counters staying untriggerable in context: the full fixture library ×
@@ -361,10 +361,11 @@ fixture and every batch cell (status, iterations and aspect ratio; the
 certified gap is printed but deliberately not compared — see `differs` in
 `bench/core.zig`), grouped — the fixtures as one group, each batch as one —
 with a per-side tally and a gap-shift line per group and differing rows
-capped per group; then interleaved timing in one table, µs per solve, over
-the eight batches (the hot path — `cases/batches.zig`) and the fixtures for
-the regimes batches lack (`np100`, `ha_12`, `near_collinear`, and `hex` as
-the many-passes quantization canary). A batch row is a mean over its ~1000
+capped per group; then interleaved timing, µs per solve,
+in two tier subsections (the timed-set rule and roles: the tier legend
+below): tier 0 — `hex` (the many-passes quantization canary) and the eight
+batches (the hot path — `cases/batches.zig`) — then tier 1, the regimes
+batches lack (`np100`, `ha_12`). A batch row is a mean over its ~1000
 cells where a fixture row is one cell: less row noise, the same layout bias
 (below). The `solves` column is how many solves each timed interval spanned
 — the calibrated passes for a fixture, the cell count for a batch. A batch
@@ -439,26 +440,57 @@ docs-, CI-, and fixtures-only PRs skip all of this:
 2. **The deterministic diff is the gate.** A non-empty diff blocks
    the PR until every differing row is explained and accepted in the
    PR body. Exceptions — named in the PR body, no justification
-   needed: `[hard]` rows (a status flip is a promotion candidate;
-   protocol: `Expected.hard`, `cases/cases.zig`) and floor-marginal
-   status flips (the FP-noise class of CLAUDE.md's monitoring notes —
-   including when two machines disagree on such a row).
+   needed: `[t2]`/`[t3]` rows (a status flip is a promotion candidate;
+   promotion = a reviewed tier edit in the data — tier legend below)
+   and floor-marginal status flips (the FP-noise class of CLAUDE.md's
+   monitoring notes — including when two machines disagree on such a
+   row). `[t1]` rows are hard claims: they get no exception.
 3. **Wall time never gates, but above-floor shifts get named in the
    PR body.** Read ratios against the same session's `--aa` floor —
    that is also how local and CI reports compare, never by µs — and a
    small stable shift with an empty diff is not yet a finding
    ("Reading a small stable shift" below).
 
-**Weigh rows by tier.** The DGGS batches and the normal-resolution
-fixtures (an H3 cell at any resolution is the type specimen) are the
-product: they must converge and stay fast, and an above-floor shift
-there is the headline of any report. Edge-case rows — wide caps,
-slivers, degenerate scatters, and the extremely small cells near the
-f64 floor — are robustness: their status flips matter, their timing
-mostly doesn't (most aren't timed). `[hard]` rows are aspiration;
-nothing blocks. A change that trades batch speed for edge-case
-robustness is backwards by default — accepting one needs the case
-made in the PR body.
+### The tier legend
+
+Every fixture carries `tier: 0-3` and a `claim` (schema:
+`cases/cases.zig`; enforcement: `tests/cases_test.zig`'s tier x claim
+loop). The tier names the settings the claim is made under and how
+much the row's speed matters — this legend is the single home for
+what each tier means:
+
+| tier | commitment | benchmark role |
+|---|---|---|
+| 0 | correct at default settings; **the product and optimization target** (normal-resolution DGGS cells — an H3 cell at any resolution is the type specimen; the batches are tier 0 by their every-cell-converges contract) | timed; above-floor shifts are the headline |
+| 1 | correct at default settings; improved gladly, never at tier 0's expense or much code complexity | timed (`converges` claims only) |
+| 2 | correct only at adjusted settings, recorded per case with headroom (`settings`, `tests/cases_test.zig`) | deterministic diff only, `[t2]` label |
+| 3 | no *reasonable* settings known; `claim = none` | deterministic diff only, `[t3]` label |
+
+The claim says what "correct" is — a certified cone (`converges`), a
+certified rejection (`infeasible`), a named `InputError` refusal
+(`rejects`). Two lines are deliberate prose judgments: 0 vs 1
+(priority — tier 0 membership needs no argument; a case that needs a
+case made for it is tier 1) and 1 vs 2 (robustness margin — a case
+that clears `GAP_TOL` only by a whisker parks at 2/3; a misjudgment
+announces itself as a flaking assertion). The 2 vs 3 line is
+anchored, not judged: *reasonable* means settings the `gap_tol` docs
+themselves advise (today `gap_tol <= 1e-3`); the line moves if the
+documented advice does.
+
+**The timed set is `claim: converges` at tier <= 1** — timing
+measures the optimization loop; `infeasible` and `rejects` rows ride
+the deterministic diff, where error names and status flips already
+surface. **Promotion** is a reviewed tier edit in the data: an
+improvement that flips a frontier case shows up as a `[t2]`/`[t3]`
+diff row in that PR's report, and the tier moves in review — no
+mechanism guarantees noticing (a stale-low tier is safe-direction
+drift). **One corpus invariant**, test-checked: tier >= 2 stays
+nonempty — those cases also cover the non-converged reporting paths
+(`examples/cases.zig`'s DNC print); if the frontier ever fully
+converges, replenish it (e.g. thinner slivers), don't delete the
+branch. A change that trades tier-0 speed for edge-case robustness
+is backwards by default — accepting one needs the case made in the
+PR body.
 
 For scale, a clean report reads: deterministic diff `none`, gap shift
 ≤ 1.5e-24, timing ratios 0.987–1.012 against a roughly-1% per-row

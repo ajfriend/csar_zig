@@ -1,12 +1,61 @@
 //! Tests driven by the bundled case manifest (`cases/cases.zig`, imported as
 //! the `cases` build module). Reached by the test target's root
 //! (`test_root.zig` → `tests/all.zig` → here).
+//!
+//! The data says what a case *is* (tier + claim + its settings-independent
+//! AR); this file carries the settings-dependent values — the tier-2
+//! settings table — and the loop that derives each case's obligations from
+//! tier x claim. Tier legend: dev.md.
 
 const std = @import("std");
 const csar = @import("../src/root.zig");
 const cases = @import("cases");
 const helpers = @import("helpers.zig");
 const Vec3 = csar.Vec3;
+
+/// Recorded settings for tier-2 cases: the adjustments under which the claim
+/// is made (fields not listed keep `cases.pin`'s values). All current entries
+/// certify at 1e-4 or tighter (issue #62's sweep), so `gap_tol = 1e-3` — the
+/// loosest setting the `gap_tol` docs advise — carries >= 10x headroom each.
+/// A case needing a different knob extends this struct.
+const Setting = struct { name: []const u8, gap_tol: f64 };
+const settings = [_]Setting{
+    .{ .name = "band_S150_w1em5", .gap_tol = 1e-3 },
+    .{ .name = "sliver_S150_d1em6", .gap_tol = 1e-3 },
+    .{ .name = "sliver_S175_d1em4", .gap_tol = 1e-3 },
+    .{ .name = "sliver_S90_d1em6", .gap_tol = 1e-3 },
+};
+
+test "settings table carries no stale keys" {
+    // The other direction — a tier-2 case missing its entry — fails loudly
+    // in the tier x claim loop via requireSettings; this catches the
+    // orphaned row a rename or deletion leaves behind.
+    for (settings) |s| try std.testing.expect(cases.byName(s.name) != null);
+}
+
+/// A case's claimed AR, or a labeled hard failure: a tier <= 1 `converges`
+/// case without one is a corpus bug, not a skip.
+fn requireAr(name: []const u8, case: cases.Case) !f64 {
+    return case.ar orelse {
+        helpers.diagPrint("missing .ar for case={s} (converges at tier <= 1 requires one)\n", .{name});
+        return error.MissingAr;
+    };
+}
+
+/// The recorded settings for a tier-2 case, or a labeled hard failure.
+fn requireSettings(name: []const u8) !Setting {
+    for (settings) |s| if (std.mem.eql(u8, s.name, name)) return s;
+    helpers.diagPrint("missing tier-2 settings for case={s} (tests/cases_test.zig)\n", .{name});
+    return error.MissingSettings;
+}
+
+test "requireAr and requireSettings fail loudly on a case without an entry" {
+    helpers.quiet_diagnostics = true;
+    defer helpers.quiet_diagnostics = false;
+    const bare: cases.Case = .{ .description = "", .tags = &.{}, .points = &.{}, .tier = 1, .claim = .converges };
+    try std.testing.expectError(error.MissingAr, requireAr("synthetic", bare));
+    try std.testing.expectError(error.MissingSettings, requireSettings("not_a_tier2_case"));
+}
 
 /// Labeled approx-equal check on aspect ratios. On failure prints
 /// the case label + full-precision expected/actual/delta — useful
@@ -38,16 +87,36 @@ test "cases.byName: found and not-found" {
     try std.testing.expectEqual(@as(?cases.Case, null), cases.byName("definitely_not_a_case"));
 }
 
-test "all cases match expected outcome" {
+test "the tier x claim loop: every case's claim enforced at its tier's settings" {
     const allocator = std.testing.allocator;
-    const tol: f64 = cases.GAP_TOL;
 
     for (cases.all) |entry| {
-        var outcome = try csar.solve(allocator, entry.case.points, cases.pin(csar.SolveOptions));
-        defer outcome.deinit();
+        const case = entry.case;
 
-        switch (entry.case.expected) {
-            .converged => |exp| {
+        // Schema invariants (dev.md's tier legend).
+        try std.testing.expect((case.claim == .none) == (case.tier == 3));
+        if (case.claim == .rejects) try std.testing.expect(case.tier <= 1);
+        if (case.ar != null) try std.testing.expect(case.claim == .converges and case.tier <= 1);
+
+        // The tier names the settings the claim is made under: defaults for
+        // tiers 0-1 and 3, the recorded settings for tier 2.
+        var opts = cases.pin(csar.SolveOptions);
+        if (case.tier == 2) opts.gap_tol = (try requireSettings(entry.name)).gap_tol;
+        const tol = opts.gap_tol;
+
+        // One arm per claim: the arm IS the obligation, solve call included
+        // (`rejects` must not solve at all — it asserts the refusal).
+        switch (case.claim) {
+            .rejects => |reject| {
+                const want: csar.InputError = switch (reject) {
+                    .insufficient_points => error.InsufficientPoints,
+                    .coplanar_input => error.CoplanarInput,
+                };
+                try std.testing.expectError(want, csar.solve(allocator, case.points, opts));
+            },
+            .converges => {
+                var outcome = try csar.solve(allocator, case.points, opts);
+                defer outcome.deinit();
                 try std.testing.expect(std.meta.activeTag(outcome) == .converged);
                 const c = outcome.converged;
                 try std.testing.expect(c.aspectRatio() >= 1.0 - 1e-10);
@@ -55,17 +124,20 @@ test "all cases match expected outcome" {
                 // gap; ulp-level negatives can slip through here, hence |gap|).
                 try std.testing.expect(@abs(c.gap) < tol);
 
-                // AR agrees with the per-case expected value to within solve
-                // tolerance. The certified duality gap is the source of truth
-                // for correctness; AR agreement is a cross-implementation /
-                // cross-version sanity check.
-                try checkArEq(entry.name, exp.ar, c.aspectRatio(), tol);
-
                 // Feasibility: ‖Ax_i‖ ≤ b·x_i for all i (tol includes numerics buffer).
-                const viol = csar.checkFeasibility(c, entry.case.points);
+                const viol = csar.checkFeasibility(c, case.points);
                 try std.testing.expect(viol <= tol);
+
+                // Tiers 0-1 additionally pin the AR. The certified duality
+                // gap is the source of truth for correctness; AR agreement
+                // is a cross-implementation / cross-version sanity check.
+                if (case.tier <= 1) {
+                    try checkArEq(entry.name, try requireAr(entry.name, case), c.aspectRatio(), tol);
+                }
             },
             .infeasible => {
+                var outcome = try csar.solve(allocator, case.points, opts);
+                defer outcome.deinit();
                 try std.testing.expect(std.meta.activeTag(outcome) == .infeasible);
                 const inf = outcome.infeasible;
                 // Verify Farkas certificate: λ ≥ 0, ∑ λ ≈ 1, ‖∑ λᵢ xᵢ‖ small.
@@ -78,18 +150,30 @@ test "all cases match expected outcome" {
 
                 var z = Vec3.zero;
                 for (inf.cert.indices, inf.cert.lambdas) |idx, l| {
-                    z = Vec3.lincomb(1.0, z, l, Vec3{ .m = entry.case.points[idx] });
+                    z = Vec3.lincomb(1.0, z, l, Vec3{ .m = case.points[idx] });
                 }
                 try std.testing.expect(z.norm() < 1e-2);
                 // residual matches the computed witness magnitude (to a couple of ulp).
                 try std.testing.expect(@abs(inf.residual - z.norm()) < 1e-6);
             },
-            .hard => {
-                // Frontier case: no outcome asserted (see Expected.hard) —
-                // the `try` on solve above is the whole check.
+            .none => {
+                // Tier 3: no claim — the solve returning is the whole check.
+                var outcome = try csar.solve(allocator, case.points, opts);
+                outcome.deinit();
             },
         }
     }
+}
+
+test "the frontier stays populated: some case is not default-correct" {
+    // The tier legend's one corpus invariant: tier 3 (or non-default-correct
+    // tier 2) stays nonempty — these cases also cover the non-converged
+    // reporting paths (examples/cases.zig's DNC print).
+    var found = false;
+    for (cases.all) |entry| {
+        if (entry.case.tier >= 2) found = true;
+    }
+    try std.testing.expect(found);
 }
 
 test "Shape invariants: Q right-handed orthonormal, sigma paired with columns, AR = sigma[2]/sigma[1]" {

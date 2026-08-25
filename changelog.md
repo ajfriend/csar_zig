@@ -5,6 +5,12 @@ commit that carries the full detail.
 
 ## [Unreleased]
 
+- Corpus fixtures now carry a commitment tier (0-3) and a claim
+  (converges / infeasible / rejects / none) instead of `Expected`; tests
+  derive their obligations from the pair, and the A/B report groups
+  timing by tier and labels diff rows `[t1]`/`[t2]`/`[t3]`. Details in
+  [#74](https://github.com/ajfriend/csar_zig/pull/74).
+
 - The certified gap is now measured against the normalized dual — a
   never-looser bound; behavior otherwise unchanged (deterministic diff
   empty, timing within noise). Details in
