@@ -343,8 +343,8 @@ are PRs, the rest are not commits.
    rewrites the URL and hash in place (the comment block survives), then
    `zig build --build-file bench/build.zig check`. The harness always measures
    against the last release (the `csar_base` comment in `bench/build.zig.zon`).
-   Before anything touching `src/` merges after the tag: run `just ab` and
-   `just ab --aa`, attach both to the PR, and record the ratios on #22 — the
+   Before anything touching `src/` merges after the tag: run `just ab --aa`,
+   then `just ab`, attach both to the PR, and record the ratios on #22 — the
    A/B is then a layout-bias sample (`bench/ab.zig` "Known residual bias").
 6. ajfriend/csar_py: the same `zig fetch --save=csar <tarball URL>` in its
    `src/zig/`, plus whatever the release changed in the Python surface. This
@@ -395,7 +395,8 @@ near the noise floor as unproven.
 - The report's `gap shift` line is the largest move of the certified gap
   among rows the diff does *not* flag, and each tally ends in `min gap`,
   the smallest certified gap among its converged cases — sign included.
-  Numbers for a PR body, not gates (#18).
+  Numbers for a PR body, not gates (see "The PR procedure, and what
+  gates" below).
 - `just ab --inject-2x` / `--inject-tol` — self-tests. The first must report
   ~2.0, the second must produce deterministic diffs (and `skipped` batch rows,
   since the current side then fails to converge most cells). Without them, a
@@ -414,10 +415,55 @@ mechanism the coverage build uses.
 
 The baseline pin lives in `bench/build.zig.zon`; resolving it fetches once per
 machine and is then cached (why that's fine, rather than lazy: `bench/build.zig`).
+The pin advances in its own PR after each tag ("Releasing"); a
+mid-cycle re-pin records its reason in the PR that moves it.
 It is a separate package so the library's manifest never carries a benchmark
 dependency — consumers can't inherit it, and nothing under `bench/` ships
 (see "Packaging"). Reports are for pasting into a PR;
 nothing is written to disk.
+
+### The PR procedure, and what gates
+
+The aim is legible joint review — human and agent reading the same
+report in the same PR — so that when a change moves anything, it
+*likely* gets flagged; *likely*, because nothing mechanical enforces
+these signals yet, and whether we'd even want that is open. The
+procedure applies to any PR that touches the solve path (`src/`);
+docs-, CI-, and fixtures-only PRs skip all of this:
+
+1. **Run `just ab --aa`, then `just ab`, and paste both reports into
+   the PR body** (collapsed `<details>` blocks; an on-demand CI run
+   is tracked in the issues).
+2. **The deterministic diff is the gate.** A non-empty diff blocks
+   the PR until every differing row is explained and accepted in the
+   PR body. Exceptions — named in the PR body, no justification
+   needed: `[hard]` rows (a status flip is a promotion candidate;
+   protocol: `Expected.hard`, `cases/cases.zig`) and floor-marginal
+   status flips (the FP-noise class of CLAUDE.md's monitoring notes —
+   including when two machines disagree on such a row).
+3. **Wall time never gates, but above-floor shifts get named in the
+   PR body.** Read ratios against the same session's `--aa` floor —
+   that is also how local and CI reports compare, never by µs — and a
+   small stable shift with an empty diff is not yet a finding
+   ("Reading a small stable shift" below).
+
+**Weigh rows by tier.** The DGGS batches and the normal-resolution
+fixtures (an H3 cell at any resolution is the type specimen) are the
+product: they must converge and stay fast, and an above-floor shift
+there is the headline of any report. Edge-case rows — wide caps,
+slivers, degenerate scatters, and the extremely small cells near the
+f64 floor — are robustness: their status flips matter, their timing
+mostly doesn't (most aren't timed). `[hard]` rows are aspiration;
+nothing blocks. A change that trades batch speed for edge-case
+robustness is backwards by default — accepting one needs the case
+made in the PR body.
+
+For scale, a clean report reads: deterministic diff `none`, gap shift
+≤ 1.5e-24, timing ratios 0.987–1.012 against a roughly-1% per-row
+`--aa` floor — from the gap-formula change this procedure was
+calibrated on (that report, a corpus-growth report, and a CI-timing
+investigation are in their PRs). The gate is row-agnostic: report
+curation, tracked in the issues, does not change what blocks.
 
 ### Reading a small stable shift
 

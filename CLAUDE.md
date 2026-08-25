@@ -37,8 +37,11 @@ problem). Core: `src/csar.zig` (`solve`, the outer loop, `mveeFw` inner MVEE),
 
 ## Performance & regression monitoring (read before "optimizing" the solver)
 
-The hot/common path is **small cells** — 4–10 points (H3 hexagons, S2/A5 finest
-cells) — which solve in ~1–2 outer iterations and a few µs. Protect them:
+The hot/common path is **normal-resolution DGGS cells** — 4–10 points, an H3
+cell at any resolution the type specimen — which solve in ~1–2 outer
+iterations and a few µs. (The *extremely* small, finest-resolution S2/A5
+cells are not this tier: they sit near the f64 floor, below, and belong to
+the robustness tier of dev.md's "Weigh rows by tier".) Protect the hot path:
 
 - **Do NOT judge a solver change by `ex-bench`'s `TOTAL` line.** It sums
   wall-times and is dominated by the large synthetic cases (np400, ha_*), so a
@@ -74,9 +77,11 @@ When changing the solver, the full check is: `just ci` green (suite + coverage
 gate + both backends where supported) + **`just ab`**, which measures the
 working tree against the pinned baseline in one binary and reports a
 deterministic diff over every fixture and batch cell plus interleaved timing
-(the batches — `cases/batches.zig` — are the hot-path rows). Attach its
-report to the PR; `just ab --aa` gives the noise floor to read it against. Its
-methodology is documented in `bench/core.zig` and `bench/ab.zig`.
+(the batches — `cases/batches.zig` — are the hot-path rows). Attach both the
+`ab` and `--aa` reports to the PR; a non-empty deterministic diff blocks until
+each unexcepted row is explained and accepted in the PR body (exceptions and
+procedure: dev.md "The PR procedure, and what gates"). Methodology: `bench/core.zig`
+and `bench/ab.zig`.
 
 ## Background / history
 
