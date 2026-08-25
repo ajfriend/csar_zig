@@ -265,7 +265,7 @@ test "writeDiff shows both sides at full precision, with gap for context" {
     const b: bc.Metrics = .{ .status = "converged", .iters = 0, .ar = 1.05467581817586240, .gap = 1.1e-9 };
     try bc.writeDiff(&w, "h3_r12_midLat", a, b);
     try std.testing.expectEqualStrings(
-        "  h3_r12_midLat          cur=did_not_converge/34/1.05467581817604850/3.20e-7  base=converged/0/1.05467581817586240/1.10e-9\n",
+        "  h3_r12_midLat            cur=did_not_converge/34/1.05467581817604850/3.20e-7  base=converged/0/1.05467581817586240/1.10e-9\n",
         w.buffered(),
     );
 }
