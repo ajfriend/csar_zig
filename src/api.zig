@@ -238,7 +238,11 @@ pub const TrustDiagnostics = struct {
 
 /// Active-set certificate. `indices` / `lambdas` are paired arrays:
 /// the indices into the caller's `X[]` of the active input points and
-/// their dual weights (λ ≥ 0, ∑λ = 1). Shared across all three
+/// their dual multipliers (λ ≥ 0). The normalization is per-variant:
+/// on `Converged`/`Uncertified` the multipliers are exported on the
+/// normalized dual's constraint boundary, ‖Σᵢ λᵢxᵢ‖₂ = 3 (∑λ is
+/// unconstrained); on `Infeasible` they are Farkas simplex weights,
+/// ∑λ = 1 (up to active-set truncation). Shared across all three
 /// outcome variants; the per-variant scalar (gap / residual) lives on
 /// the variant itself.
 pub const Cert = struct {
