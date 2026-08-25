@@ -432,17 +432,16 @@ dependency — consumers can't inherit it, and nothing under `bench/` ships
 
 The aim is legible joint review — human and agent reading the same
 report in the same PR. The report showing a change is produced and
-posted mechanically; nothing mechanical *acts* on it — a non-empty
-diff raises a checks-UI warning (scripts/ab_comment.py) but fails no
-check — and whether it should gate is open. The procedure
+posted mechanically; a non-empty diff raises a checks-UI warning
+(scripts/ab_comment.py) but fails no check — whether CI should
+*enforce* the diff is open. The procedure
 applies to any PR that touches the report's inputs — the solve path
 (`src/`), the harness and baseline pin (`bench/`), the corpus
 (`cases/`), the build files — or its delivery mechanism; only
 docs-class PRs skip:
 
-1. **CI posts both reports as a PR comment** on any PR touching the
-   in-scope paths (`.github/workflows/ab.yml` — its filter is the
-   executable form of the scope above). Run `just ab --aa` +
+1. **CI posts both reports as a PR comment** (`.github/workflows/ab.yml`
+   — its paths filter is the executable form of the scope above). Run `just ab --aa` +
    `just ab` locally when iterating, or dispatch a re-run:
    `gh workflow run ab --ref <branch>`. CI *timing* is coarse —
    between-session runner variance is ~10x the within-run A/A floor

@@ -6,8 +6,8 @@ name: ab
 # mechanism (the paths below are the executable form of the procedure's
 # scope; docs-class PRs skip), so the gate's bit-exact diff report is
 # delivered mechanically rather than author-remembered — the test suite's
-# 1e-6 pins never covered that. CI *timing* stays coarse (between-session
-# variance ~10x the within-run A/A floor — dev.md step 1, #22). For a
+# 1e-6 pins never covered that. CI *timing* stays coarse (dev.md step 1,
+# #22). For a
 # branch without a PR (e.g. main), or a second timing sample on one:
 #   gh workflow run ab --ref <branch>
 on:
@@ -63,8 +63,7 @@ jobs:
         # read the same block while iterating.
         env:
           GH_TOKEN: ${{ github.token }}
-          # On pull_request the event names the PR (the ref is N/merge, so a
-          # branch lookup can't); empty under workflow_dispatch, where the
-          # script resolves the branch's open PR instead.
+          # Empty under workflow_dispatch; why, and the fallback:
+          # scripts/ab_comment.py.
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: uv run scripts/ab_comment.py

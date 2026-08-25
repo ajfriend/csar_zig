@@ -249,7 +249,9 @@ fn report(comptime Base: type, init: std.process.Init, opts: Opts) !void {
     // ---- headline: the gate's answer before anything else; on a dirty
     // report the blocking rows follow immediately — they are the content.
     // The mode is in the headline so the calibration can never be mistaken
-    // for the measurement when both blocks sit open in one PR ----
+    // for the measurement when both blocks sit open in one PR. The verdict
+    // phrase "deterministic diff: none" is matched by scripts/ab_comment.py
+    // for its checks-UI annotations — reword in both places ----
     const title: []const u8 = if (opts.aa) "csar A/A calibration" else "csar A/B report";
     if (n_diff == 0) {
         try out.print("{s} — deterministic diff: none ({d} fixtures + {d} batches)\n", .{ title, cases.all.len, BATCHES.len });
