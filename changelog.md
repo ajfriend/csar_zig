@@ -5,8 +5,7 @@ commit that carries the full detail.
 
 ## [Unreleased]
 
-- Boundary-normalized certificate export (`‖Xλ‖₂ = 3`).
-  Details in [#88](https://github.com/ajfriend/csar_zig/pull/88).
+- Normalize dual variables so `‖Xλ‖₂ = 3` (#88)
 
 ## [0.5.0]
 
