@@ -62,6 +62,16 @@ pub const Entry = struct {
 
 pub const all: []const Entry = &.{
     .{ .name = "dnc_small_wide", .case = @import("zon/dnc_small_wide.zon") },
+    .{ .name = "exact_min3_ar5", .case = @import("zon/exact_min3_ar5.zon") },
+    .{ .name = "exact_tiny_ar3", .case = @import("zon/exact_tiny_ar3.zon") },
+    .{ .name = "exact_w76_ar20", .case = @import("zon/exact_w76_ar20.zon") },
+    .{ .name = "exact_w82_ar1p4", .case = @import("zon/exact_w82_ar1p4.zon") },
+    .{ .name = "exact_w84_ar1000", .case = @import("zon/exact_w84_ar1000.zon") },
+    .{ .name = "exact_w85_ar2", .case = @import("zon/exact_w85_ar2.zon") },
+    .{ .name = "exact_w85_ar2_fill", .case = @import("zon/exact_w85_ar2_fill.zon") },
+    .{ .name = "exact_w88_ar10", .case = @import("zon/exact_w88_ar10.zon") },
+    .{ .name = "exact_w88_ar1p5", .case = @import("zon/exact_w88_ar1p5.zon") },
+    .{ .name = "exact_w89_ar2", .case = @import("zon/exact_w89_ar2.zon") },
     .{ .name = "h3_r12_equator", .case = @import("zon/h3_r12_equator.zon") },
     .{ .name = "h3_r12_midLat", .case = @import("zon/h3_r12_midLat.zon") },
     .{ .name = "h3_r12_pent", .case = @import("zon/h3_r12_pent.zon") },
