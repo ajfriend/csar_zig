@@ -114,12 +114,12 @@ const settings = [_]Setting{
     .{ .name = "sliver_S90_d1em6", .gap_tol = 1e-3 },
 };
 
-// Stale table keys are compile errors: `cases.get` rejects unknown names.
-// (Quota: ~75 lookups x a linear scan over the manifest's string names.)
-comptime {
-    @setEvalBranchQuota(1_000_000);
-    for (pins) |p| _ = cases.get(p.name);
-    for (settings) |s| _ = cases.get(s.name);
+test "pin and settings tables carry no stale keys" {
+    // The other direction — a case missing its entry — fails loudly in the
+    // tier x claim loop via requirePin/requireSettings; this catches the
+    // orphaned row a rename or deletion leaves behind.
+    for (pins) |p| try std.testing.expect(cases.byName(p.name) != null);
+    for (settings) |s| try std.testing.expect(cases.byName(s.name) != null);
 }
 
 /// The pinned AR for a case, or a labeled hard failure: a tier <= 1
