@@ -395,7 +395,7 @@ near the noise floor as unproven.
 - The report's `gap shift` line is the largest move of the certified gap
   among rows the diff does *not* flag, and each tally ends in `min gap`,
   the smallest certified gap among its converged cases — sign included.
-  Numbers for a PR body, not gates (#18).
+  Numbers for a PR body, not gates (see "The PR procedure" below).
 - `just ab --inject-2x` / `--inject-tol` — self-tests. The first must report
   ~2.0, the second must produce deterministic diffs (and `skipped` batch rows,
   since the current side then fails to converge most cells). Without them, a
@@ -411,6 +411,52 @@ Every loop has one lever, each a constant edited in place — no flags:
 
 A quick local `just ab`, if ever wanted, is the same `build_options`
 mechanism the coverage build uses.
+
+### The PR procedure, and what gates
+
+Written once the tool had produced reports on real changes, per #18's
+own rule that thresholds written before real numbers are calibrated
+against nothing. The calibration set: #65 (a gap-formula change — the
+clean exemplar: deterministic diff `none` over every fixture and batch
+cell, gap shift ≤ 1.5e-24, timing ratios 0.987–1.012 against a ~1–3%
+`--aa` floor), #67 (corpus growth — six `.hard` fixtures enter both
+tallies, no diffs), and the #64→#66 CI investigation (job-timing
+evidence, no solver surface). The procedure:
+
+1. **A PR that touches the solve path** (`src/`) runs `just ab --aa`
+   and then `just ab`, and pastes **both** reports into the PR body
+   (collapsed `<details>` blocks). The `--aa` floor is what makes the
+   timing table readable — a ratio without it is a number with no
+   error bar. PRs that don't touch the solve path (docs, CI,
+   fixtures-only) skip this. This is a checklist obligation, not
+   mechanical enforcement: CI neither runs the tool (#7) nor parses
+   reports.
+2. **The deterministic diff is the gate — by review, not mechanism.**
+   A non-empty diff blocks the PR until every differing row is
+   explained and accepted in the PR body, the same flag-don't-bump
+   norm the `.zon` expectations follow. Two standing exception
+   classes, which the PR body still names but need not justify:
+   rows labeled `[hard]` (a status flip there is a promotion
+   candidate — `Expected.hard` in `cases/cases.zig` owns the
+   protocol), and floor-marginal status flips of the kind CLAUDE.md's
+   monitoring notes already classify as FP-noise.
+3. **Wall time never gates.** Read ratios against the same session's
+   `--aa` floor; a small stable shift with an empty diff is not yet a
+   finding ("Reading a small stable shift" below). µs-scale rows on
+   small cells are noise-dominated by design.
+4. **The baseline pin advances at each release**, in the release PR
+   (see "Releasing"), so reports always measure against the last
+   released solver. A mid-cycle re-pin needs its reason recorded in
+   the PR that moves it.
+5. **Local and CI reports compare by ratio, never by µs** (absolute
+   times vary 2–5× between launches; machines differ more). Once #7
+   posts CI reports, a deterministic-diff disagreement between
+   machines on floor-marginal rows is the known FP-noise class, not a
+   defect.
+
+Which rows deserve standing *highlights* — and `ex-bench`'s fate — is
+#19's question, deliberately not this section's: the gate above is
+row-agnostic and stays valid under any future curation.
 
 The baseline pin lives in `bench/build.zig.zon`; resolving it fetches once per
 machine and is then cached (why that's fine, rather than lazy: `bench/build.zig`).
