@@ -414,14 +414,15 @@ mechanism the coverage build uses.
 
 ### The PR procedure, and what gates
 
-Written once the tool had produced reports on real changes, per #18's
-own rule that thresholds written before real numbers are calibrated
-against nothing. The calibration set: #65 (a gap-formula change — the
-clean exemplar: deterministic diff `none` over every fixture and batch
-cell, gap shift ≤ 1.5e-24, timing ratios 0.987–1.012 against a ~1–3%
-`--aa` floor), #67 (corpus growth — six `.hard` fixtures enter both
-tallies, no diffs), and the #64→#66 CI investigation (job-timing
-evidence, no solver surface). The procedure:
+Written only after the tool had produced reports on real changes —
+thresholds written before real numbers are calibrated against
+nothing. The calibration set, all reports attached to their PRs: a
+gap-formula change that moved nothing (the clean exemplar:
+deterministic diff `none` over every fixture and batch cell, gap
+shift ≤ 1.5e-24, timing ratios 0.987–1.012 against a ~1–3% `--aa`
+floor), a corpus growth (six `.hard` fixtures entering both tallies,
+no diffs), and a CI-timing investigation with no solver surface. The
+procedure:
 
 1. **A PR that touches the solve path** (`src/`) runs `just ab --aa`
    and then `just ab`, and pastes **both** reports into the PR body
@@ -429,8 +430,8 @@ evidence, no solver surface). The procedure:
    timing table readable — a ratio without it is a number with no
    error bar. PRs that don't touch the solve path (docs, CI,
    fixtures-only) skip this. This is a checklist obligation, not
-   mechanical enforcement: CI neither runs the tool (#7) nor parses
-   reports.
+   mechanical enforcement: CI neither runs the tool nor parses
+   reports (an on-demand CI run is tracked in the issues).
 2. **The deterministic diff is the gate — by review, not mechanism.**
    A non-empty diff blocks the PR until every differing row is
    explained and accepted in the PR body, the same flag-don't-bump
@@ -449,14 +450,14 @@ evidence, no solver surface). The procedure:
    released solver. A mid-cycle re-pin needs its reason recorded in
    the PR that moves it.
 5. **Local and CI reports compare by ratio, never by µs** (absolute
-   times vary 2–5× between launches; machines differ more). Once #7
-   posts CI reports, a deterministic-diff disagreement between
-   machines on floor-marginal rows is the known FP-noise class, not a
-   defect.
+   times vary 2–5× between launches; machines differ more). A
+   deterministic-diff disagreement between machines on floor-marginal
+   rows is the known FP-noise class, not a defect.
 
 Which rows deserve standing *highlights* — and `ex-bench`'s fate — is
-#19's question, deliberately not this section's: the gate above is
-row-agnostic and stays valid under any future curation.
+the report-curation question, tracked in the issues and deliberately
+not this section's: the gate above is row-agnostic and stays valid
+under any future curation.
 
 The baseline pin lives in `bench/build.zig.zon`; resolving it fetches once per
 machine and is then cached (why that's fine, rather than lazy: `bench/build.zig`).
