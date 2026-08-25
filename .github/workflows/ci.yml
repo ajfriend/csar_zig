@@ -86,14 +86,10 @@ jobs:
         if: always() && hashFiles('coverage/summary.txt') != ''
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          # The report names the kcov build; name the image too, the other
-          # thing that can move kcov's line classification and so the ledger.
-          { printf '**Coverage gate** (%s; see dev.md "Coverage"):\n```\n' "${ImageOS:-ubuntu}"
-            cat coverage/summary.txt
-            printf '```\n'
-          } > gate-report.md
-          cat gate-report.md >> "$GITHUB_STEP_SUMMARY"
-          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
-            gh pr comment "${{ github.event.pull_request.number }}" --edit-last --create-if-none --body-file gate-report.md
-          fi
+          # Empty on a push to main: the script then writes the summary only.
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        # The report names the kcov build; the script names the image too,
+        # the other thing that can move kcov's line classification and so
+        # the ledger. Upsert by marker, not --edit-last: rationale in
+        # scripts/gate_comment.py.
+        run: uv run scripts/gate_comment.py
