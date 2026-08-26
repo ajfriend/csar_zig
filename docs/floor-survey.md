@@ -11,8 +11,9 @@ and their difference is pure evaluation rounding.
 **Data:** every batch cell (`cases/batches.zig`: 8 DGGS families ×
 1000 cells, σ_max spanning 2.4e4 – 1.7e7) re-solved at the corpus pin
 options with `gap_tol` = 1e-9 and 1e-10 — 16,000 solves, 32,000
-oracle evaluations, ~1 s wall ReleaseFast. Per-cell rows: the CSV
-artifact attached to the PR that landed this file.
+oracle evaluations, ~1 s wall ReleaseFast. Per-cell rows: the sweep
+is deterministic — regenerate the CSV with
+`zig build floor-survey -Doptimize=ReleaseFast -- --csv=<path>`.
 
 **Verdict: the f64 solver is evaluation-limited, not
 iterate-limited.** Every tight-tolerance failure in the corpus is a
