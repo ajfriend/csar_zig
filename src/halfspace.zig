@@ -153,12 +153,18 @@ pub fn convexHull2d(allocator: std.mem.Allocator, P: []const [2]f64, hull_idx: [
 /// `P[i..]` is left unspecified. Callers that already know feasibility
 /// (e.g. post-`halfspaceCheck` initial projection) can pass
 /// `-std.math.inf(f64)` to bypass the check.
-pub fn projectGnomonic(X: []const Vec3, b: Vec3, Q: Mat3x2, P: [][2]f64, feas_margin: f64) bool {
-    for (X, 0..) |xi, i| {
-        const ci = b.dot(xi);
-        if (ci < feas_margin) return false;
-        const p = Q.applyT(xi);
-        P[i] = .{ p.m[0] / ci, p.m[1] / ci };
-    }
-    return true;
+pub fn Gnomonic(comptime T: type) type {
+    const la = linalg.Linalg(T);
+    return struct {
+        pub fn projectGnomonic(X: []const la.Vec3, b: la.Vec3, Q: la.Mat3x2, P: [][2]T, feas_margin: T) bool {
+            for (X, 0..) |xi, i| {
+                const ci = b.dot(xi);
+                if (ci < feas_margin) return false;
+                const p = Q.applyT(xi);
+                P[i] = .{ p.m[0] / ci, p.m[1] / ci };
+            }
+            return true;
+        }
+    };
 }
+pub const projectGnomonic = Gnomonic(f64).projectGnomonic;
