@@ -88,7 +88,7 @@ pub const dualityGapConstructed = gap64.dualityGapConstructed;
 pub const BStep = struct { b: Vec3, Q: Mat3x2, s_scale: f64 };
 
 pub fn acceptBUpdate(
-    Xw: []const Vec3,
+    sp: halfspace.ShiftedPoints,
     b: Vec3,
     Q: Mat3x2,
     u: Vec2,
@@ -102,13 +102,13 @@ pub fn acceptBUpdate(
     while (bt < algo.MAX_BACKTRACKS) : (bt += 1) {
         const b_trial = Vec3.lincomb(1.0, b, alpha_try, dQc).normalize();
         const Q_trial = b_trial.orthoBasis();
-        if (projectGnomonic(Xw, b_trial, Q_trial, P_buf, algo.FEAS_MARGIN)) {
+        if (projectGnomonic(sp, b_trial, Q_trial, P_buf, algo.FEAS_MARGIN)) {
             const s_scale = rescaleP(P_buf, Ps);
             return .{ .b = b_trial, .Q = Q_trial, .s_scale = s_scale };
         }
         alpha_try *= 0.5;
     }
-    _ = projectGnomonic(Xw, b, Q, P_buf, -std.math.inf(f64));
+    _ = projectGnomonic(sp, b, Q, P_buf, -std.math.inf(f64));
     const s_scale = rescaleP(P_buf, Ps);
     return .{ .b = b, .Q = Q, .s_scale = s_scale };
 }

@@ -48,7 +48,8 @@ fn octantGap(comptime T: type, allocator: std.mem.Allocator) !struct { gap: T, c
     const Q = b.orthoBasis();
 
     var P_buf: [3][2]T = undefined;
-    try std.testing.expect(proj.projectGnomonic(&X, b, Q, &P_buf, 0));
+    var xd: [3]la.Vec3 = undefined;
+    try std.testing.expect(proj.projectGnomonic(proj.shiftPoints(&X, &xd), b, Q, &P_buf, 0));
     var Ps: [3][2]T = undefined;
     const s_scale = G.rescaleP(&P_buf, &Ps);
     const w = [_]T{ 1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0 };
@@ -97,7 +98,8 @@ test "Gnomonic(f128): feasibility margin rejects like f64" {
     const X = [_]la.Vec3{ .{ .m = .{ 1, 0, 0 } }, .{ .m = .{ 0, 1, 0 } } };
     const b = la.Vec3{ .m = .{ 1, 0, 0 } }; // b·X[1] = 0 < margin
     var P: [2][2]f128 = undefined;
-    try std.testing.expect(!proj.projectGnomonic(&X, b, b.orthoBasis(), &P, 1e-30));
+    var xd: [2]la.Vec3 = undefined;
+    try std.testing.expect(!proj.projectGnomonic(proj.shiftPoints(&X, &xd), b, b.orthoBasis(), &P, 1e-30));
 }
 
 test "GapScratch.init frees earlier slices when a later alloc fails" {

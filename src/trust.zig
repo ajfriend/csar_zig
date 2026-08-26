@@ -72,6 +72,9 @@ const GapResult = core.GapResult;
 /// Per-solve working buffers, all on the solve arena. (`pub` so the
 /// FD Hessian-validation test can drive `evalH` directly.)
 pub const Buffers = struct {
+    /// Shift-then-project differences xᵢ − X[0] (axis-independent;
+    /// filled once per solve, reused by every projection).
+    xd: []Vec3,
     P_buf: [][2]f64,
     Ps: [][2]f64,
     Ql: []Vec3,
@@ -92,6 +95,7 @@ pub const Buffers = struct {
 
     pub fn init(scratch: std.mem.Allocator, nw: usize) !Buffers {
         return .{
+            .xd = try scratch.alloc(Vec3, nw),
             .P_buf = try scratch.alloc([2]f64, nw),
             .Ps = try scratch.alloc([2]f64, nw),
             .Ql = try scratch.alloc(Vec3, nw),
@@ -188,12 +192,12 @@ fn designState(Ql: []const Vec3, w: []const f64, s_scale: f64) ?DesignState {
 /// the first call). (`pub` for the FD Hessian-validation test.)
 pub fn evalH(
     b: Vec3,
-    Xw: []const Vec3,
+    sp: halfspace.ShiftedPoints,
     wb: *Buffers,
     margin: f64,
 ) ?Eval {
     const Q = b.orthoBasis();
-    if (!projectGnomonic(Xw, b, Q, wb.P_buf, margin)) return null;
+    if (!projectGnomonic(sp, b, Q, wb.P_buf, margin)) return null;
     const s_scale = core.rescaleP(wb.P_buf, wb.Ps);
 
     // Inner solve: pairwise FW in bursts with a stall exit on the
@@ -495,6 +499,7 @@ pub fn solveTrust(
 ) !Outcome {
     const Xw = prep.Xw;
     var wb = try Buffers.init(scratch_alloc, Xw.len);
+    const sp = halfspace.shiftPoints(Xw, wb.xd);
 
     var b = prep.b0;
     var tr_iters: u32 = 0;
@@ -521,7 +526,7 @@ pub fn solveTrust(
         var Q = b.orthoBasis();
         // b0 comes from halfspaceCheck (strictly feasible), so the
         // projection cannot fail.
-        _ = projectGnomonic(Xw, b, Q, wb.P_buf, -std.math.inf(f64));
+        _ = projectGnomonic(sp, b, Q, wb.P_buf, -std.math.inf(f64));
         var s_scale = core.rescaleP(wb.P_buf, wb.Ps);
         core.initWeights(wb.Ps, wb.w);
         core.mveeFw(wb.Ps, algo.FW_PER_NEWTON, 0.0, wb.Ql, wb.w);
@@ -550,7 +555,7 @@ pub fn solveTrust(
             const c_norm = m.center.norm();
             const alpha: f64 = if (c_norm > prev_norm) tc.DAMP_SHRINK else 1.0;
             prev_norm = c_norm;
-            const st = core.acceptBUpdate(Xw, b, Q, m.center, alpha, wb.P_buf, wb.Ps);
+            const st = core.acceptBUpdate(sp, b, Q, m.center, alpha, wb.P_buf, wb.Ps);
             b = st.b;
             Q = st.Q;
             s_scale = st.s_scale;
@@ -576,7 +581,7 @@ pub fn solveTrust(
         // opening-round axis accepted at FEAS_MARGIN. A rank-deficient
         // design here means the input slipped past the coplanarity
         // gate — surface it as the error `recoverAPerp` raises for it.
-        cur = evalH(b, Xw, &wb, -std.math.inf(f64)) orelse return SolveError.SingularMoment;
+        cur = evalH(b, sp, &wb, -std.math.inf(f64)) orelse return SolveError.SingularMoment;
         if (cur.polish_failed) polish_failures += 1;
 
         converged = try certify(&last, &gaps_below_model, opts.gap_tol, cur.moments.M, cur.Q, b, Xw, &wb);
@@ -606,7 +611,7 @@ pub fn solveTrust(
         const b_trial = Vec3.lincomb(1.0, b, 1.0, cur.Q.apply(step.u)).normalize();
 
         @memcpy(wb.w_bak, wb.w);
-        const trial = evalH(b_trial, Xw, &wb, algo.FEAS_MARGIN);
+        const trial = evalH(b_trial, sp, &wb, algo.FEAS_MARGIN);
 
         const rho: f64 = if (trial) |t| (cur.h - t.h) / step.pred else -1.0;
         const rd = updateRadius(delta, rho, step.u.norm());
@@ -657,7 +662,7 @@ pub fn solveTrust(
         var Q = cur.Q;
         // The last trial may have been rejected, leaving the projection
         // buffers at the rejected axis; re-project at the accepted b.
-        _ = projectGnomonic(Xw, b, Q, wb.P_buf, -std.math.inf(f64));
+        _ = projectGnomonic(sp, b, Q, wb.P_buf, -std.math.inf(f64));
         var s_scale = core.rescaleP(wb.P_buf, wb.Ps);
         while (recert_attempts < tc.RECERT_MAX and open_iters + tr_iters + recert_attempts < opts.max_outer) {
             recert_attempts += 1;
@@ -671,7 +676,7 @@ pub fn solveTrust(
             // Axis micro-step along the h-gradient (plain, undamped —
             // ‖center‖ is at noise scale here). This is the numerical
             // re-sample.
-            const bstep = core.acceptBUpdate(Xw, b, Q, m.center, 1.0, wb.P_buf, wb.Ps);
+            const bstep = core.acceptBUpdate(sp, b, Q, m.center, 1.0, wb.P_buf, wb.Ps);
             b = bstep.b;
             Q = bstep.Q;
             s_scale = bstep.s_scale;

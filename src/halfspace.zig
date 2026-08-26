@@ -154,34 +154,47 @@ pub fn convexHull2d(allocator: std.mem.Allocator, P: []const [2]f64, hull_idx: [
 pub fn Gnomonic(comptime T: type) type {
     const la = linalg.Linalg(T);
     return struct {
+        const Self = @This();
+
+        /// Shift-then-project's point-set view (roadmap item 11):
+        /// `c = X[0]` and the differences `dᵢ = xᵢ − c`. The dᵢ are
+        /// axis-independent, so `shiftPoints` runs once per point set
+        /// and every projection at every trial axis reuses them.
+        pub const ShiftedPoints = struct { c: la.Vec3, d: []const la.Vec3 };
+
+        /// Fill `d[0..X.len]` with `xᵢ − X[0]` and return the view.
+        /// `X` must be non-empty — a caller with possibly-empty input
+        /// owns that case (`cert_primal`'s `empty_support`).
+        pub fn shiftPoints(X: []const la.Vec3, d: []la.Vec3) Self.ShiftedPoints {
+            const c = X[0];
+            for (X, 0..) |xi, i| d[i] = xi.sub(c);
+            return .{ .c = c, .d = d[0..X.len] };
+        }
+
         /// Projection is well-defined iff every `b·xᵢ ≥ feas_margin`.
         /// Returns `false` and short-circuits on the first violator;
         /// the trailing `P[i..]` is left unspecified. Callers that
         /// already know feasibility (e.g. post-`halfspaceCheck` initial
         /// projection) can pass −inf to bypass the check.
         ///
-        /// Shift-then-project (roadmap item 11): each dot is split through the
-        /// reference point `X[0]` — `Qᵀxᵢ = Qᵀc + Qᵀdᵢ` with
-        /// `dᵢ = xᵢ − c`. For a clustered cell the dᵢ are O(θ) and
-        /// subtract exactly (Sterbenz), so `Qᵀdᵢ` carries relative-ε
-        /// error where the direct `Qᵀxᵢ` — an O(1) dot cancelling to a
-        /// θ-sized result — carries absolute-ε (relative ε/θ, the
-        /// gapFloor σ_max·ε term's source). The remaining absolute-ε
-        /// error in `Qᵀc` is common to every point: a translation of
-        /// the chart cloud, invisible to the MVEE's shape. For
-        /// non-clustered inputs the split is mathematically identical
-        /// and costs one extra rounding — nothing is lost. The gap
-        /// evaluation carries its own copy of this split at the
-        /// certificate's eigenbasis, with the reference dots
-        /// compensated (`gapFromMultipliers`, gap_generic.zig) —
-        /// amend both together.
-        pub fn projectGnomonic(X: []const la.Vec3, b: la.Vec3, Q: la.Mat3x2, P: [][2]T, feas_margin: T) bool {
-            if (X.len == 0) return true;
-            const c = X[0];
-            const qc = Q.applyT(c);
-            const bc = b.dot(c);
-            for (X, 0..) |xi, i| {
-                const di = xi.sub(c);
+        /// Shift-then-project (roadmap item 11): each dot is split
+        /// through the reference point — `Qᵀxᵢ = Qᵀc + Qᵀdᵢ`. For a
+        /// clustered cell the dᵢ are O(θ) and subtract exactly
+        /// (Sterbenz), so `Qᵀdᵢ` carries relative-ε error where the
+        /// direct `Qᵀxᵢ` — an O(1) dot cancelling to a θ-sized result —
+        /// carries absolute-ε (relative ε/θ, the gapFloor σ_max·ε
+        /// term's source). The remaining absolute-ε error in `Qᵀc` is
+        /// common to every point: a translation of the chart cloud,
+        /// invisible to the MVEE's shape. For non-clustered inputs the
+        /// split is mathematically identical and costs one extra
+        /// rounding — nothing is lost. The gap evaluation carries its
+        /// own copy of this split at the certificate's eigenbasis, with
+        /// the reference dots compensated (`gapFromMultipliers`,
+        /// gap_generic.zig) — amend both together.
+        pub fn projectGnomonic(sp: Self.ShiftedPoints, b: la.Vec3, Q: la.Mat3x2, P: [][2]T, feas_margin: T) bool {
+            const qc = Q.applyT(sp.c);
+            const bc = b.dot(sp.c);
+            for (sp.d, 0..) |di, i| {
                 const ci = bc + b.dot(di);
                 if (ci < feas_margin) return false;
                 const p = la.Vec2.add(qc, Q.applyT(di));
@@ -191,4 +204,6 @@ pub fn Gnomonic(comptime T: type) type {
         }
     };
 }
+pub const ShiftedPoints = Gnomonic(f64).ShiftedPoints;
+pub const shiftPoints = Gnomonic(f64).shiftPoints;
 pub const projectGnomonic = Gnomonic(f64).projectGnomonic;
