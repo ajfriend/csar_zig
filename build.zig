@@ -138,6 +138,31 @@ pub fn build(b: *std.Build) void {
     countries_aspect_step.dependOn(&run_countries_aspect.step);
     check_step.dependOn(&countries_aspect_exe.step);
 
+    // The floor survey (floor_survey.zig, at the repo root so its module
+    // spans src/ — the header explains): the oracle over the batches at
+    // tight tolerances. Coverage-gated (installed + RUNS slices), so it
+    // takes the standard optimize mode; pass -Doptimize=ReleaseFast for
+    // the full measurement. Args after `--` per the header.
+    const floor_mod = b.createModule(.{
+        .root_source_file = b.path("floor_survey.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    floor_mod.addImport("cases", cases_mod);
+    floor_mod.addImport("qmath", qmath_mod);
+    const floor_exe = b.addExecutable(.{
+        .name = "csar-floor-survey",
+        .root_module = floor_mod,
+        // kcov reads only LLVM DWARF (dev.md "Two backends").
+        .use_llvm = if (coverage) true else null,
+    });
+    const run_floor = b.addRunArtifact(floor_exe);
+    run_floor.setCwd(b.path(""));
+    if (b.args) |args| run_floor.addArgs(args);
+    const floor_step = b.step("floor-survey", "Run floor_survey.zig (oracle over the batches at tight gap_tol)");
+    floor_step.dependOn(&run_floor.step);
+    check_step.dependOn(&floor_exe.step);
+    install_coverage_step.dependOn(&b.addInstallArtifact(floor_exe, .{}).step);
 }
 
 fn addExample(

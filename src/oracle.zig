@@ -7,7 +7,7 @@
 //! an independent construction (Cholesky of the materialized A)
 //! answering a different question.
 //!
-//! Reconstruction (pinned on #95): everything comes from the returned
+//! Reconstruction: everything comes from the returned
 //! outcome plus the input points. A is promoted from the outcome's
 //! factored (Q, σ) — f64 → T widening is exact, and buildOutcome's
 //! handedness flip of v₂ is bit-exactly harmless: it enters buildA
@@ -20,8 +20,8 @@
 //! (mechanism, bound, measurements: BOOTSTRAP_TOL in
 //! tests/oracle_test.zig). A_perp is deliberately NOT rebuilt through
 //! chart → recoverAPerp: the ACTIVE_THRESH truncation would perturb M
-//! at exactly the resolution #96 measures. Null contracts are on
-//! `evalOutcome`.
+//! at exactly the resolution the floor survey measures
+//! (docs/floor-survey.md). Null contracts are on `evalOutcome`.
 
 const std = @import("std");
 
@@ -34,8 +34,9 @@ const tol = config.tol;
 /// Re-evaluate a shipped certificate at `T` from its parts: the
 /// factored iterate (Q, σ) and the active set in the caller's `X[]`
 /// indexing. Returns null when M's Cholesky fails at `T` — the same
-/// indefinite-dual guard the solver applies; #96 compares that
-/// failure across precisions (branch identity).
+/// indefinite-dual guard the solver applies; the floor survey
+/// (floor_survey.zig) compares that failure across precisions
+/// (branch identity).
 pub fn evalCert(
     comptime T: type,
     allocator: std.mem.Allocator,

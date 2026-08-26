@@ -58,12 +58,19 @@ RUNS = [
     ('bench/zig-out/bin/csar-ab', ['--gap-tol=1e-9'], True),
     ('bench/zig-out/bin/csar-ab', ['--gap-tol=abc'], False),
     ('bench/zig-out/bin/csar-ab', ['--no-such-flag'], False),
+    # Reduced floor-survey slices (full sweep: floor_survey.zig header).
+    # s2_L23's first 30 cells reach the precision_floor branch at 1e-10.
+    ('zig-out/bin/csar-floor-survey', ['--limit=2', '--csv=zig-out/floor-survey.csv'], True),
+    ('zig-out/bin/csar-floor-survey', ['--batch=s2_L23', '--limit=30'], True),
+    ('zig-out/bin/csar-floor-survey', ['--batch=no-such-batch'], False),
+    ('zig-out/bin/csar-floor-survey', ['--limit=abc'], False),
+    ('zig-out/bin/csar-floor-survey', ['--no-such-flag'], False),
 ]
 INSTALL_DIRS = ['zig-out/bin', 'bench/zig-out/bin']  # every binary here must be in RUNS
 LOG = Path('zig-out/test-slow.log')
 OUT = Path('coverage')              # one kcov output dir per run, under here
 SUMMARY = OUT / 'summary.txt'       # the report; CI posts it on the PR
-INCLUDE_PATTERN = 'src/,tests/,cases/,examples/,bench/'
+INCLUDE_PATTERN = 'src/,tests/,cases/,examples/,bench/,floor_survey.zig'
 # The A/B harness compiles the pinned baseline's sources too (unpacked under
 # bench/zig-pkg/); those match `src/` and must not be measured.
 EXCLUDE_PATTERN = 'zig-pkg/'
