@@ -19,7 +19,6 @@
 //!                     on mid-size cases due to arena-friendly growth)
 
 const std = @import("std");
-const qmath = @import("qmath");
 
 // ----------------------------------------------------------------
 // Configuration
@@ -75,7 +74,7 @@ pub inline fn rescaleP(P_buf: []const [2]f64, Ps: [][2]f64) f64 {
         const sq = @mulAdd(f64, p[1], p[1], p[0] * p[0]);
         if (sq > s2_max) s2_max = sq;
     }
-    var s_scale = qmath.sqrt(s2_max);
+    var s_scale = @sqrt(s2_max);
     if (s_scale < tol.UNDERFLOW) s_scale = 1.0;
     const inv_s = 1.0 / s_scale;
     for (P_buf, 0..) |p, i| Ps[i] = .{ p[0] * inv_s, p[1] * inv_s };
@@ -519,13 +518,13 @@ pub fn recoverAPerp(P: []const [2]f64, M: Mat2) SolveError!Mat2 {
     const tr = Minv.m[0] + Minv.m[3];
     const det = Minv.det();
     if (det < -tol.PSD_NEG_REL * tr * tr) return SolveError.SingularMoment;
-    const s_det = qmath.sqrt(@max(det, 0));
-    const denom = qmath.sqrt(@mulAdd(f64, 2.0, s_det, tr));
+    const s_det = @sqrt(@max(det, 0));
+    const denom = @sqrt(@mulAdd(f64, 2.0, s_det, tr));
     const eye2: Mat2 = .{ .m = .{ 1, 0, 0, 1 } };
     const Minv_half = Mat2.lincomb(1.0 / denom, Minv, s_det / denom, eye2);
 
     const budget: f64 = 2.0 / 3.0;
-    return Minv_half.scale(qmath.sqrt(budget / g_max));
+    return Minv_half.scale(@sqrt(budget / g_max));
 }
 
 // ----------------------------------------------------------------
@@ -648,9 +647,9 @@ pub fn dualityGapConstructed(
 
     // L = V·√Λ so L·Lᵀ = A. Non-triangular, but we only use it in the
     // symmetric similarity Lᵀ·Z·L — any square root of A works there.
-    const L0 = b.scale(qmath.sqrt(SIGMA_0));
-    const L1 = v1.scale(qmath.sqrt(sigma[0]));
-    const L2 = v2.scale(qmath.sqrt(sigma[1]));
+    const L0 = b.scale(@sqrt(SIGMA_0));
+    const L1 = v1.scale(@sqrt(sigma[0]));
+    const L2 = v2.scale(@sqrt(sigma[1]));
     const L = Mat3{ .m = .{
         L0.m[0], L1.m[0], L2.m[0],
         L0.m[1], L1.m[1], L2.m[1],
@@ -698,7 +697,7 @@ pub fn dualityGapConstructed(
     // routing through M (eigenvalues near 1 at convergence) avoids the
     // ~1e-3 error of sum-of-logs on Z's own ill-conditioned
     // eigenvalues (hex-degenerate cases, κ(Z) ~ 1e7).
-    const gap = 3.0 * qmath.log1p((xlam_norm - 3.0) / 3.0) - Lm.logDet();
+    const gap = 3.0 * std.math.log1p((xlam_norm - 3.0) / 3.0) - Lm.logDet();
     return .{
         .gap = gap,
         .cert_n = k,

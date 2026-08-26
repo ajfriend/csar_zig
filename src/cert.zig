@@ -24,7 +24,6 @@
 //! the primal repair's 3·log s charge.
 
 const std = @import("std");
-const qmath = @import("qmath");
 
 const linalg = @import("linalg.zig");
 const Vec3 = linalg.Vec3;
@@ -181,8 +180,8 @@ pub fn cert_dual(X: []const [3]f64, A: Mat3, b_raw: Vec3, lambda: []const f64) D
     // Gap of the repaired pair (A/s, 3λ/t): the primal repair scales M
     // by 1/s (charge 3·log s) and the dual rescale contributes the
     // solver's closed-form boundary term.
-    const gap = 3.0 * qmath.log1p((t - 3.0) / 3.0) + 3.0 * qmath.log(s) - Lm.logDet();
-    const primal = -La.logDet() + 3.0 * qmath.log(s);
+    const gap = 3.0 * std.math.log1p((t - 3.0) / 3.0) + 3.0 * @log(s) - Lm.logDet();
+    const primal = -La.logDet() + 3.0 * @log(s);
     return .{ .certified = .{
         .gap = gap,
         .primal = primal,

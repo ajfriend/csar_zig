@@ -4,11 +4,7 @@ Spherical aspect-ratio solver. Given a point set on the unit sphere,
 finds the tightest ellipsoidal cone enclosing it (parameterized by a
 PSD matrix `A` and unit axis `b`) and returns the cone's axis ratio.
 
-A standalone Zig package. One first-party dependency —
-[qmath](https://github.com/ajfriend/qmath), which routes every
-transcendental (`log`/`log1p`/`sqrt`) so f128 support slots in without
-touching call sites; its f64 arms compile to exactly the builtins
-(disassembly-verified). No third-party dependencies.
+A standalone, std-only Zig package — no third-party dependencies.
 
 ## Quick start
 
@@ -56,7 +52,7 @@ The original alternating solver was removed in 0.3.0.
 - `src/root.zig` — public API re-exports
 - `src/api.zig` — public API surface (types + methods + `checkFeasibility`)
 - `src/cert.zig` — foreign-candidate certification (`cert_primal` / `cert_dual` / `primal_violation`)
-- `src/csar.zig` — solver core: preprocessing, the inner MVEE machinery, certification, dispatch
+- `src/csar.zig` — solver core: preprocessing, the inner MVEE machinery, certification, dispatch (std-only)
 - `src/trust.zig` — the trust-region solver path (what `.auto` resolves to)
 - `src/linalg.zig`, `src/halfspace.zig`, `src/newton.zig`, `src/config.zig` — internal modules
 - `tests/*_test.zig` — tests (run via `zig build test`); `cases_test.zig` is the one driven by the corpus

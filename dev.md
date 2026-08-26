@@ -299,15 +299,6 @@ binary picks it up automatically.
 it lists only what compiling the `csar` module needs — `src/` plus the build
 and doc files. `tests/`, `cases/`, `examples/` and `bench/` stay out.
 
-The one dependency is [qmath](https://github.com/ajfriend/qmath)
-(first-party): every `log`/`log1p`/`sqrt` in `src/` routes through it,
-so f128 arms slot in behind qmath's version gate without touching call
-sites. Its f64 arms are `inline` builtin forwards — the routed
-`csar.solve` disassembles instruction-identical to the pre-routing
-baseline. Consumers resolve it transitively by URL+hash; bump the pin
-with `zig fetch --save` on a tagged qmath release. (Comptime constants
-like `SIGMA_0` keep the builtins: no runtime code, nothing to route.)
-
 `build.zig` still references those paths. That is safe by construction, not by
 luck: a dependency's `build()` constructs its step graph, but `b.path(...)` is
 a `LazyPath` resolved only when a step that uses it is *made*, and a consumer

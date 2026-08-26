@@ -6,7 +6,7 @@
 /// Structural axial eigenvalue: A·b = SIGMA_0·b, where b is the cone axis.
 /// Derived in `recoverAPerp` via the budget/g_max rescaling: λ_b = √(1 − 2/3).
 /// Not tunable — it's geometry, not a knob.
-pub const SIGMA_0: f64 = 1.0 / @sqrt(3.0); // comptime constant: builtin, not qmath
+pub const SIGMA_0: f64 = 1.0 / @sqrt(3.0);
 
 /// Gate for tripwire assertions on invariants the solver checks at
 /// runtime (today: the duality-gap error model, `trust.certify`). Debug
