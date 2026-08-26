@@ -159,11 +159,28 @@ pub fn Gnomonic(comptime T: type) type {
         /// the trailing `P[i..]` is left unspecified. Callers that
         /// already know feasibility (e.g. post-`halfspaceCheck` initial
         /// projection) can pass −inf to bypass the check.
+        ///
+        /// Shift-then-project (roadmap item 11): each dot is split through the
+        /// reference point `X[0]` — `Qᵀxᵢ = Qᵀc + Qᵀdᵢ` with
+        /// `dᵢ = xᵢ − c`. For a clustered cell the dᵢ are O(θ) and
+        /// subtract exactly (Sterbenz), so `Qᵀdᵢ` carries relative-ε
+        /// error where the direct `Qᵀxᵢ` — an O(1) dot cancelling to a
+        /// θ-sized result — carries absolute-ε (relative ε/θ, the
+        /// gapFloor σ_max·ε term's source). The remaining absolute-ε
+        /// error in `Qᵀc` is common to every point: a translation of
+        /// the chart cloud, invisible to the MVEE's shape. For
+        /// non-clustered inputs the split is mathematically identical
+        /// and costs one extra rounding — nothing is lost.
         pub fn projectGnomonic(X: []const la.Vec3, b: la.Vec3, Q: la.Mat3x2, P: [][2]T, feas_margin: T) bool {
+            if (X.len == 0) return true;
+            const c = X[0];
+            const qc = Q.applyT(c);
+            const bc = b.dot(c);
             for (X, 0..) |xi, i| {
-                const ci = b.dot(xi);
+                const di = xi.sub(c);
+                const ci = bc + b.dot(di);
                 if (ci < feas_margin) return false;
-                const p = Q.applyT(xi);
+                const p = la.Vec2.add(qc, Q.applyT(di));
                 P[i] = .{ p.m[0] / ci, p.m[1] / ci };
             }
             return true;

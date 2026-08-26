@@ -70,10 +70,10 @@ test "Gap(f128) vs Gap(f64): agreement at f64-noise scale, branch identity" {
 
     // The octant's uniform weights are the exact optimum: both gaps are
     // ~eps-level, and they must agree to f64 evaluation noise (the f128
-    // value stands as the truth the f64 one approximates). Measured:
-    // gap64 = -eps(f64) exactly, gap128 ~ eps(f128) — diff 2.2e-16,
-    // 45x under the bound; deterministic cross-platform (qmath
-    // transcendentals + guaranteed-fused @mulAdd, no libm variance).
+    // value stands as the truth the f64 one approximates); deterministic
+    // cross-platform (qmath transcendentals + guaranteed-fused @mulAdd,
+    // no libm variance), so the bound's headroom is re-verified by this
+    // assert on every change to the slice.
     try std.testing.expect(@abs(@as(f128, r64.gap) - r128.gap) <= 1e-14);
     // Branch identity: same support at both precisions (the phase-1
     // rule in gap_generic.zig's header; protects the oracle's

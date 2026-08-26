@@ -242,6 +242,13 @@ Two consequences:
 
 ### 7. Two-component, cancellation-free gap
 
+> **Half landed** (with item 11): the cancellation-free log1p
+> argument ships — `gapFromMultipliers` computes the deviation in
+> chart form, `(S_w²−1 by fused multiply-add + ‖m‖²)/(√(·)+1)`,
+> equivalent to the split below with τ read off the chart centroid.
+> Still open here: *surfacing* the two components (`gap_axis` /
+> `gap_inner`) so a DNC can report which half stalled.
+
 `dualityGapConstructed` computes the axis term as
 3·log1p((‖Xλ‖ − 3)/3) (src/gap_generic.zig; the normalized-dual form) — the
 log1p is exact, but its argument still subtracts 3 from a norm that
@@ -422,7 +429,27 @@ terms with two different causes, and the solver now reports a cell at that
 floor as `.precision_floor`. That closes item 4's *probe* (it became #9
 phase 1, the f128 oracle) and re-ranks the remedies:
 
-### 11. Shift-then-project (#58) — the σ_max·ε term, algebraically
+### 11. Shift-then-project — the σ_max·ε term, algebraically
+
+> **Landed** — the shifted projection (`halfspace.projectGnomonic`)
+> plus the chart-form gap evaluation (`gapFromMultipliers`,
+> src/gap_generic.zig, whose header carries the algebra). Measured:
+> the evaluation-noise coefficient c collapsed from max 1.29 to max
+> 2.5e-4 σ_max·ε corpus-wide (~5000×; ~9 orders on the #1 hexagon),
+> and the f64 oracle bootstrap tightened from 9.1e-10 to 1.1e-15.
+> Two amendments to the prose below, discovered by the oracle: the
+> common `Qᵀc` offset is only second-order harmless at *exact*
+> optimality — shipped certificates live at stalled iterates, where
+> the gap is first-order sensitive to it with a σ-amplified
+> coefficient — so the two reference-point dots are compensated
+> (`Vec3.dotCompensated`), which keeps everything else plain f64.
+> And the floor column did NOT collapse: the accurate evaluation
+> instead *revealed* that many old tight-tolerance certifications
+> were evaluation-noise reading below tol (h3_r15@1e-9: 928 → 779
+> honest converged), so floor counts rose while every count became
+> honest; the residual stall is an iterate-side limit (#9 phase 2's
+> territory). `gapFloor`'s retune to the new (σ_max-free) noise
+> model is the follow-up.
 
 The σ_max·ε term is not the eigenvalue spread of A; it is the cancellation
 in `Qᵀxᵢ` — a dot product of O(1) components that cancels to size θ, so the
@@ -445,7 +472,7 @@ if the oracle shows it first order. Composition with f128 (#9): f128 alone
 does not remove the cancellation (it pays ε₁₂₈/θ, with more digits to
 spare); the shifted form gives relative ε at any precision — the two
 tracks compound rather than compete (docs/floor-survey.md §3). For the
-*current* corpus, #58 + #54 scope what #9 phase 2 must add.
+*current* corpus, this item + #54 scope what #9 phase 2 must add.
 
 Item 7 (the two-component gap) is the natural companion: its `gap_axis`
 split is where the second-order claim shows up as a number, so do it in the
@@ -463,7 +490,7 @@ the linear-algebra reformulation — keep the Cholesky factor and evaluate
 eigen-based square root. Measure the second before paying for the first.
 The minority of floored cells; low priority.
 
-Order: #9 phase 1 (oracle) → #58 with item 7 → #54's Cholesky form → #9
+Order: #9 phase 1 (oracle) → item 11 with item 7 (both landed) → #54's Cholesky form → #9
 phase 2, scoped by what the hardened-f64 residue and the solvability
 horizon then demand (sequencing, not a conditional — docs/floor-survey.md
 §3). What not to retry from this round, with
