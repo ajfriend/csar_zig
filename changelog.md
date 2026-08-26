@@ -5,6 +5,7 @@ commit that carries the full detail.
 
 ## [Unreleased]
 
+- Add the f128 gap oracle over promoted iterates (#100)
 - Genericize the certificate slice over `comptime T` (#99)
 
 - Route all transcendentals through the first-party `qmath` dependency (#98)

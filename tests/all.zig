@@ -7,6 +7,7 @@ comptime {
     _ = @import("cases_test.zig");
     _ = @import("cert_test.zig");
     _ = @import("generic_slice_test.zig");
+    _ = @import("oracle_test.zig");
     _ = @import("batches_test.zig");
     _ = @import("bench_core_test.zig");
     _ = @import("solver_test.zig");
