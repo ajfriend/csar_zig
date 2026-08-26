@@ -60,8 +60,12 @@ pub fn Linalg(comptime T: type) type {
             /// tiny total, where `dot` leaves absolute ~ε. Used where a
             /// single cancelling dot would otherwise be the one
             /// ε/θ-error input of an evaluation (the gap slice's
-            /// reference-point chart coordinates); ~5× the flops of
-            /// `dot`, so not a default.
+            /// reference-point chart coordinates). Cost at f64:
+            /// ~2× `dot` in time, measured both latency- and
+            /// throughput-shaped (the ~5× op count is mostly hidden
+            /// by ILP); at f128 the three genuine fmas make it far
+            /// worse (soft-float). Not a default: at non-cancelling
+            /// sites it buys nothing.
             pub fn dotCompensated(a: Vec3, b: Vec3) T {
                 var s = a.m[0] * b.m[0];
                 var e = @mulAdd(T, a.m[0], b.m[0], -s);
