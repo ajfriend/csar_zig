@@ -98,3 +98,15 @@ test "Gnomonic(f128): feasibility margin rejects like f64" {
     var P: [2][2]f128 = undefined;
     try std.testing.expect(!proj.projectGnomonic(&X, b, b.orthoBasis(), &P, 1e-30));
 }
+
+test "GapScratch.init frees earlier slices when a later alloc fails" {
+    // Fail each of the four allocations in turn; the errdefers must
+    // release whatever was already allocated (testing.allocator is the
+    // leak check). fail_index 4 doesn't fire: init succeeds.
+    for (0..4) |fail_index| {
+        var fa = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = fail_index });
+        try std.testing.expectError(error.OutOfMemory, gap_generic.Gap(f64).GapScratch.init(fa.allocator(), 4));
+    }
+    var ok = try gap_generic.Gap(f64).GapScratch.init(std.testing.allocator, 4);
+    defer ok.deinit(std.testing.allocator);
+}
