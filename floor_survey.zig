@@ -129,7 +129,8 @@ fn run(allocator: std.mem.Allocator, filter: ?[]const u8, limit: usize) !void {
 }
 
 /// The outcome union's own tag set (the `.infeasible` slot stays
-/// zero; its arm below is unreachable).
+/// zero: cellRow fails the whole run before an infeasible cell's
+/// tally could ever be reported).
 const Status = std.meta.Tag(csar.Outcome);
 
 /// One evaluated cell: the shipped gap, the outcome's sigma_max, and
@@ -210,7 +211,7 @@ fn runBatch(
 /// Classify one solved cell into its survey row. Feasibility is a
 /// property of the point set alone and every batch cell is a valid
 /// DGGS cell (batches.zig's contract), so `.infeasible` is a loud
-/// failure of the run, like the sentinel guard above — defined
+/// failure of the run, like runBatch's sentinel guard — defined
 /// behavior rather than an unreachable arm, and directly exercised
 /// by tests/floor_survey_test.zig (`pub` for exactly that).
 pub fn cellRow(allocator: std.mem.Allocator, cell: []const [3]f64, outcome: *const csar.Outcome) !Row {
