@@ -5,6 +5,8 @@ commit that carries the full detail.
 
 ## [Unreleased]
 
+- Route all transcendentals through the first-party `qmath` dependency (#98)
+
 ## [0.6.0]
 
 - Normalize dual variables so `‖Xλ‖₂ = 3` (#88)

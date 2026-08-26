@@ -4,11 +4,20 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    // The one dependency: qmath (first-party), transcendental routing
+    // for src/. Rationale, codegen equivalence, pin-bump: dev.md
+    // "Packaging".
+    const qmath_mod = b.dependency("qmath", .{
+        .target = target,
+        .optimize = optimize,
+    }).module("qmath");
+
     const csar_mod = b.addModule("csar", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
     });
+    csar_mod.addImport("qmath", qmath_mod);
 
     // The fixture corpus (cases/zon/*.zon) + its comptime manifest, which sits
     // beside the .zon files so it can `@import` them without crossing
@@ -55,6 +64,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     test_mod.addImport("cases", cases_mod);
+    test_mod.addImport("qmath", qmath_mod);
     test_mod.addOptions("test_options", test_options);
     // Backend selection for the test binary. Default LLVM because the
     // kcov coverage gate reads only LLVM-emitted DWARF; `-Dllvm=false`

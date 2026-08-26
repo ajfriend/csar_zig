@@ -39,6 +39,7 @@
 //! `polish_failures`.
 
 const std = @import("std");
+const qmath = @import("qmath");
 
 const linalg = @import("linalg.zig");
 const Vec2 = linalg.Vec2;
@@ -172,7 +173,7 @@ fn designState(Ql: []const Vec3, w: []const f64, s_scale: f64) ?DesignState {
     const L = S.cholesky() orelse return null;
     return .{
         .L = L,
-        .h = 0.5 * (L.logDet() + 3.0 * @log(3.0)) + 2.0 * @log(s_scale),
+        .h = 0.5 * (L.logDet() + 3.0 * qmath.log(3.0)) + 2.0 * qmath.log(s_scale),
         .moments = .{
             .center = (Vec2{ .m = .{ S.m[2], S.m[5] } }).scale(s_scale),
             .M = (Mat2{ .m = .{ S.m[0], S.m[1], S.m[1], S.m[4] } }).scale(s_scale * s_scale),
@@ -479,7 +480,7 @@ pub fn doglegStep(B: Mat2, g: Vec2, delta: f64) TrStep {
     const bq = 2.0 * pu.dot(d);
     const cq = pu.dot(pu) - delta * delta;
     const disc = @max(bq * bq - 4.0 * a * cq, 0);
-    const tau = (-bq + @sqrt(disc)) / (2.0 * a);
+    const tau = (-bq + qmath.sqrt(disc)) / (2.0 * a);
     const u = Vec2.lincomb(1.0, pu, tau, d);
     return .{ .u = u, .pred = model.pred(B, g, u) };
 }
