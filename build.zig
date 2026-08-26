@@ -4,10 +4,9 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    // The one dependency: transcendental routing (see src/qmath usage
-    // notes in dev.md "Packaging"). Every `log`/`log1p`/`sqrt` in src/
-    // goes through it; the f64 arms are inline builtin forwards, so the
-    // hot path's codegen is unchanged (A/B-verified).
+    // The one dependency: qmath (first-party), transcendental routing
+    // for src/. Rationale, codegen equivalence, pin-bump: dev.md
+    // "Packaging".
     const qmath_mod = b.dependency("qmath", .{
         .target = target,
         .optimize = optimize,

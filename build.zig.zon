@@ -9,6 +9,8 @@
             .hash = "qmath-0.2.2-so3qB6WdAAAQ8Ffwy0MKV6lmQkOa7XqSCeidRrKGe13g",
         },
     },
+    // Only what compiling the `csar` module needs; `just consumer-smoke`
+    // proves the tree builds through this list. See dev.md "Packaging".
     .paths = .{
         "build.zig",
         "build.zig.zon",

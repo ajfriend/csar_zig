@@ -4,11 +4,10 @@ Spherical aspect-ratio solver. Given a point set on the unit sphere,
 finds the tightest ellipsoidal cone enclosing it (parameterized by a
 PSD matrix `A` and unit axis `b`) and returns the cone's axis ratio.
 
-A standalone Zig package. One first-party dependency —
-[qmath](https://github.com/ajfriend/qmath), which routes every
-transcendental (`log`/`log1p`/`sqrt`) so f128 support slots in without
-touching call sites; its f64 arms compile to exactly the builtins
-(disassembly-verified). No third-party dependencies.
+A standalone Zig package with a single first-party dependency,
+[qmath](https://github.com/ajfriend/qmath) (transcendental math
+routines; details in dev.md "Packaging") — no third-party
+dependencies.
 
 ## Quick start
 
