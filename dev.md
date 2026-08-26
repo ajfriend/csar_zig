@@ -211,13 +211,13 @@ first is a question, not a technique, and it comes first:
   wide-cap eager certificate fails by construction) so both arms
   execute on every platform.
 
-The ledger currently holds one line: `floor_survey.zig`'s
-`.infeasible => unreachable` switch arm (feasibility is a property of
-the point set, and every batch cell is feasible by the batches
-contract — no narrower type exists to delete the arm, since the
-driver consumes the public `Outcome`). No `kcov-excl` markers exist
-(the last, on `examples/cases.zig`'s DNC print, was retired when
-the tier-2/3 frontier fixtures made that line genuinely covered).
+Nothing anywhere is currently excluded — the ledger is empty. The
+last `=> unreachable` arm (`floor_survey.zig`'s infeasible case) was
+retired by extracting the classification into `cellRow` with a loud
+error for the impossible variant, exercised directly by
+tests/floor_survey_test.zig — the extract-and-test playbook below;
+the last `kcov-excl` marker (examples/cases.zig's DNC print) fell
+when the tier-2/3 frontier fixtures made that line genuinely covered.
 Historical
 evidence for the polish-bail
 counters staying untriggerable in context: the full fixture library ×

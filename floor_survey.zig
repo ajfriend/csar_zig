@@ -175,20 +175,7 @@ fn runBatch(
         const g64 = (try oracle.evalOutcome(f64, arena, &outcome, cell)) orelse return error.SentinelOutcome;
         const g128 = (try oracle.evalOutcome(f128, arena, &outcome, cell)) orelse return error.SentinelOutcome;
 
-        const row: Row = switch (outcome) {
-            .converged => |c| .{
-                .gap = c.gap,
-                .sigma_max = c.sigma[2],
-                .floor = try certFloor(arena, cell, c.Q, c.sigma, c.cert),
-            },
-            // Identical payloads share the arm — and the survey measured
-            // zero did_not_converge cells corpus-wide, so a dedicated arm
-            // would sit permanently uncovered.
-            .did_not_converge, .precision_floor => |u| .{ .gap = u.gap, .sigma_max = u.sigma[2], .floor = u.gap_floor },
-            // Feasibility is a property of the point set alone, and every
-            // batch cell is a valid DGGS cell (batches.zig's contract).
-            .infeasible => unreachable,
-        };
+        const row: Row = try cellRow(arena, cell, &outcome);
 
         const diff: f64 = @floatCast(@abs(@as(f128, g64) - g128));
         const noise_scale = row.sigma_max * EPS;
@@ -218,6 +205,27 @@ fn runBatch(
     agg.verdict.uncertified += v.uncertified;
     agg.verdict.collapse_tol += v.collapse_tol;
     agg.verdict.collapse_pin += v.collapse_pin;
+}
+
+/// Classify one solved cell into its survey row. Feasibility is a
+/// property of the point set alone and every batch cell is a valid
+/// DGGS cell (batches.zig's contract), so `.infeasible` is a loud
+/// failure of the run, like the sentinel guard above — defined
+/// behavior rather than an unreachable arm, and directly exercised
+/// by tests/floor_survey_test.zig (`pub` for exactly that).
+pub fn cellRow(allocator: std.mem.Allocator, cell: []const [3]f64, outcome: *const csar.Outcome) !Row {
+    return switch (outcome.*) {
+        .converged => |c| .{
+            .gap = c.gap,
+            .sigma_max = c.sigma[2],
+            .floor = try certFloor(allocator, cell, c.Q, c.sigma, c.cert),
+        },
+        // Identical payloads share the arm — and the survey measured
+        // zero did_not_converge cells corpus-wide, so a dedicated arm
+        // would sit permanently uncovered.
+        .did_not_converge, .precision_floor => |u| .{ .gap = u.gap, .sigma_max = u.sigma[2], .floor = u.gap_floor },
+        .infeasible => error.InfeasibleBatchCell,
+    };
 }
 
 /// The floor model input for a converged outcome, rebuilt from what
