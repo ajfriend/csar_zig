@@ -72,8 +72,7 @@ const GapResult = core.GapResult;
 /// Per-solve working buffers, all on the solve arena. (`pub` so the
 /// FD Hessian-validation test can drive `evalH` directly.)
 pub const Buffers = struct {
-    /// Shift-then-project differences xᵢ − X[0] (axis-independent;
-    /// filled once per solve, reused by every projection).
+    /// Backing storage for `halfspace.shiftPoints` (see `ShiftedPoints`).
     xd: []Vec3,
     P_buf: [][2]f64,
     Ps: [][2]f64,

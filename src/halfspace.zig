@@ -5,9 +5,10 @@
 //!   certificate of infeasibility).
 //! - `convexHull2d`: Andrew's monotone chain over 2D-projected points,
 //!   used to reduce large inputs to their hull boundary.
-//! - `projectGnomonic`: tangent-plane projection at a feasible axis.
+//! - `shiftPoints` + `projectGnomonic`: shift-then-project
+//!   tangent-plane projection at a feasible axis.
 //!
-//! All three operate on linear-algebra primitives from `linalg.zig`
+//! All of them operate on linear-algebra primitives from `linalg.zig`
 //! and read tolerances/constants from `config.zig`. None of them
 //! capture solver outer-loop state, so they can live cleanly outside
 //! `csar.zig`.
@@ -156,10 +157,10 @@ pub fn Gnomonic(comptime T: type) type {
     return struct {
         const Self = @This();
 
-        /// Shift-then-project's point-set view (roadmap item 11):
-        /// `c = X[0]` and the differences `dᵢ = xᵢ − c`. The dᵢ are
-        /// axis-independent, so `shiftPoints` runs once per point set
-        /// and every projection at every trial axis reuses them.
+        /// The reference point `c = X[0]` and the differences
+        /// `dᵢ = xᵢ − c` — axis-independent, so `shiftPoints` runs
+        /// once per point set and every projection at every trial
+        /// axis reuses them (the split's numerics: `projectGnomonic`).
         pub const ShiftedPoints = struct { c: la.Vec3, d: []const la.Vec3 };
 
         /// Fill `d[0..X.len]` with `xᵢ − X[0]` and return the view.

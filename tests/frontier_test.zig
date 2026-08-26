@@ -5,10 +5,9 @@
 //!  - `genuine` of those, cells whose oracle-f128 gap is within
 //!    GAP_TOL — the same tolerance the pin certifies at.
 //! raw == genuine is an INVARIANT (asserted below): the chart-form
-//! evaluation certifies nothing on noise. (Pre-#105's pins recorded
-//! raw > genuine — e.g. 10/5 at θ=1e-9 — half those certifications
-//! were evaluation noise.) The stack is deterministic cross-platform (qmath
-//! transcendentals, fused ops), so the counts are exact pinnable
+//! evaluation certifies nothing on noise. The stack is deterministic
+//! cross-platform (qmath transcendentals, fused ops), so the counts
+//! are exact pinnable
 //! facts: a solver change that moves one fails this test until the
 //! pin is re-pinned in the same PR — the frontier shift becomes a
 //! reviewable data diff, flag-and-reconcile like any fixture pin
@@ -80,6 +79,7 @@ test "frontier ladder: pinned convergence counts + genuine-certification audit" 
     if (!test_options.slow) return error.SkipZigTest;
     const allocator = std.testing.allocator;
     var failed = false;
+    var invariant_broken = false;
     for (LADDER) |rung| {
         var raw: u32 = 0;
         var genuine: u32 = 0;
@@ -93,10 +93,12 @@ test "frontier ladder: pinned convergence counts + genuine-certification audit" 
             genuine += @intFromBool(@abs(g128) <= cases.GAP_TOL);
         }
         if (!checkRung(rung, raw, genuine)) failed = true; // report every rung before failing
-        // The honesty invariant: every certification is genuine. A
-        // violation is a bug in the gap evaluation, not a re-pin.
-        try std.testing.expectEqual(raw, genuine);
+        if (!checkInvariant(rung, raw, genuine)) invariant_broken = true;
     }
+    // The honesty invariant fails the suite on its own line so the
+    // two failure kinds stay distinct in the trace: a count move is a
+    // re-pin; a raw != genuine is a gap-evaluation bug.
+    try std.testing.expect(!invariant_broken);
     try std.testing.expect(!failed);
 }
 
@@ -110,10 +112,21 @@ fn checkRung(rung: Rung, raw: u32, genuine: u32) bool {
     return false;
 }
 
-test "checkRung: mismatch prints the re-pin line and returns false" {
+/// The honesty invariant: every certification is genuine (the
+/// chart-form evaluation certifies nothing on noise). A violation is
+/// a BUG in the gap evaluation — never a re-pin.
+fn checkInvariant(rung: Rung, raw: u32, genuine: u32) bool {
+    if (raw == genuine) return true;
+    helpers.diagPrint("gap-evaluation BUG (not a re-pin): theta={e:.1}: raw {d} != genuine {d} — a certification on noise\n", .{ rung.theta, raw, genuine });
+    return false;
+}
+
+test "checkRung/checkInvariant: failure branches print and return false" {
     helpers.quiet_diagnostics = true;
     defer helpers.quiet_diagnostics = false;
     const rung: Rung = .{ .theta = 1e-9, .raw = 1, .genuine = 1 };
     try std.testing.expect(!checkRung(rung, 0, 0));
     try std.testing.expect(checkRung(rung, 1, 1));
+    try std.testing.expect(!checkInvariant(rung, 2, 1));
+    try std.testing.expect(checkInvariant(rung, 1, 1));
 }
