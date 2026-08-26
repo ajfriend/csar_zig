@@ -60,7 +60,7 @@ RUNS = [
     ('bench/zig-out/bin/csar-ab', ['--no-such-flag'], False),
     # Reduced floor-survey slices (full sweep: floor_survey.zig header).
     # s2_L23's first 30 cells reach the precision_floor branch at 1e-10.
-    ('zig-out/bin/csar-floor-survey', ['--limit=2', '--csv=zig-out/floor-survey.csv'], True),
+    ('zig-out/bin/csar-floor-survey', ['--limit=2'], True),
     ('zig-out/bin/csar-floor-survey', ['--batch=s2_L23', '--limit=30'], True),
     ('zig-out/bin/csar-floor-survey', ['--batch=no-such-batch'], False),
     ('zig-out/bin/csar-floor-survey', ['--limit=abc'], False),

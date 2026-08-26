@@ -11,9 +11,10 @@ and their difference is pure evaluation rounding.
 **Data:** every batch cell (`cases/batches.zig`: 8 DGGS families ×
 1000 cells, σ_max spanning 2.4e4 – 1.7e7) re-solved at the corpus pin
 options with `gap_tol` = 1e-9 and 1e-10 — 16,000 solves, 32,000
-oracle evaluations, ~1 s wall ReleaseFast. Per-cell rows: the sweep
-is deterministic — regenerate the CSV with
-`zig build floor-survey -Doptimize=ReleaseFast -- --csv=<path>`.
+oracle evaluations, ~1 s wall ReleaseFast. Every number cited below
+is in the run's own output, and the run is deterministic: re-running
+the driver IS the per-cell record — there is no side-channel data
+file to keep in sync.
 
 **Verdict: the f64 solver is evaluation-limited, not
 iterate-limited.** Every tight-tolerance failure in the corpus is a
@@ -31,41 +32,43 @@ in coefficient (measured ≤ 1.3 vs the model's `NEG_GAP_SIGMA` = 64).
 
 `zig build floor-survey -Doptimize=ReleaseFast`, this machine
 (aarch64-macos), 2026-08-25. `d/f` = |gap_f64 − gap_f128| / floor —
-the model-normalized evaluation error; `unc` = uncertified
+the model-normalized evaluation error; `c` = |gap_f64 − gap_f128| /
+(σ_max·ε) — the physical noise coefficient; `unc` = uncertified
 (floor-classified) cells; the last two columns count uncertified
 cells whose f128 gap is below their own `gap_tol`, resp. the 1e-6
 pin.
 
 ```
-  batch    tol |  conv floor  dnc |   d/f p50   d/f p90   d/f max |   unc f128<=tol  <=1e-6
-  h3_r9   1e-9 |  1000     0    0 |   2.88e-3   8.18e-3   1.92e-2 |     0         0       0
-  h3_r9  1e-10 |  1000     0    0 |   2.88e-3   8.18e-3   1.92e-2 |     0         0       0
- h3_r15   1e-9 |   928    72    0 |   2.75e-3   8.18e-3   1.90e-2 |    72        15      72
- h3_r15  1e-10 |   423   577    0 |   2.82e-3   7.91e-3   1.79e-2 |   577        30     577
- s2_L15   1e-9 |  1000     0    0 |   2.35e-3   6.26e-3   1.59e-2 |     0         0       0
- s2_L15  1e-10 |  1000     0    0 |   2.35e-3   6.26e-3   1.59e-2 |     0         0       0
- s2_L19   1e-9 |  1000     0    0 |   2.10e-3   6.48e-3   1.53e-2 |     0         0       0
- s2_L19  1e-10 |   987    13    0 |   2.15e-3   6.65e-3   1.48e-2 |    13         3      13
- s2_L23   1e-9 |   934    66    0 |   2.25e-3   6.81e-3   2.02e-2 |    66        10      66
- s2_L23  1e-10 |   429   571    0 |   2.18e-3   6.81e-3   1.71e-2 |   571        25     571
- a5_r14   1e-9 |  1000     0    0 |   1.76e-3   5.57e-3   1.68e-2 |     0         0       0
- a5_r14  1e-10 |  1000     0    0 |   1.76e-3   5.57e-3   1.68e-2 |     0         0       0
- a5_r18   1e-9 |  1000     0    0 |   2.01e-3   5.84e-3   1.46e-2 |     0         0       0
- a5_r18  1e-10 |   990    10    0 |   2.03e-3   5.95e-3   1.46e-2 |    10         1      10
- a5_r23   1e-9 |   827   173    0 |   1.79e-3   5.76e-3   1.88e-2 |   173        40     173
- a5_r23  1e-10 |   291   709    0 |   1.79e-3   5.90e-3   1.40e-2 |   709        38     709
+  batch    tol |  conv floor  dnc |   d/f p50   d/f p90   d/f max |   c p50   c max |   unc f128<=tol  <=1e-6
+  h3_r9   1e-9 |  1000     0    0 |   2.88e-3   8.18e-3   1.92e-2 | 1.84e-1  1.23e0 |     0         0       0
+  h3_r9  1e-10 |  1000     0    0 |   2.88e-3   8.18e-3   1.92e-2 | 1.84e-1  1.23e0 |     0         0       0
+ h3_r15   1e-9 |   928    72    0 |   2.75e-3   8.18e-3   1.90e-2 | 1.76e-1  1.22e0 |    72        15      72
+ h3_r15  1e-10 |   423   577    0 |   2.82e-3   7.91e-3   1.79e-2 | 1.81e-1  1.15e0 |   577        30     577
+ s2_L15   1e-9 |  1000     0    0 |   2.35e-3   6.26e-3   1.59e-2 | 1.50e-1  1.02e0 |     0         0       0
+ s2_L15  1e-10 |  1000     0    0 |   2.35e-3   6.26e-3   1.59e-2 | 1.50e-1  1.02e0 |     0         0       0
+ s2_L19   1e-9 |  1000     0    0 |   2.10e-3   6.48e-3   1.53e-2 | 1.34e-1 9.77e-1 |     0         0       0
+ s2_L19  1e-10 |   987    13    0 |   2.15e-3   6.65e-3   1.48e-2 | 1.38e-1 9.45e-1 |    13         3      13
+ s2_L23   1e-9 |   934    66    0 |   2.25e-3   6.81e-3   2.02e-2 | 1.44e-1  1.29e0 |    66        10      66
+ s2_L23  1e-10 |   429   571    0 |   2.18e-3   6.81e-3   1.71e-2 | 1.39e-1  1.10e0 |   571        25     571
+ a5_r14   1e-9 |  1000     0    0 |   1.76e-3   5.57e-3   1.68e-2 | 1.12e-1  1.07e0 |     0         0       0
+ a5_r14  1e-10 |  1000     0    0 |   1.76e-3   5.57e-3   1.68e-2 | 1.12e-1  1.07e0 |     0         0       0
+ a5_r18   1e-9 |  1000     0    0 |   2.01e-3   5.84e-3   1.46e-2 | 1.28e-1 9.31e-1 |     0         0       0
+ a5_r18  1e-10 |   990    10    0 |   2.03e-3   5.95e-3   1.46e-2 | 1.30e-1 9.31e-1 |    10         1      10
+ a5_r23   1e-9 |   827   173    0 |   1.79e-3   5.76e-3   1.88e-2 | 1.14e-1  1.20e0 |   173        40     173
+ a5_r23  1e-10 |   291   709    0 |   1.79e-3   5.90e-3   1.40e-2 | 1.15e-1 8.96e-1 |   709        38     709
 
+coefficient c over all 16000 evaluations: p50 1.42e-1 p90 4.30e-1 p99 7.55e-1 max 1.29e0
+uncertified stall |gap_f128| / (sigma_max*eps): p10 8.11e-2 p50 3.71e-1 p90 1.20e0 max 3.25e0; negative gap_f128: 39 (min -3.90e-10)
 uncertified cells 2191: below their gap_tol at f128 162; below the 1e-6 pin at f128 2191; above gap_tol at f128 2029
 ```
 
 Population notes: no nulls (no sentinel outcomes anywhere — the
 survey fails loudly on one), no infeasibles, and f128 evaluation
 succeeded on every cell f64 did (branch identity held corpus-wide).
-The h3_r9 rows are bit-identical across the two tolerances —
-1000/1000 cells ship the same iterate, i.e. a cell that converges at
-1e-9 has already passed 1e-10 (the gap falls through that last decade
-within one accept; max shipped |gap| over all 6120 converged-at-1e-10
-cells is 9.98e-11).
+Where a batch fully converges at both tolerances, its two rows print
+identical statistics (h3_r9, s2_L15, a5_r14): the same iterates ship,
+i.e. a cell that converges at 1e-9 has already passed 1e-10 — the gap
+falls through that last decade within one accept.
 
 ## 1. Iterate-limited or evaluation-limited (the answer of record)
 
@@ -96,8 +99,8 @@ in the loop — whether wide iteration is also needed is unmeasured
 here and, on this evidence, doubtful.
 
 A curiosity worth recording: 39 uncertified cells evaluate to a
-*negative* gap at f128 (most negative −3.9e-10, all within
-0.13·σ_max·ε). Not a bug: the constructed certificate's A_perp is
+*negative* gap at f128 (most negative −3.9e-10 — well inside the
+σ_max·ε noise scale). Not a bug: the constructed certificate's A_perp is
 feasible only to κ(M)·ε (the `gapFloor` model's second term), so
 exact-arithmetic weak duality does not bind the *constructed* dual —
 f128 is simply exact enough to expose the slack. Magnitudes are
@@ -105,24 +108,16 @@ noise-scale, consistent with the model.
 
 ## 2. `gapFloor` calibration
 
-The model (`csar.gapFloor`): floor = (64·σ_max + κ(M))·ε. Measured,
-with c = |gap_f64 − gap_f128| / (σ_max·ε) over all 16,000 evaluations:
-
-| batch | c p50 | c p90 | c p99 | c max |
-|---|---|---|---|---|
-| h3_r9 | 0.184 | 0.523 | 0.879 | 1.228 |
-| h3_r15 | 0.176 | 0.524 | 0.892 | 1.216 |
-| s2_L15 | 0.150 | 0.401 | 0.635 | 1.021 |
-| s2_L19 | 0.134 | 0.415 | 0.662 | 0.977 |
-| s2_L23 | 0.144 | 0.436 | 0.776 | 1.294 |
-| a5_r14 | 0.112 | 0.357 | 0.681 | 1.073 |
-| a5_r18 | 0.128 | 0.374 | 0.686 | 0.931 |
-| a5_r23 | 0.114 | 0.369 | 0.718 | 1.201 |
-| **all** | **0.142** | **0.430** | **0.755** | **1.294** |
+The model (`csar.gapFloor`): floor = (64·σ_max + κ(M))·ε. The
+measured coefficient is the survey table's `c` columns plus its
+corpus-wide line: p50 0.142 / p90 0.430 / p99 0.755 / max 1.294 over
+all 16,000 evaluations.
 
 - **Form confirmed:** the coefficient distribution is flat across
-  eight families and three decades of σ_max — the noise really scales
-  as σ_max·ε, which is what lets one constant serve the whole corpus.
+  eight families and three decades of σ_max — per-row `c p50` spans
+  0.11–0.18 and `c max` 0.90–1.29, no family an outlier — so the
+  noise really scales as σ_max·ε, which is what lets one constant
+  serve the whole corpus.
 - **Coefficient ~50× conservative:** worst measured c = 1.29 vs the
   model's 64. On these geometries the model never under-predicts
   (d/f max 2e-2 corpus-wide) and the κ term never matters
@@ -165,11 +160,8 @@ only says which one the *current* corpus is waiting on.
 
 ## Reproducing
 
-- `zig build floor-survey -Doptimize=ReleaseFast` — the full sweep
-  (summary table above on stderr).
-- `-- --csv=<path>` — the per-cell rows (the PR artifact);
-  `--batch=<name>` / `--limit=<n>` restrict.
+- `zig build floor-survey -Doptimize=ReleaseFast` — the full sweep;
+  its output is exactly the block quoted above (percentiles are
+  nearest-rank). `-- --batch=<name>` / `--limit=<n>` restrict.
 - Coverage slices run in `just test-slow` (registered in
   `scripts/coverage_gate.py` RUNS).
-- The analysis cuts here (coefficient distributions, stall scale) are
-  plain column arithmetic over the CSV; percentiles are nearest-rank.

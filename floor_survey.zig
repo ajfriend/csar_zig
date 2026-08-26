@@ -11,9 +11,11 @@
 //! exported from root.zig), so its module must span `src/`.
 //!
 //! Run: `zig build floor-survey -Doptimize=ReleaseFast` for the full
-//! measurement; `-- --batch=<name> --limit=<n> --csv=<path>` restrict
-//! the sweep and dump per-cell rows. Registered in the coverage
-//! gate's RUNS on reduced slices.
+//! measurement; `-- --batch=<name> --limit=<n>` restrict the sweep.
+//! Registered in the coverage gate's RUNS on reduced slices. Every
+//! number the report cites is in the run's own output — the run is
+//! deterministic, so re-running IS the per-cell record; there is no
+//! side-channel data file to keep in sync.
 //!
 //! Per cell: solve at the pinned options with the tight `gap_tol`,
 //! then `oracle.evalOutcome` at f64 and f128 on the returned outcome.
@@ -37,10 +39,9 @@ const cases = @import("cases");
 const TOLS = [_]f64{ 1e-9, 1e-10 };
 
 const usage_text =
-    \\usage: csar-floor-survey [--batch=<name>] [--limit=<n>] [--csv=<path>]
+    \\usage: csar-floor-survey [--batch=<name>] [--limit=<n>]
     \\  --batch=<name>  run one batch (default: all of cases/batches.zig)
     \\  --limit=<n>     first n cells per batch (default: all)
-    \\  --csv=<path>    write per-cell rows to <path>
     \\
 ;
 
@@ -50,27 +51,15 @@ pub fn main(init: std.process.Init) !void {
 
     var filter: ?[]const u8 = null;
     var limit: usize = std.math.maxInt(usize);
-    var csv_path: ?[]const u8 = null;
     for (argv[1..]) |arg| {
         if (std.mem.startsWith(u8, arg, "--batch=")) {
             filter = arg["--batch=".len..];
         } else if (std.mem.startsWith(u8, arg, "--limit=")) {
             limit = std.fmt.parseInt(usize, arg["--limit=".len..], 10) catch return badArg(arg);
-        } else if (std.mem.startsWith(u8, arg, "--csv=")) {
-            csv_path = arg["--csv=".len..];
         } else return badArg(arg);
     }
 
-    if (csv_path) |path| {
-        var file = try std.Io.Dir.cwd().createFile(init.io, path, .{ .truncate = true });
-        defer file.close(init.io);
-        var buf: [4096]u8 = undefined;
-        var writer = file.writer(init.io, &buf);
-        try run(allocator, filter, limit, &writer.interface);
-        try writer.interface.flush();
-    } else {
-        try run(allocator, filter, limit, null);
-    }
+    try run(allocator, filter, limit);
 }
 
 fn badArg(arg: []const u8) error{BadArgument} {
@@ -91,24 +80,52 @@ const Verdict = struct {
     collapse_pin: u32 = 0,
 };
 
-fn run(allocator: std.mem.Allocator, filter: ?[]const u8, limit: usize, csv: ?*std.Io.Writer) !void {
-    if (csv) |w| try w.print("batch,gap_tol,cell,status,gap_shipped,gap_f64,gap_f128,diff,sigma_max,floor\n", .{});
-    std.debug.print("floor survey: options = corpus pin except gap_tol; oracle f64/f128 per cell; d/f = |gap_f64 - gap_f128| / floor\n\n", .{});
-    std.debug.print("{s:>7} {s:>6} | {s:>5} {s:>5} {s:>4} | {s:>9} {s:>9} {s:>9} | {s:>5} {s:>9} {s:>7}\n", .{
-        "batch", "tol", "conv", "floor", "dnc", "d/f p50", "d/f p90", "d/f max", "unc", "f128<=tol", "<=1e-6",
+/// Everything accumulated across the whole sweep — the aggregate the
+/// report's headline numbers come straight from.
+const Agg = struct {
+    verdict: Verdict = .{},
+    /// c = |gap_f64 − gap_f128| / (σ_max·ε), every evaluated cell:
+    /// the physical evaluation-noise coefficient (gapFloor's model
+    /// coefficient for the same quantity is tol.NEG_GAP_SIGMA).
+    coeff: std.ArrayListUnmanaged(f64) = .empty,
+    /// |gap_f128| / (σ_max·ε), uncertified cells only: where the
+    /// iterates stall, in units of the actual noise scale.
+    stall: std.ArrayListUnmanaged(f64) = .empty,
+    /// Uncertified cells whose f128 gap is negative — the constructed
+    /// certificate's κ·ε feasibility slack made visible.
+    neg: u32 = 0,
+    neg_min: f64 = 0,
+};
+
+fn run(allocator: std.mem.Allocator, filter: ?[]const u8, limit: usize) !void {
+    std.debug.print("floor survey: options = corpus pin except gap_tol; oracle f64/f128 per cell; d/f = |gap_f64 - gap_f128| / floor; c = |gap_f64 - gap_f128| / (sigma_max*eps)\n\n", .{});
+    std.debug.print("{s:>7} {s:>6} | {s:>5} {s:>5} {s:>4} | {s:>9} {s:>9} {s:>9} | {s:>7} {s:>7} | {s:>5} {s:>9} {s:>7}\n", .{
+        "batch", "tol", "conv", "floor", "dnc", "d/f p50", "d/f p90", "d/f max", "c p50", "c max", "unc", "f128<=tol", "<=1e-6",
     });
 
-    var total: Verdict = .{};
+    var agg: Agg = .{};
+    defer agg.coeff.deinit(allocator);
+    defer agg.stall.deinit(allocator);
     var matched = false;
     for (cases.batches.all) |entry| {
         if (filter) |f| if (!std.mem.eql(u8, entry.name, f)) continue;
         matched = true;
-        for (TOLS) |gap_tol| try runBatch(allocator, entry, gap_tol, limit, csv, &total);
+        for (TOLS) |gap_tol| try runBatch(allocator, entry, gap_tol, limit, &agg);
     }
     if (!matched) return badArg(filter.?);
 
-    std.debug.print("\nuncertified cells {d}: below their gap_tol at f128 {d}; below the 1e-6 pin at f128 {d}; above gap_tol at f128 {d}\n", .{
-        total.uncertified, total.collapse_tol, total.collapse_pin, total.uncertified - total.collapse_tol,
+    std.mem.sort(f64, agg.coeff.items, {}, std.sort.asc(f64));
+    std.mem.sort(f64, agg.stall.items, {}, std.sort.asc(f64));
+    const c = agg.coeff.items;
+    std.debug.print("\ncoefficient c over all {d} evaluations: p50 {e:.2} p90 {e:.2} p99 {e:.2} max {e:.2}\n", .{
+        c.len, pct(c, 0.50), pct(c, 0.90), pct(c, 0.99), pct(c, 1.0),
+    });
+    if (agg.stall.items.len > 0) std.debug.print("uncertified stall |gap_f128| / (sigma_max*eps): p10 {e:.2} p50 {e:.2} p90 {e:.2} max {e:.2}; negative gap_f128: {d} (min {e:.2})\n", .{
+        pct(agg.stall.items, 0.10), pct(agg.stall.items, 0.50), pct(agg.stall.items, 0.90), pct(agg.stall.items, 1.0), agg.neg, agg.neg_min,
+    });
+    const v = agg.verdict;
+    std.debug.print("uncertified cells {d}: below their gap_tol at f128 {d}; below the 1e-6 pin at f128 {d}; above gap_tol at f128 {d}\n", .{
+        v.uncertified, v.collapse_tol, v.collapse_pin, v.uncertified - v.collapse_tol,
     });
 }
 
@@ -120,13 +137,14 @@ const Status = std.meta.Tag(csar.Outcome);
 /// the floor the diff is normalized by.
 const Row = struct { gap: f64, sigma_max: f64, floor: f64 };
 
+const EPS = std.math.floatEps(f64);
+
 fn runBatch(
     allocator: std.mem.Allocator,
     entry: cases.batches.Entry,
     gap_tol: f64,
     limit: usize,
-    csv: ?*std.Io.Writer,
-    total: *Verdict,
+    agg: *Agg,
 ) !void {
     const cells = entry.batch.cells[0..@min(limit, entry.batch.cells.len)];
     var opts = cases.pin(csar.SolveOptions);
@@ -134,6 +152,7 @@ fn runBatch(
 
     const ratios = try allocator.alloc(f64, cells.len);
     defer allocator.free(ratios);
+    const coeff_start = agg.coeff.items.len;
     var counts = std.enums.EnumArray(Status, u32).initFill(0);
     var v: Verdict = .{};
 
@@ -173,32 +192,33 @@ fn runBatch(
         };
 
         const diff: f64 = @floatCast(@abs(@as(f128, g64) - g128));
+        const noise_scale = row.sigma_max * EPS;
         ratios[idx] = diff / row.floor;
+        try agg.coeff.append(allocator, diff / noise_scale);
 
         if (status != .converged) {
             v.uncertified += 1;
             const a128: f64 = @floatCast(@abs(g128));
             if (a128 <= gap_tol) v.collapse_tol += 1;
             if (a128 <= cases.GAP_TOL) v.collapse_pin += 1;
+            try agg.stall.append(allocator, a128 / noise_scale);
+            if (g128 < 0) agg.neg += 1;
+            if (g128 < 0) agg.neg_min = @min(agg.neg_min, @as(f64, @floatCast(g128)));
         }
-
-        if (csv) |w| try w.print("{s},{e},{d},{s},{e},{e},{e},{e},{e},{e}\n", .{
-            entry.name,                 gap_tol, idx,           @tagName(status), row.gap, g64,
-            @as(f64, @floatCast(g128)), diff,    row.sigma_max, row.floor,
-        });
     }
 
     std.mem.sort(f64, ratios, {}, std.sort.asc(f64));
-    const r = ratios;
-    std.debug.print("{s:>7} {e:>6.0} | {d:>5} {d:>5} {d:>4} | {e:>9.2} {e:>9.2} {e:>9.2} | {d:>5} {d:>9} {d:>7}\n", .{
-        entry.name,     gap_tol,      counts.get(.converged), counts.get(.precision_floor), counts.get(.did_not_converge),
-        pct(r, 0.50),   pct(r, 0.90), pct(r, 1.0),            v.uncertified,                v.collapse_tol,
-        v.collapse_pin,
+    const cs = agg.coeff.items[coeff_start..];
+    std.mem.sort(f64, cs, {}, std.sort.asc(f64));
+    std.debug.print("{s:>7} {e:>6.0} | {d:>5} {d:>5} {d:>4} | {e:>9.2} {e:>9.2} {e:>9.2} | {e:>7.2} {e:>7.2} | {d:>5} {d:>9} {d:>7}\n", .{
+        entry.name,        gap_tol,           counts.get(.converged), counts.get(.precision_floor), counts.get(.did_not_converge),
+        pct(ratios, 0.50), pct(ratios, 0.90), pct(ratios, 1.0),       pct(cs, 0.50),                pct(cs, 1.0),
+        v.uncertified,     v.collapse_tol,    v.collapse_pin,
     });
 
-    total.uncertified += v.uncertified;
-    total.collapse_tol += v.collapse_tol;
-    total.collapse_pin += v.collapse_pin;
+    agg.verdict.uncertified += v.uncertified;
+    agg.verdict.collapse_tol += v.collapse_tol;
+    agg.verdict.collapse_pin += v.collapse_pin;
 }
 
 /// The floor model input for a converged outcome, rebuilt from what
