@@ -5,7 +5,7 @@ commit that carries the full detail.
 
 ## [Unreleased]
 
-- Route all transcendentals through the new first-party `qmath` dependency (#93)
+- Route all transcendentals through the new first-party `qmath` dependency (#97)
 
 ## [0.6.0]
 
