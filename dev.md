@@ -211,16 +211,16 @@ first is a question, not a technique, and it comes first:
   wide-cap eager certificate fails by construction) so both arms
   execute on every platform.
 
-The ledger currently holds one line: `floor_survey.zig`'s
-`.infeasible => unreachable` switch arm (feasibility is a property of
-the point set, and every batch cell is feasible by the batches
-contract — no narrower type exists to delete the arm, since the
-driver consumes the public `Outcome`). No `kcov-excl` markers exist
-(the last, on `examples/cases.zig`'s DNC print, was retired when
-the tier-2/3 frontier fixtures made that line genuinely covered).
-Historical
-evidence for the polish-bail
-counters staying untriggerable in context: the full fixture library ×
+Nothing anywhere is currently excluded — the ledger is empty. The
+last `=> unreachable` arm (`floor_survey.zig`'s infeasible case) was
+retired by extracting the classification into `cellRow` with a loud
+error for the impossible variant, exercised directly by
+tests/floor_survey_test.zig — the extract-and-test playbook above;
+the last `kcov-excl` marker (examples/cases.zig's DNC print) fell
+when the tier-2/3 frontier fixtures made that line genuinely covered.
+
+Historical evidence for the polish-bail counters staying
+untriggerable in context: the full fixture library ×
 option grids, ~100 synthetic shape families, direct far-field
 `solveTrust` seams (lldb breakpoint counts confirming zero hits), and
 the real-world states + countries surveys (227 regions, zero polish
@@ -295,6 +295,7 @@ re-exporting them through the public API.
 | `tests/solver_test.zig` | Synthetic property/contract tests of `solve` (e.g. the `max_outer` DNC contract). No fixture dependency. |
 | `tests/extreme_aspect_test.zig` | Rotation-invariance, coplanarity, near-degenerate edge-case tests on synthesized inputs. Also hits internal helpers (`acceptBUpdate`, `convexHull2d`) via filesystem imports for branches not reachable through `solve` for all inputs. |
 | `tests/cases_test.zig` | Tests driven by the case manifest: cases.byName lookup, per-case outcome dispatch, Q/sigma shape invariants on np100. |
+| `tests/frontier_test.zig` | The solvable frontier as pinned numbers: synthetic triangle cells at descending scale, exact per-rung counts of raw vs oracle-verified-genuine convergence at the corpus pin. Untimed; count movement is a reviewed re-pin. Slow tier. |
 | `tests/batches_test.zig` | The batch contract: per batch, tally every cell (`bench/core.zig`'s `Side`/`Tally`) and require all of them converged. A failure prints the tally and names the batch. Slow tier (`-Dslow`): 8000 Debug solves guarding a gate property. |
 | `cases/cases.zig` | Comptime manifest over `cases/zon/*.zon` — defines the `Case` schema and the `all` list — plus `GAP_TOL` and `pin(Options)`, the solver options every pin in the corpus is taken under (the tests and `bench/core.zig` take them from here rather than carrying copies). Exposed as the `cases` build module; imported by the tests, the examples and `bench/`. Top-level because it is a shared corpus, not test code. |
 | `cases/zon/*.zon` | Per-case fixture: description + points + tier + claim (+ `ar` for tier <= 1 `converges`). |
