@@ -305,8 +305,13 @@ so f128 arms slot in behind qmath's version gate without touching call
 sites. Its f64 arms are `inline` builtin forwards — the routed
 `csar.solve` disassembles instruction-identical to the pre-routing
 baseline. Consumers resolve it transitively by URL+hash; bump the pin
-with `zig fetch --save` on a tagged qmath release. (Comptime constants
-like `SIGMA_0` keep the builtins: no runtime code, nothing to route.)
+with `zig fetch --save` on a tagged qmath release. The routing boundary is syntactic and deliberate: top-level const
+declarations keep the builtins (`SIGMA_0`), function bodies route
+through qmath uniformly — spelling uniformity is a runtime-code
+concern, and comptime eval never touches libm. Generic-T code derives
+its constants AT `T` (see `sigma0` in gap_generic.zig and its comptime
+guard): a comptime f64 constant would silently type the computation
+and round f128 work through f64.
 
 `build.zig` still references those paths. That is safe by construction, not by
 luck: a dependency's `build()` constructs its step graph, but `b.path(...)` is
