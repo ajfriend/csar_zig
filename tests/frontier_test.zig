@@ -3,13 +3,14 @@
 //! Per rung, two pinned counts:
 //!  - `raw`     cells returning `.converged`;
 //!  - `genuine` of those, cells whose oracle-f128 gap is within
-//!    GAP_TOL — the certification is real, not evaluation noise.
+//!    GAP_TOL — the same tolerance the pin certifies at.
 //! raw > genuine means certifications were granted on evaluation
 //! noise. The stack is deterministic cross-platform (qmath
 //! transcendentals, fused ops), so the counts are exact pinnable
 //! facts: a solver change that moves one fails this test until the
 //! pin is re-pinned in the same PR — the frontier shift becomes a
-//! reviewable data diff, flag-and-reconcile like any fixture pin.
+//! reviewable data diff, flag-and-reconcile like any fixture pin
+//! (CLAUDE.md's monitoring notes).
 //!
 //! Untimed by design (timing is the batches' job), and deliberately
 //! outside the batches' every-cell-converges contract: the bottom
@@ -27,7 +28,7 @@ const SEEDS = 32;
 
 const Rung = struct { theta: f64, raw: u32, genuine: u32 };
 
-/// Pinned on main. Re-pin protocol: on mismatch the test prints every
+/// Pinned on main. Re-pin protocol: the test prints each mismatched
 /// rung's measured counts (run `just test-slow`); copy them in and
 /// explain the shift in the PR body.
 const LADDER = [_]Rung{
@@ -39,21 +40,23 @@ const LADDER = [_]Rung{
     .{ .theta = 8e-11, .raw = 0, .genuine = 0 },
 };
 
-/// One frontier cell: a fixed isoceles triangle in the tangent chart
+/// One frontier cell: a fixed isosceles triangle in the tangent chart
 /// at a fixed axis — vertices (1,0), (−1/2, ±1/√3), centroid at the
 /// origin, second-moment axis ratio 1.5 (clear of the AR≈1
-/// eigenvector-degeneracy region) — rotated by seed·golden-angle
-/// (rotation re-rolls every floating-point alignment while leaving
-/// the problem identical), scaled by θ, and normalized onto the
-/// sphere. Three points ⇒ the chart MVEE touches all of them with
-/// weights exactly ⅓: total support, no active-set flicker, so count
-/// changes measure the precision mechanism and nothing else.
-fn cell(theta: f64, seed: u32) [3][3]f64 {
+/// eigenvector-degeneracy region) — rigidly rotated by
+/// seed·golden-angle, scaled by θ, and normalized onto the sphere.
+/// The rigid rotation (rather than helpers.ellipseBoundary's phase
+/// slide, which fixes the axes) re-rolls every floating-point
+/// alignment INCLUDING the shape's axis orientation, while leaving
+/// the problem identical. Three points ⇒ the chart MVEE touches all
+/// of them with weights exactly ⅓: total support, no active-set
+/// flicker, so count changes measure the precision mechanism and
+/// nothing else.
+fn cell(theta: f64, seed: usize) [3][3]f64 {
     const b = (csar.Vec3{ .m = .{ 0.6746833, 0.7369618, -0.0411066 } }).normalize();
-    // Tangent frame: Gram-Schmidt of e_z against b, then the cross.
-    var u = csar.Vec3{ .m = .{ -b.m[2] * b.m[0], -b.m[2] * b.m[1], 1.0 - b.m[2] * b.m[2] } };
-    u = u.normalize();
-    const v = b.cross(u);
+    const Q = b.orthoBasis();
+    const u = Q.e1;
+    const v = Q.e2;
 
     const phi = @as(f64, @floatFromInt(seed)) * 2.399963229728653; // golden angle
     const c = std.math.cos(phi);
@@ -79,7 +82,7 @@ test "frontier ladder: pinned convergence counts + genuine-certification audit" 
         var raw: u32 = 0;
         var genuine: u32 = 0;
         for (0..SEEDS) |seed| {
-            const pts = cell(rung.theta, @intCast(seed));
+            const pts = cell(rung.theta, seed);
             var o = try csar.solve(allocator, &pts, cases.pin(csar.SolveOptions));
             defer o.deinit();
             if (o != .converged) continue;
