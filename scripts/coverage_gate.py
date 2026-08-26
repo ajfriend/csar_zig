@@ -59,7 +59,8 @@ RUNS = [
     ('bench/zig-out/bin/csar-ab', ['--gap-tol=abc'], False),
     ('bench/zig-out/bin/csar-ab', ['--no-such-flag'], False),
     # Reduced floor-survey slice (full sweep: floor_survey.zig header).
-    # s2_L23's first 30 cells cover both outcome arms — converged (with
+    # s2_L23's first 30 cells cover both corpus-producible outcome arms
+    # (the infeasible arm is tests/floor_survey_test.zig's) — converged (with
     # certFloor) at 1e-9 and precision_floor (with the stall/negative
     # aggregates) at 1e-10; an unfiltered small-limit run adds no lines.
     ('zig-out/bin/csar-floor-survey', ['--batch=s2_L23', '--limit=30'], True),

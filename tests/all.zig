@@ -10,6 +10,7 @@ comptime {
     _ = @import("oracle_test.zig");
     _ = @import("batches_test.zig");
     _ = @import("frontier_test.zig");
+    _ = @import("floor_survey_test.zig");
     _ = @import("bench_core_test.zig");
     _ = @import("solver_test.zig");
     _ = @import("extreme_aspect_test.zig");
