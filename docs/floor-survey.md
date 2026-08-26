@@ -139,9 +139,13 @@ iteration's. The near-term lever is the narrow one: a **wide gap
 evaluation on the floor path** — on this corpus it would certify
 100% of floor-classified cells at the 1e-6 default outright, and
 gives the loop a merit signal down to ~σ_max·ε²-scale for the
-tight-tolerance residue. The full sweep's cost hint: 32,000 oracle
-evaluations inside a ~1 s run — wide evaluation is
-microseconds-scale per cell even at soft-float f128. Whether it
+tight-tolerance residue. The cost hint from the sweep itself: the
+~1 s run is dominated by its 16,000 f128 evaluations — tens of µs
+each at soft-float f128, roughly two orders above an f64 evaluation,
+yet still cheap as a post-pass gated to cells that would otherwise
+floor (a floor cell's own solve at 1e-10 is ~10 µs). That per-eval
+cost is also the number #55's compensated f64 competes against in
+the bake-off. Whether it
 ships as f128 (this slice), compensated f64 (#55), or is removed
 algebraically (#58) is that pair's bake-off — refereed against this
 survey's per-cell record once #58 lands, per the roadmap's addendum.
