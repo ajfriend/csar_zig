@@ -92,7 +92,7 @@ newton/trust boundary), zero algorithmic risk.
 > first branch below: the floor is the evaluation, not iterate
 > quantization — the entire floor-classified batch population certifies
 > below 1e-6 at f128. The numbers, the `gapFloor` calibration, and the
-> #55/#58 bake-off framing live in the survey report.
+> #55/item-11 bake-off framing live in the survey report.
 
 The only convergence lever left is the f64 gap floor, not the solver. The
 tell is already in the record (CLAUDE.md, dggs_dnc_test): WHICH finest-res
@@ -436,13 +436,14 @@ phase 1, the f128 oracle) and re-ranks the remedies:
 > src/gap_generic.zig, whose header carries the algebra). Measured:
 > the evaluation-noise coefficient c collapsed from max 1.29 to max
 > 2.5e-4 σ_max·ε corpus-wide (~5000×; ~9 orders on the #1 hexagon),
-> and the f64 oracle bootstrap tightened from 9.1e-10 to 1.1e-15.
+> and the f64 oracle bootstrap tightened to ulp scale (the bound and
+> its measurement live at BOOTSTRAP_TOL, tests/oracle_test.zig).
 > Two amendments to the prose below, discovered by the oracle: the
 > common `Qᵀc` offset is only second-order harmless at *exact*
-> optimality — shipped certificates live at stalled iterates, where
-> the gap is first-order sensitive to it with a σ-amplified
-> coefficient — so the two reference-point dots are compensated
-> (`Vec3.dotCompensated`), which keeps everything else plain f64.
+> optimality — at shipped (stalled) iterates it is first-order with
+> a σ-amplified coefficient, so the two reference-point dots are
+> compensated; mechanism and rationale in the `gapFromMultipliers`
+> header.
 > And the floor column did NOT collapse: the accurate evaluation
 > instead *revealed* that many old tight-tolerance certifications
 > were evaluation-noise reading below tol (h3_r15@1e-9: 928 → 779
@@ -490,7 +491,7 @@ the linear-algebra reformulation — keep the Cholesky factor and evaluate
 eigen-based square root. Measure the second before paying for the first.
 The minority of floored cells; low priority.
 
-Order: #9 phase 1 (oracle) → item 11 with item 7 (both landed) → #54's Cholesky form → #9
+Order: #9 phase 1 (oracle) → item 11 (landed; item 7's log1p half with it) → #54's Cholesky form → #9
 phase 2, scoped by what the hardened-f64 residue and the solvability
 horizon then demand (sequencing, not a conditional — docs/floor-survey.md
 §3). What not to retry from this round, with

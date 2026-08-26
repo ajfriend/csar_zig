@@ -170,7 +170,11 @@ pub fn Gnomonic(comptime T: type) type {
         /// error in `Qᵀc` is common to every point: a translation of
         /// the chart cloud, invisible to the MVEE's shape. For
         /// non-clustered inputs the split is mathematically identical
-        /// and costs one extra rounding — nothing is lost.
+        /// and costs one extra rounding — nothing is lost. The gap
+        /// evaluation carries its own copy of this split at the
+        /// certificate's eigenbasis, with the reference dots
+        /// compensated (`gapFromMultipliers`, gap_generic.zig) —
+        /// amend both together.
         pub fn projectGnomonic(X: []const la.Vec3, b: la.Vec3, Q: la.Mat3x2, P: [][2]T, feas_margin: T) bool {
             if (X.len == 0) return true;
             const c = X[0];

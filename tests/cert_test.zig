@@ -106,3 +106,13 @@ test "no_certificate: every reason, from both entry points" {
     const co_two = try csar.cert_primal(allocator, &two, eye, b_ok);
     try std.testing.expect(co_two.no_certificate == .dual_indefinite);
 }
+
+test "cert_primal: empty input yields empty_support (pins the projection's empty guard)" {
+    // Also the one reachable path to projectGnomonic's X.len == 0
+    // early-return (halfspace.zig): solver paths always pass a
+    // non-empty work set.
+    const A: csar.Mat3 = .{ .m = .{ 1, 0, 0, 0, 1, 0, 0, 0, 1 } };
+    const b: csar.Vec3 = .{ .m = .{ 0, 0, 1 } };
+    const co = try csar.cert_primal(std.testing.allocator, &.{}, A, b);
+    try std.testing.expectEqual(csar.NoCertReason.empty_support, co.no_certificate);
+}

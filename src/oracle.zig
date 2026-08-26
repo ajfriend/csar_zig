@@ -60,8 +60,6 @@ pub fn evalCert(
     defer allocator.free(xa);
     const lam = try allocator.alloc(T, k);
     defer allocator.free(lam);
-    const p_buf = try allocator.alloc([2]T, k);
-    defer allocator.free(p_buf);
     const lam_out = try allocator.alloc(T, k); // required by the callee; discarded
     defer allocator.free(lam_out);
     for (0..k) |i| {
@@ -69,7 +67,7 @@ pub fn evalCert(
         lam[i] = lambdas[i];
     }
 
-    const r = G.gapFromMultipliers(b, v1, v2, sig, xa, lam, p_buf, lam_out);
+    const r = G.gapFromMultipliers(b, v1, v2, sig, xa, lam, lam_out);
     if (r.gap == tol.GAP_UNCERTIFIED) return null;
     return r.gap;
 }

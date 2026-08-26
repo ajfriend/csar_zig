@@ -123,13 +123,11 @@ pub fn Gap(comptime T: type) type {
             active_idx: []usize, // [nmax]  points with w > thresh
             lam: []T, // [nmax]  dual lambdas: 3 w_i / (b·x_i)
             xa: []Vec3, // [nmax]  active x_i (from X_work)
-            p: [][2]T, // [nmax]  chart coords of the active z_i (gap scratch)
 
             pub fn deinit(self: *GapScratch, allocator: std.mem.Allocator) void {
                 allocator.free(self.active_idx);
                 allocator.free(self.lam);
                 allocator.free(self.xa);
-                allocator.free(self.p);
             }
 
             pub fn init(allocator: std.mem.Allocator, nmax: usize) !GapScratch {
@@ -137,13 +135,10 @@ pub fn Gap(comptime T: type) type {
                 errdefer allocator.free(active_idx);
                 const lam = try allocator.alloc(T, nmax);
                 errdefer allocator.free(lam);
-                const xa = try allocator.alloc(Vec3, nmax);
-                errdefer allocator.free(xa);
                 return .{
                     .active_idx = active_idx,
                     .lam = lam,
-                    .xa = xa,
-                    .p = try allocator.alloc([2]T, nmax),
+                    .xa = try allocator.alloc(Vec3, nmax),
                 };
             }
         };
@@ -181,11 +176,11 @@ pub fn Gap(comptime T: type) type {
             // so `solve`'s finalization reuses it without re-decomposing.
             const eAPerp = eig2(A_perp.m);
             // A_perp is PSD by construction; eig2 can produce ulp-scale negative
-            // eigenvalues from FP noise. Clip noise to 0 (so the sqrt below is
-            // well-defined and downstream M = LᵀZL routes through the Cholesky
-            // null guard as "no progress"), but raise NegativeEigenvalue when
-            // the negative value is meaningful — that signals Newton polish
-            // landed on a non-PSD iterate or eig2 has a bug.
+            // eigenvalues from FP noise. Clip noise to 0 (a clipped zero is
+            // caught by gapFromMultipliers' sigma sentinel as "no progress"),
+            // but raise NegativeEigenvalue when the negative value is
+            // meaningful — that signals Newton polish landed on a non-PSD
+            // iterate or eig2 has a bug.
             const sigma_raw: [2]T = eAPerp.vals;
             const sigma_neg_thr = tol.PSD_NEG_REL * @max(sigma_raw[1], 1.0);
             if (sigma_raw[0] < -sigma_neg_thr) return SolveError.NegativeEigenvalue;
@@ -211,25 +206,30 @@ pub fn Gap(comptime T: type) type {
                 lam[i] = 3.0 * w[idx] / b.dot(xa[i]);
                 cert_active_out[i] = idx;
             }
-            return gapFromMultipliers(b, v1, v2, sigma, xa[0..k], lam[0..k], s.p, cert_lambdas_out);
+            return gapFromMultipliers(b, v1, v2, sigma, xa[0..k], lam[0..k], cert_lambdas_out);
         }
 
         /// The post-active-set core of `dualityGapConstructed`: the gap
         /// of an EXPLICIT multiplier set. Its own entry point so a
         /// caller holding (λ, active xᵢ) — the f128 oracle
         /// re-evaluating a shipped certificate — reaches the identical
-        /// arithmetic. `p_buf` is scratch (≥ xa.len entries); the
-        /// boundary-normalized multipliers land in
-        /// `cert_lambdas_out[0..lam.len]`.
+        /// arithmetic. The boundary-normalized multipliers land in
+        /// `cert_lambdas_out[0..lam.len]`. (`inline`: certification-path
+        /// only, small body, k ≤ ~10 — and the shipped timing was
+        /// measured with it.)
         ///
-        /// CHART FORM (roadmap item 11). The dual it constructs is unchanged —
-        /// γᵢ = λᵢ·A·xᵢ/‖A·xᵢ‖, gap = 3·log1p((‖Xλ‖−3)/3) − log det M
-        /// with M = Lᵀ·Z·L — but every quantity is evaluated in the
-        /// tangent chart at `b` spanned by (v₁, v₂), A's own eigenbasis,
-        /// reached through the shifted projection. The algebra: with
-        /// zᵢ = xᵢ/(b·xᵢ) = b + p₁ᵢv₁ + p₂ᵢv₂ exactly, λᵢxᵢ = 3wᵢzᵢ
-        /// (wᵢ = λᵢ(b·xᵢ)/3), and ẑᵢ = A·zᵢ/‖A·zᵢ‖, the similarity
-        /// collapses to
+        /// CHART FORM (roadmap item 11). The dual it constructs is
+        /// unchanged — γᵢ = λᵢ·ẑᵢ with ẑᵢ = A·xᵢ/‖A·xᵢ‖,
+        /// Z = Σᵢ λᵢ·sym(xᵢẑᵢᵀ), and gap = 3·log1p((‖Xλ‖−3)/3) −
+        /// log det M with M = Lᵀ·Z·L, L·Lᵀ = A (the 3D spelling
+        /// cert.zig's `cert_dual` still carries verbatim) — but every
+        /// quantity is evaluated in the tangent chart at `b` spanned by
+        /// (v₁, v₂), A's own eigenbasis, reached through the shifted
+        /// projection. The algebra: with
+        /// zᵢ = xᵢ/(b·xᵢ) = b + p₁ᵢv₁ + p₂ᵢv₂ exactly and
+        /// λᵢxᵢ = 3wᵢzᵢ (wᵢ = λᵢ(b·xᵢ)/3), ẑᵢ's coordinates in the
+        /// eigenbasis are tᵢ/nᵢ (below) — never materialized — and the
+        /// similarity collapses to
         ///   M_jk = E_jk · (σⱼ+σₖ)/(2√(σⱼσₖ)),
         ///   E    = 3·Σᵢ (wᵢ/nᵢ)·tᵢtᵢᵀ,
         ///   tᵢ   = Λ·[1; pᵢ] = [σ₀; σ₁p₁ᵢ; σ₂p₂ᵢ],  nᵢ = ‖A·zᵢ‖ = ‖tᵢ‖,
@@ -255,7 +255,6 @@ pub fn Gap(comptime T: type) type {
             sigma: [2]T,
             xa: []const Vec3,
             lam: []const T,
-            p_buf: [][2]T,
             cert_lambdas_out: []T,
         ) GapResult {
             const k = xa.len;
@@ -287,7 +286,6 @@ pub fn Gap(comptime T: type) type {
                 const ci = bc + b.dot(d);
                 const p1 = (qc1 + v1.dot(d)) / ci;
                 const p2 = (qc2 + v2.dot(d)) / ci;
-                p_buf[i] = .{ p1, p2 };
                 const wi = lam[i] * ci / 3.0;
                 S_w += wi;
                 m1 = @mulAdd(T, wi, p1, m1);
@@ -298,9 +296,8 @@ pub fn Gap(comptime T: type) type {
 
             // M from E via the eigenvalue mixing factors. σ₀ is fixed;
             // f_jk = (σⱼ+σₖ)/(2√(σⱼσₖ)) ≥ 1, equal to 1 on the diagonal.
-            const s0: T = sigma0;
-            const f01 = (s0 + sigma[0]) / (2.0 * qmath.sqrt(s0 * sigma[0]));
-            const f02 = (s0 + sigma[1]) / (2.0 * qmath.sqrt(s0 * sigma[1]));
+            const f01 = (sigma0 + sigma[0]) / (2.0 * qmath.sqrt(sigma0 * sigma[0]));
+            const f02 = (sigma0 + sigma[1]) / (2.0 * qmath.sqrt(sigma0 * sigma[1]));
             const f12 = (sigma[0] + sigma[1]) / (2.0 * qmath.sqrt(sigma[0] * sigma[1]));
             const M = Mat3{ .m = .{
                 E.m[0],       f01 * E.m[1], f02 * E.m[2],
