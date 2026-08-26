@@ -89,14 +89,10 @@ newton/trust boundary), zero algorithmic risk.
 
 > **Superseded — the probe ran, at f128 instead of double-double
 > (docs/floor-survey.md; `zig build floor-survey`).** The answer is the
-> first branch below: at f128 evaluation, 100% of the floor-classified
-> batch population (2191 cells at gap_tol 1e-9/1e-10) has a true gap
-> below 1e-6 — the floor is the evaluation, not iterate quantization.
-> The iterates stall at 0.1–3× σ_max·ε, the actual f64 evaluation
-> noise (measured coefficient ≤ 1.3, vs the model's 64). Whether the
-> wide evaluation ships as f128, compensated f64 (#55), or is removed
-> algebraically (#58) is that pair's bake-off, refereed against the
-> survey's per-cell record.
+> first branch below: the floor is the evaluation, not iterate
+> quantization — the entire floor-classified batch population certifies
+> below 1e-6 at f128. The numbers, the `gapFloor` calibration, and the
+> #55/#58 bake-off framing live in the survey report.
 
 The only convergence lever left is the f64 gap floor, not the solver. The
 tell is already in the record (CLAUDE.md, dggs_dnc_test): WHICH finest-res

@@ -194,7 +194,8 @@ excluded = {f: sorted(raw[f].keys() - gated.get(f, {}).keys()) for f in raw if r
 # apply the rule, or the marker no longer sits on an executable line. A
 # marked file no run measured is an error too. Not detectable: a marker on
 # a line that would have been covered (kcov excludes before measuring).
-sources = {str(p.resolve()): p.read_text() for pat in INCLUDE_PATTERN.split(',') for p in Path(pat).rglob('*.zig')
+sources = {str(p.resolve()): p.read_text() for pat in INCLUDE_PATTERN.split(',')
+           for p in ([Path(pat)] if Path(pat).is_file() else Path(pat).rglob('*.zig'))
            if EXCLUDE_PATTERN not in str(p)}
 marked = {f for f, t in sources.items() if 'kcov-excl' in t or '=> unreachable' in t}
 problems = []

@@ -92,7 +92,7 @@ const Verdict = struct {
 };
 
 fn run(allocator: std.mem.Allocator, filter: ?[]const u8, limit: usize, csv: ?*std.Io.Writer) !void {
-    if (csv) |w| try w.print("batch,gap_tol,cell,status,gap_shipped,gap_f64,gap_f128,diff,sigma_max,floor,diff_over_floor\n", .{});
+    if (csv) |w| try w.print("batch,gap_tol,cell,status,gap_shipped,gap_f64,gap_f128,diff,sigma_max,floor\n", .{});
     std.debug.print("floor survey: options = corpus pin except gap_tol; oracle f64/f128 per cell; d/f = |gap_f64 - gap_f128| / floor\n\n", .{});
     std.debug.print("{s:>7} {s:>6} | {s:>5} {s:>5} {s:>4} | {s:>9} {s:>9} {s:>9} | {s:>5} {s:>9} {s:>7}\n", .{
         "batch", "tol", "conv", "floor", "dnc", "d/f p50", "d/f p90", "d/f max", "unc", "f128<=tol", "<=1e-6",
@@ -112,11 +112,13 @@ fn run(allocator: std.mem.Allocator, filter: ?[]const u8, limit: usize, csv: ?*s
     });
 }
 
-const Status = enum { converged, precision_floor, did_not_converge };
+/// The outcome union's own tag set (the `.infeasible` slot stays
+/// zero; its arm below is unreachable).
+const Status = std.meta.Tag(csar.Outcome);
 
 /// One evaluated cell: the shipped gap, the outcome's sigma_max, and
 /// the floor the diff is normalized by.
-const Row = struct { status: Status, gap: f64, sigma_max: f64, floor: f64 };
+const Row = struct { gap: f64, sigma_max: f64, floor: f64 };
 
 fn runBatch(
     allocator: std.mem.Allocator,
@@ -132,64 +134,62 @@ fn runBatch(
 
     const ratios = try allocator.alloc(f64, cells.len);
     defer allocator.free(ratios);
-    var n_ratio: usize = 0;
     var counts = std.enums.EnumArray(Status, u32).initFill(0);
     var v: Verdict = .{};
 
+    // All per-cell allocations (the outcome, the oracle's scratch,
+    // certFloor's buffers) go through one arena, reset between cells.
+    var arena_state = std.heap.ArenaAllocator.init(allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+
     for (cells, 0..) |cell, idx| {
-        var outcome = try csar.solve(allocator, cell, opts);
+        _ = arena_state.reset(.retain_capacity);
+        var outcome = try csar.solve(arena, cell, opts);
         defer outcome.deinit();
+        const status = std.meta.activeTag(outcome);
+        counts.getPtr(status).* += 1;
 
         // A null means an empty-cert sentinel — nothing in the batch
         // corpus produces one (the survey measured zero, and every cell
         // converges at the corpus pin). Silently skipping would corrupt
         // the population, so a null is a loud failure of the run.
-        const g64 = (try oracle.evalOutcome(f64, allocator, &outcome, cell)) orelse return error.SentinelOutcome;
-        const g128 = (try oracle.evalOutcome(f128, allocator, &outcome, cell)) orelse return error.SentinelOutcome;
+        const g64 = (try oracle.evalOutcome(f64, arena, &outcome, cell)) orelse return error.SentinelOutcome;
+        const g128 = (try oracle.evalOutcome(f128, arena, &outcome, cell)) orelse return error.SentinelOutcome;
 
         const row: Row = switch (outcome) {
             .converged => |c| .{
-                .status = .converged,
                 .gap = c.gap,
                 .sigma_max = c.sigma[2],
-                .floor = try certFloor(allocator, cell, c.Q, c.sigma, c.cert),
+                .floor = try certFloor(arena, cell, c.Q, c.sigma, c.cert),
             },
-            // One arm: the survey measured zero did_not_converge cells
-            // corpus-wide (the trust path's floor classifier catches every
-            // tight-tolerance stall), so a dedicated arm would sit
-            // permanently uncovered.
-            .did_not_converge, .precision_floor => |u| .{
-                .status = if (outcome == .precision_floor) .precision_floor else .did_not_converge,
-                .gap = u.gap,
-                .sigma_max = u.sigma[2],
-                .floor = u.gap_floor,
-            },
+            // Identical payloads share the arm — and the survey measured
+            // zero did_not_converge cells corpus-wide, so a dedicated arm
+            // would sit permanently uncovered.
+            .did_not_converge, .precision_floor => |u| .{ .gap = u.gap, .sigma_max = u.sigma[2], .floor = u.gap_floor },
             // Feasibility is a property of the point set alone, and every
             // batch cell is a valid DGGS cell (batches.zig's contract).
             .infeasible => unreachable,
         };
-        counts.getPtr(row.status).* += 1;
 
         const diff: f64 = @floatCast(@abs(@as(f128, g64) - g128));
-        const ratio = diff / row.floor;
-        ratios[n_ratio] = ratio;
-        n_ratio += 1;
+        ratios[idx] = diff / row.floor;
 
-        if (row.status != .converged) {
+        if (status != .converged) {
             v.uncertified += 1;
             const a128: f64 = @floatCast(@abs(g128));
             if (a128 <= gap_tol) v.collapse_tol += 1;
             if (a128 <= cases.GAP_TOL) v.collapse_pin += 1;
         }
 
-        if (csv) |w| try w.print("{s},{e},{d},{s},{e},{e},{e},{e},{e},{e},{e}\n", .{
-            entry.name,                 gap_tol, idx,           @tagName(row.status), row.gap, g64,
-            @as(f64, @floatCast(g128)), diff,    row.sigma_max, row.floor,            ratio,
+        if (csv) |w| try w.print("{s},{e},{d},{s},{e},{e},{e},{e},{e},{e}\n", .{
+            entry.name,                 gap_tol, idx,           @tagName(status), row.gap, g64,
+            @as(f64, @floatCast(g128)), diff,    row.sigma_max, row.floor,
         });
     }
 
-    std.mem.sort(f64, ratios[0..n_ratio], {}, std.sort.asc(f64));
-    const r = ratios[0..n_ratio];
+    std.mem.sort(f64, ratios, {}, std.sort.asc(f64));
+    const r = ratios;
     std.debug.print("{s:>7} {e:>6.0} | {d:>5} {d:>5} {d:>4} | {e:>9.2} {e:>9.2} {e:>9.2} | {d:>5} {d:>9} {d:>7}\n", .{
         entry.name,     gap_tol,      counts.get(.converged), counts.get(.precision_floor), counts.get(.did_not_converge),
         pct(r, 0.50),   pct(r, 0.90), pct(r, 1.0),            v.uncertified,                v.collapse_tol,
