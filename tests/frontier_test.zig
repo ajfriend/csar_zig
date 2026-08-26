@@ -4,8 +4,10 @@
 //!  - `raw`     cells returning `.converged`;
 //!  - `genuine` of those, cells whose oracle-f128 gap is within
 //!    GAP_TOL — the same tolerance the pin certifies at.
-//! raw > genuine means certifications were granted on evaluation
-//! noise. The stack is deterministic cross-platform (qmath
+//! raw == genuine is an INVARIANT (asserted below): the chart-form
+//! evaluation certifies nothing on noise. (Pre-#105's pins recorded
+//! raw > genuine — e.g. 10/5 at θ=1e-9 — half those certifications
+//! were evaluation noise.) The stack is deterministic cross-platform (qmath
 //! transcendentals, fused ops), so the counts are exact pinnable
 //! facts: a solver change that moves one fails this test until the
 //! pin is re-pinned in the same PR — the frontier shift becomes a
@@ -33,8 +35,8 @@ const Rung = struct { theta: f64, raw: u32, genuine: u32 };
 /// explain the shift in the PR body.
 const LADDER = [_]Rung{
     .{ .theta = 3e-9, .raw = 32, .genuine = 32 },
-    .{ .theta = 1e-9, .raw = 10, .genuine = 5 },
-    .{ .theta = 4e-10, .raw = 1, .genuine = 0 },
+    .{ .theta = 1e-9, .raw = 12, .genuine = 12 },
+    .{ .theta = 4e-10, .raw = 1, .genuine = 1 },
     .{ .theta = 2.5e-10, .raw = 0, .genuine = 0 },
     .{ .theta = 1.5e-10, .raw = 0, .genuine = 0 },
     .{ .theta = 8e-11, .raw = 0, .genuine = 0 },
@@ -91,6 +93,9 @@ test "frontier ladder: pinned convergence counts + genuine-certification audit" 
             genuine += @intFromBool(@abs(g128) <= cases.GAP_TOL);
         }
         if (!checkRung(rung, raw, genuine)) failed = true; // report every rung before failing
+        // The honesty invariant: every certification is genuine. A
+        // violation is a bug in the gap evaluation, not a re-pin.
+        try std.testing.expectEqual(raw, genuine);
     }
     try std.testing.expect(!failed);
 }
