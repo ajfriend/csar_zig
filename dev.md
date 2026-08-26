@@ -35,6 +35,7 @@
 | `just consumer-smoke` | Build `scripts/consumer_smoke/` against the tree as a consumer receives it, and print the shipped file list. The only check of the published package rather than the working tree; see "Packaging". |
 | `just ab` | A/B the working tree against the pinned baseline, both in one binary. `just ab --aa` calibrates. See "A/B benchmarking" below. |
 | `just clean` | Remove `zig-out/`, `.zig-cache/`, `coverage/`, and the bench package's caches and unpacked baseline. |
+| `zig build floor-survey -Doptimize=ReleaseFast` | The floor survey (`floor_survey.zig`): re-solve every batch cell at tight tolerances and re-evaluate each shipped certificate through the gap oracle at f64 and f128. Findings: `docs/floor-survey.md`. |
 | `just surveys::…` | The states/countries survey pipelines (research/example tooling), grouped in the `surveys` module (`surveys.just`) — `just --list surveys`. |
 
 ### Two test tiers
@@ -210,8 +211,12 @@ first is a question, not a technique, and it comes first:
   wide-cap eager certificate fails by construction) so both arms
   execute on every platform.
 
-Nothing anywhere is currently excluded — the ledger is empty (the
-last marker, on `examples/cases.zig`'s DNC print, was retired when
+The ledger currently holds one line: `floor_survey.zig`'s
+`.infeasible => unreachable` switch arm (feasibility is a property of
+the point set, and every batch cell is feasible by the batches
+contract — no narrower type exists to delete the arm, since the
+driver consumes the public `Outcome`). No `kcov-excl` markers exist
+(the last, on `examples/cases.zig`'s DNC print, was retired when
 the tier-2/3 frontier fixtures made that line genuinely covered).
 Historical
 evidence for the polish-bail
@@ -254,17 +259,23 @@ pick up branch coverage automatically.
 ## Source layout
 
 The `src/` directory contains library code only — nothing in there
-should be test- or diagnostic-specific.
+should be test- or diagnostic-specific. The one carve-out is
+`oracle.zig`: a debug instrument that must sit beside the generic
+slice it re-instantiates, kept out of the public surface by not being
+exported from `root.zig` rather than by placement.
 
 | File | Role |
 | --- | --- |
 | `src/root.zig` | Module entry point — thin re-export shim over `api.zig` + `solve` from `csar.zig`. |
 | `src/api.zig` | Solver public surface: `Outcome` (`Converged` / `Infeasible` / `Uncertified` ×2), `Cert`, `SolveError` / `InputError` / `SolveOptions`, `checkFeasibility`. |
 | `src/cert.zig` | Foreign-candidate certification: `cert_primal` / `cert_dual` / `primal_violation` and their result types. |
-| `src/csar.zig` | Algorithm orchestration: mvee/gap inner code, outer-loop driver, `solve`. |
-| `src/linalg.zig` | Linear algebra primitives: Vec2/3, Mat2/3/3x2, Chol3, `eig2`. |
+| `src/csar.zig` | Algorithm orchestration: mvee inner code, outer-loop driver, `solve`; re-exports the f64 `Gap` instantiation as decl aliases. |
+| `src/linalg_generic.zig` | `Linalg(T)`: the linear-algebra primitives (Vec2/3, Mat2/3/3x2, Chol3, `eig2`), generic over the scalar. |
+| `src/linalg.zig` | f64 alias shim over `Linalg(f64)`, plus the f64-only `LU` (bordered-KKT consumer; deliberately outside the generic slice). |
+| `src/gap_generic.zig` | `Gap(T)`: the certificate/gap slice (moments, `recoverAPerp`, `dualityGapConstructed`, `gapFromMultipliers`) — home of the phase-1 branch-identity rules. |
+| `src/oracle.zig` | Debug instrument: re-evaluate a shipped certificate's gap at a wider `T` (unexported; drives `floor_survey.zig`). |
 | `src/config.zig` | Internal tuning: `SIGMA_0`, `algo` (algorithm tuning), `tol` (numerical tolerances). |
-| `src/halfspace.zig` | Geometric preprocessing: `halfspaceCheck`, `convexHull2d`, `projectGnomonic`. |
+| `src/halfspace.zig` | Geometric preprocessing: `halfspaceCheck`, `convexHull2d`, `Gnomonic(T)` / `projectGnomonic`. |
 | `src/newton.zig` | Newton polish on the D-optimal dual + bordered KKT/LU. |
 
 ## Test layout
@@ -298,6 +309,21 @@ binary picks it up automatically.
 `build.zig.zon`'s `.paths` is the allowlist for what a consumer receives, and
 it lists only what compiling the `csar` module needs — `src/` plus the build
 and doc files. `tests/`, `cases/`, `examples/` and `bench/` stay out.
+
+The one dependency is [qmath](https://github.com/ajfriend/qmath)
+(first-party): every `log`/`log1p`/`sqrt` in `src/` routes through it,
+so f128 arms slot in behind qmath's version gate without touching call
+sites. Its f64 arms are `inline` builtin forwards — the routed
+`csar.solve` disassembles instruction-identical to the pre-routing
+baseline. Consumers resolve it transitively by URL+hash; bump the pin
+with `zig fetch --save` on a tagged qmath release.
+The routing boundary is syntactic and deliberate: top-level const
+declarations keep the builtins (`SIGMA_0`), function bodies route
+through qmath uniformly — spelling uniformity is a runtime-code
+concern, and comptime eval never touches libm. Generic-T code derives
+its constants AT `T` (see `sigma0` in gap_generic.zig and its comptime
+guard): a comptime f64 constant would silently type the computation
+and round f128 work through f64.
 
 `build.zig` still references those paths. That is safe by construction, not by
 luck: a dependency's `build()` constructs its step graph, but `b.path(...)` is

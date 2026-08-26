@@ -270,7 +270,7 @@ pub const Converged = struct {
     /// Aspect ratio of the cone cross-section = sigma[2] / sigma[1].
     sigma: [3]f64,
     /// Certified duality gap |primal − dual| (≤ `gap_tol`), measured
-    /// against the normalized dual (`dualityGapConstructed`, src/csar.zig).
+    /// against the normalized dual (`dualityGapConstructed`, src/gap_generic.zig).
     gap: f64,
     /// Algorithm-specific diagnostics; the tag records which solver
     /// path produced this outcome.

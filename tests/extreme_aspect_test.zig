@@ -1,7 +1,7 @@
 //! Stress tests for extreme-aspect-ratio inputs under rotation.
 //!
 //! Motivation. The recent symEigvals → Cholesky swap in
-//! `dualityGapConstructed` (src/csar.zig) tightened the indefinite-dual
+//! `dualityGapConstructed` (src/gap_generic.zig) tightened the indefinite-dual
 //! guard: the prior eig path tolerated a smallest M-eigenvalue in
 //! `[-CS_PSD_REL · max_eig, 0]` and clamped the log via UNDERFLOW; the
 //! Cholesky path bails on any non-positive pivot. The existing 48-case
@@ -431,8 +431,9 @@ test "convexHull2d tie-break sort: points sharing an x-coordinate" {
     const allocator = std.testing.allocator;
     const convexHull2d = halfspace.convexHull2d;
     const P = [_][2]f64{
-        .{ -1, -1 }, .{ 1, -1 }, .{ 1, 1 }, .{ -1, 1 },
-        .{ 0, -0.5 }, .{ 0, 0.5 }, .{ 0, 0 }, .{ 0, -0.25 }, .{ 0, 0.25 },
+        .{ -1, -1 },  .{ 1, -1 },  .{ 1, 1 }, .{ -1, 1 },
+        .{ 0, -0.5 }, .{ 0, 0.5 }, .{ 0, 0 }, .{ 0, -0.25 },
+        .{ 0, 0.25 },
     };
     const hull_idx = try allocator.alloc(u32, P.len);
     defer allocator.free(hull_idx);
@@ -497,8 +498,6 @@ test "OOM in the last cert alloc hits buildFarkasCert's indices errdefer" {
     const fi = try lastAllocFailIndex(&pts, opts);
     try std.testing.expectError(error.OutOfMemory, runWithFailIndex(fi, &pts, opts));
 }
-
-
 
 test "acceptBUpdate fallback: all backtracks fail when a point sits below FEAS_MARGIN" {
     // halfspaceCheck only guarantees `b·xᵢ > 0` strictly — not

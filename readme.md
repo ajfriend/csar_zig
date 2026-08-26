@@ -4,7 +4,10 @@ Spherical aspect-ratio solver. Given a point set on the unit sphere,
 finds the tightest ellipsoidal cone enclosing it (parameterized by a
 PSD matrix `A` and unit axis `b`) and returns the cone's axis ratio.
 
-A standalone, std-only Zig package — no third-party dependencies.
+A standalone Zig package with a single first-party dependency,
+[qmath](https://github.com/ajfriend/qmath) (transcendental math
+routines; details in dev.md "Packaging") — no third-party
+dependencies.
 
 ## Quick start
 
@@ -52,13 +55,16 @@ The original alternating solver was removed in 0.3.0.
 - `src/root.zig` — public API re-exports
 - `src/api.zig` — public API surface (types + methods + `checkFeasibility`)
 - `src/cert.zig` — foreign-candidate certification (`cert_primal` / `cert_dual` / `primal_violation`)
-- `src/csar.zig` — solver core: preprocessing, the inner MVEE machinery, certification, dispatch (std-only)
+- `src/csar.zig` — solver core: preprocessing, the inner MVEE machinery, dispatch
 - `src/trust.zig` — the trust-region solver path (what `.auto` resolves to)
+- `src/linalg_generic.zig`, `src/gap_generic.zig` — linalg primitives and the certificate/gap slice, generic over the scalar (f64 aliases re-exported via `src/linalg.zig` / `src/csar.zig`)
+- `src/oracle.zig` — debug instrument: re-evaluate a shipped certificate's gap at a wider scalar
 - `src/linalg.zig`, `src/halfspace.zig`, `src/newton.zig`, `src/config.zig` — internal modules
 - `tests/*_test.zig` — tests (run via `zig build test`); `cases_test.zig` is the one driven by the corpus
 - `cases/cases.zig` — comptime manifest over the .zon files; exposed as the `cases` build module
 - `cases/zon/*.zon` — fixture point sets + expected outcomes (data only)
 - `test_root.zig` — test-target root at repo level
+- `floor_survey.zig` — measurement driver at repo level (`zig build floor-survey`; findings: `docs/floor-survey.md`)
 - `examples/basic.zig`, `examples/status.zig`, `examples/cases.zig` — end-user usage demos
 - `dev.md` — developer-workflow guide (coverage, layout, conventions)
 

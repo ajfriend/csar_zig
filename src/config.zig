@@ -6,7 +6,7 @@
 /// Structural axial eigenvalue: A·b = SIGMA_0·b, where b is the cone axis.
 /// Derived in `recoverAPerp` via the budget/g_max rescaling: λ_b = √(1 − 2/3).
 /// Not tunable — it's geometry, not a knob.
-pub const SIGMA_0: f64 = 1.0 / @sqrt(3.0);
+pub const SIGMA_0: f64 = 1.0 / @sqrt(3.0); // comptime constant: builtin, not qmath
 
 /// Gate for tripwire assertions on invariants the solver checks at
 /// runtime (today: the duality-gap error model, `trust.certify`). Debug
@@ -60,6 +60,10 @@ pub const algo = struct {
     /// which is why a *fixed low* value (vs a relative or adaptive one)
     /// suffices: the support is identified by optimality, and the residual
     /// switching noise is below what any practical gap_tol resolves.
+    /// Phase-1 branch identity (#9): FIXED across T — a per-T value
+    /// could flip the active set between the f64 and f128 gap
+    /// evaluations and contaminate the oracle's measurement. See
+    /// gap_generic.zig's header; per-T laws are phase 2's triage.
     pub const ACTIVE_THRESH: f64 = 1e-12;
 
     /// Newton-polish iteration budget, shared by every polish call site.
@@ -326,12 +330,17 @@ pub const tol = struct {
     /// of gap_tol), gap_tol validation rejects tolerances at or above
     /// it, and outcomes carrying it have an empty cert and
     /// uninformative Q/sigma (documented on Uncertified.gap).
+    /// Phase-1 (#9): the sentinel keeps this value at every T.
     pub const GAP_UNCERTIFIED: f64 = 1e30;
     /// Underflow floor: pivot / scale / log argument.
+    /// Phase-1 branch identity (#9): FIXED across T (see
+    /// gap_generic.zig's header).
     pub const UNDERFLOW: f64 = 1e-300;
     /// Relative cutoff for "FP noise" vs. "theorem violation" on values
     /// that should be ≥ 0 by PSD invariant (eigenvalues of A_perp,
     /// det of Minv). Below the threshold ⇒ silent clip; above ⇒ loud
     /// SolveError.
+    /// Phase-1 branch identity (#9): FIXED across T (see
+    /// gap_generic.zig's header); per-T laws are phase 2's triage.
     pub const PSD_NEG_REL: f64 = 1e-12;
 };

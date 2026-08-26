@@ -58,12 +58,20 @@ RUNS = [
     ('bench/zig-out/bin/csar-ab', ['--gap-tol=1e-9'], True),
     ('bench/zig-out/bin/csar-ab', ['--gap-tol=abc'], False),
     ('bench/zig-out/bin/csar-ab', ['--no-such-flag'], False),
+    # Reduced floor-survey slice (full sweep: floor_survey.zig header).
+    # s2_L23's first 30 cells cover both outcome arms — converged (with
+    # certFloor) at 1e-9 and precision_floor (with the stall/negative
+    # aggregates) at 1e-10; an unfiltered small-limit run adds no lines.
+    ('zig-out/bin/csar-floor-survey', ['--batch=s2_L23', '--limit=30'], True),
+    ('zig-out/bin/csar-floor-survey', ['--batch=no-such-batch'], False),
+    ('zig-out/bin/csar-floor-survey', ['--limit=abc'], False),
+    ('zig-out/bin/csar-floor-survey', ['--no-such-flag'], False),
 ]
 INSTALL_DIRS = ['zig-out/bin', 'bench/zig-out/bin']  # every binary here must be in RUNS
 LOG = Path('zig-out/test-slow.log')
 OUT = Path('coverage')              # one kcov output dir per run, under here
 SUMMARY = OUT / 'summary.txt'       # the report; CI posts it on the PR
-INCLUDE_PATTERN = 'src/,tests/,cases/,examples/,bench/'
+INCLUDE_PATTERN = 'src/,tests/,cases/,examples/,bench/,floor_survey.zig'
 # The A/B harness compiles the pinned baseline's sources too (unpacked under
 # bench/zig-pkg/); those match `src/` and must not be measured.
 EXCLUDE_PATTERN = 'zig-pkg/'
@@ -187,7 +195,8 @@ excluded = {f: sorted(raw[f].keys() - gated.get(f, {}).keys()) for f in raw if r
 # apply the rule, or the marker no longer sits on an executable line. A
 # marked file no run measured is an error too. Not detectable: a marker on
 # a line that would have been covered (kcov excludes before measuring).
-sources = {str(p.resolve()): p.read_text() for pat in INCLUDE_PATTERN.split(',') for p in Path(pat).rglob('*.zig')
+sources = {str(p.resolve()): p.read_text() for pat in INCLUDE_PATTERN.split(',')
+           for p in ([Path(pat)] if Path(pat).is_file() else Path(pat).rglob('*.zig'))
            if EXCLUDE_PATTERN not in str(p)}
 marked = {f for f, t in sources.items() if 'kcov-excl' in t or '=> unreachable' in t}
 problems = []

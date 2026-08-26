@@ -5,6 +5,11 @@ commit that carries the full detail.
 
 ## [Unreleased]
 
+- Measure the f64 evaluation floor against f128 over the batches (#101)
+- Add the f128 gap oracle over promoted iterates (#100)
+- Genericize the certificate slice over `comptime T` (#99)
+- Route all transcendentals through the first-party `qmath` dependency (#98)
+
 ## [0.6.0]
 
 - Normalize dual variables so `‖Xλ‖₂ = 3` (#88)

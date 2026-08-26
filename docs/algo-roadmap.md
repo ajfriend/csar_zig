@@ -87,6 +87,13 @@ newton/trust boundary), zero algorithmic risk.
 
 ### 4. The certificate floor: extended-precision probe (the convergence lever)
 
+> **Superseded — the probe ran, at f128 instead of double-double
+> (docs/floor-survey.md; `zig build floor-survey`).** The answer is the
+> first branch below: the floor is the evaluation, not iterate
+> quantization — the entire floor-classified batch population certifies
+> below 1e-6 at f128. The numbers, the `gapFloor` calibration, and the
+> #55/#58 bake-off framing live in the survey report.
+
 The only convergence lever left is the f64 gap floor, not the solver. The
 tell is already in the record (CLAUDE.md, dggs_dnc_test): WHICH finest-res
 cells sit above vs below 1e-6 is path-dependent at noise level — so a large
@@ -222,8 +229,8 @@ Two consequences:
       γᵢ = λᵢ · Dᵢ / ‖Dᵢ‖            (dual-feasible by construction)
       rebuild Z(Γ), evaluate the gap through the existing M = LᵀZL path
 
-  All primitives exist in src/csar.zig (`Mat3.cholesky`, the M-path in
-  `dualityGapConstructed`); ~40 lines behind the existing
+  All primitives exist (`Mat3.cholesky` in src/linalg_generic.zig, the
+  M-path in `dualityGapConstructed`, src/gap_generic.zig); ~40 lines behind the existing
   Cholesky-failure branch. **The decisive experiment**: instrument
   `certifyAt` (src/trust.zig) to capture states where the first
   certificate fails M-Cholesky (the A5 res-30 population,
@@ -236,7 +243,7 @@ Two consequences:
 ### 7. Two-component, cancellation-free gap
 
 `dualityGapConstructed` computes the axis term as
-3·log1p((‖Xλ‖ − 3)/3) (src/csar.zig; the normalized-dual form) — the
+3·log1p((‖Xλ‖ − 3)/3) (src/gap_generic.zig; the normalized-dual form) — the
 log1p is exact, but its argument still subtracts 3 from a norm that
 is ≈ 3 near convergence, discarding the term's value into ~1e-15
 cancellation noise. Since b·Xλ = 3·Σwᵢ structurally, the stable
@@ -253,8 +260,8 @@ Discussion section) and sharpens item 4's probe (only gap_inner moves the
 eigenvalues at fixed axis). Afternoon-sized; measure on the floor-marginal
 S2/A5 populations (needs the survey harness — see the infrastructure note).
 
-**Implementation notes.** In `dualityGapConstructed` (src/csar.zig, the
-`gap = 3.0 * std.math.log1p(...) - Lm.logDet()` line; the exact `dev`
+**Implementation notes.** In `dualityGapConstructed` (src/gap_generic.zig, the
+`gap = 3.0 * qmath.log1p(...) - Lm.logDet()` line; the exact `dev`
 above replaces the naive `w_sum.norm() - 3.0` as the log1p argument):
 
 - `s = b·w_sum` — but compute the *deviation* `s − 3` without cancellation:
@@ -436,10 +443,9 @@ dot products — ~4× per dot, gated to a post-pass, cannot help the
 iteration), which is kept as the fallback for exactly the axis-offset term
 if the oracle shows it first order. Composition with f128 (#9): f128 alone
 does not remove the cancellation (it pays ε₁₂₈/θ, with more digits to
-spare); the shifted form gives relative ε at any precision. So #58 makes
-f64 sufficient for nearly every cell and turns the f128 instantiation into
-the oracle and last resort, not the production path — #9 phase 2 is scoped
-by whatever residue #58 and #54 leave.
+spare); the shifted form gives relative ε at any precision — the two
+tracks compound rather than compete (docs/floor-survey.md §3). For the
+*current* corpus, #58 + #54 scope what #9 phase 2 must add.
 
 Item 7 (the two-component gap) is the natural companion: its `gap_axis`
 split is where the second-order claim shows up as a number, so do it in the
@@ -458,7 +464,9 @@ eigen-based square root. Measure the second before paying for the first.
 The minority of floored cells; low priority.
 
 Order: #9 phase 1 (oracle) → #58 with item 7 → #54's Cholesky form → #9
-phase 2 only if a residue remains. What not to retry from this round, with
+phase 2, scoped by what the hardened-f64 residue and the solvability
+horizon then demand (sequencing, not a conditional — docs/floor-survey.md
+§3). What not to retry from this round, with
 the measurements on #53: an always-on repair in `recoverAPerp` (+1–3%,
 identical instruction count — dependency-chain serialisation), and
 `inline fn certify` (redistributes the detector's ≈1% across rows, removes

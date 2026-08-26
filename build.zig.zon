@@ -3,7 +3,12 @@
     .version = "0.6.0",
     .fingerprint = 0x9c8d1b0e21364c6e,
     .minimum_zig_version = "0.16.0",
-    .dependencies = .{},
+    .dependencies = .{
+        .qmath = .{
+            .url = "https://github.com/ajfriend/qmath/archive/refs/tags/v0.2.2.tar.gz",
+            .hash = "qmath-0.2.2-so3qB6WdAAAQ8Ffwy0MKV6lmQkOa7XqSCeidRrKGe13g",
+        },
+    },
     // Only what compiling the `csar` module needs; `just consumer-smoke`
     // proves the tree builds through this list. See dev.md "Packaging".
     .paths = .{
