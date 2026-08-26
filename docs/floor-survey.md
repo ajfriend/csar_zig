@@ -2,7 +2,7 @@
 
 **Status:** measured 2026-08-25; the answer of record for the
 iterate-vs-evaluation question (roadmap item 4, now superseded) and
-the calibration record for `csar.gapFloor`.
+the calibration record for `gapFloor` (src/csar.zig).
 **Instrument:** `floor_survey.zig` (`zig build floor-survey
 -Doptimize=ReleaseFast`) over the gap oracle (`src/oracle.zig`) —
 the solver's own gap path re-instantiated at `T = f128` on exactly
@@ -108,7 +108,7 @@ noise-scale, consistent with the model.
 
 ## 2. `gapFloor` calibration
 
-The model (`csar.gapFloor`): floor = (64·σ_max + κ(M))·ε. The
+The model (`gapFloor`, src/csar.zig): floor = (64·σ_max + κ(M))·ε. The
 measured coefficient is the survey table's `c` columns plus its
 corpus-wide line: p50 0.142 / p90 0.430 / p99 0.755 / max 1.294 over
 all 16,000 evaluations.

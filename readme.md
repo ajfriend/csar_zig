@@ -55,13 +55,16 @@ The original alternating solver was removed in 0.3.0.
 - `src/root.zig` — public API re-exports
 - `src/api.zig` — public API surface (types + methods + `checkFeasibility`)
 - `src/cert.zig` — foreign-candidate certification (`cert_primal` / `cert_dual` / `primal_violation`)
-- `src/csar.zig` — solver core: preprocessing, the inner MVEE machinery, certification, dispatch
+- `src/csar.zig` — solver core: preprocessing, the inner MVEE machinery, dispatch
 - `src/trust.zig` — the trust-region solver path (what `.auto` resolves to)
+- `src/linalg_generic.zig`, `src/gap_generic.zig` — linalg primitives and the certificate/gap slice, generic over the scalar (f64 aliases re-exported via `src/linalg.zig` / `src/csar.zig`)
+- `src/oracle.zig` — debug instrument: re-evaluate a shipped certificate's gap at a wider scalar
 - `src/linalg.zig`, `src/halfspace.zig`, `src/newton.zig`, `src/config.zig` — internal modules
 - `tests/*_test.zig` — tests (run via `zig build test`); `cases_test.zig` is the one driven by the corpus
 - `cases/cases.zig` — comptime manifest over the .zon files; exposed as the `cases` build module
 - `cases/zon/*.zon` — fixture point sets + expected outcomes (data only)
 - `test_root.zig` — test-target root at repo level
+- `floor_survey.zig` — measurement driver at repo level (`zig build floor-survey`; findings: `docs/floor-survey.md`)
 - `examples/basic.zig`, `examples/status.zig`, `examples/cases.zig` — end-user usage demos
 - `dev.md` — developer-workflow guide (coverage, layout, conventions)
 

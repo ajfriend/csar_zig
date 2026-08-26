@@ -229,8 +229,8 @@ Two consequences:
       γᵢ = λᵢ · Dᵢ / ‖Dᵢ‖            (dual-feasible by construction)
       rebuild Z(Γ), evaluate the gap through the existing M = LᵀZL path
 
-  All primitives exist in src/csar.zig (`Mat3.cholesky`, the M-path in
-  `dualityGapConstructed`); ~40 lines behind the existing
+  All primitives exist (`Mat3.cholesky` in src/linalg_generic.zig, the
+  M-path in `dualityGapConstructed`, src/gap_generic.zig); ~40 lines behind the existing
   Cholesky-failure branch. **The decisive experiment**: instrument
   `certifyAt` (src/trust.zig) to capture states where the first
   certificate fails M-Cholesky (the A5 res-30 population,
@@ -243,7 +243,7 @@ Two consequences:
 ### 7. Two-component, cancellation-free gap
 
 `dualityGapConstructed` computes the axis term as
-3·log1p((‖Xλ‖ − 3)/3) (src/csar.zig; the normalized-dual form) — the
+3·log1p((‖Xλ‖ − 3)/3) (src/gap_generic.zig; the normalized-dual form) — the
 log1p is exact, but its argument still subtracts 3 from a norm that
 is ≈ 3 near convergence, discarding the term's value into ~1e-15
 cancellation noise. Since b·Xλ = 3·Σwᵢ structurally, the stable
@@ -260,8 +260,8 @@ Discussion section) and sharpens item 4's probe (only gap_inner moves the
 eigenvalues at fixed axis). Afternoon-sized; measure on the floor-marginal
 S2/A5 populations (needs the survey harness — see the infrastructure note).
 
-**Implementation notes.** In `dualityGapConstructed` (src/csar.zig, the
-`gap = 3.0 * std.math.log1p(...) - Lm.logDet()` line; the exact `dev`
+**Implementation notes.** In `dualityGapConstructed` (src/gap_generic.zig, the
+`gap = 3.0 * qmath.log1p(...) - Lm.logDet()` line; the exact `dev`
 above replaces the naive `w_sum.norm() - 3.0` as the log1p argument):
 
 - `s = b·w_sum` — but compute the *deviation* `s − 3` without cancellation:
@@ -443,12 +443,9 @@ dot products — ~4× per dot, gated to a post-pass, cannot help the
 iteration), which is kept as the fallback for exactly the axis-offset term
 if the oracle shows it first order. Composition with f128 (#9): f128 alone
 does not remove the cancellation (it pays ε₁₂₈/θ, with more digits to
-spare); the shifted form gives relative ε at any precision — which is why
-the two tracks compound rather than compete: #58 hardens the numerics at
-every `T`, so the eventual `Solver(f128)` inherits it and starts from a
-lower floor. For the *current* corpus, #58 + #54 scope what #9 phase 2
-must add; the full instantiation remains #9's standing direction for
-inputs that push past hardened f64 (docs/floor-survey.md §3).
+spare); the shifted form gives relative ε at any precision — the two
+tracks compound rather than compete (docs/floor-survey.md §3). For the
+*current* corpus, #58 + #54 scope what #9 phase 2 must add.
 
 Item 7 (the two-component gap) is the natural companion: its `gap_axis`
 split is where the second-order claim shows up as a number, so do it in the

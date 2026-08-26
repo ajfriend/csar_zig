@@ -13,15 +13,14 @@
 //! Run: `zig build floor-survey -Doptimize=ReleaseFast` for the full
 //! measurement; `-- --batch=<name> --limit=<n>` restrict the sweep.
 //! Registered in the coverage gate's RUNS on reduced slices. Every
-//! number the report cites is in the run's own output — the run is
-//! deterministic, so re-running IS the per-cell record; there is no
-//! side-channel data file to keep in sync.
+//! number the report cites is in the run's own output (the
+//! no-side-channel rationale is the report's).
 //!
 //! Per cell: solve at the pinned options with the tight `gap_tol`,
 //! then `oracle.evalOutcome` at f64 and f128 on the returned outcome.
 //! The f64/f128 pair sees bit-identical inputs (promotion is exact),
 //! so their difference is pure evaluation noise — the quantity the
-//! floor model (`csar.gapFloor`) predicts. The floor: shipped
+//! floor model (`gapFloor`, src/csar.zig) predicts. The floor: shipped
 //! `gap_floor` for uncertified outcomes; for converged ones the model
 //! is re-run on chart moments rebuilt from the certificate (below).
 
@@ -224,7 +223,7 @@ fn runBatch(
 /// The floor model input for a converged outcome, rebuilt from what
 /// ships: project the certificate's active points into the gnomonic
 /// chart at the shipped axis, weight by normalized λ, and hand the
-/// chart moments to `csar.gapFloor`. The inactive points' near-zero
+/// chart moments to `core.gapFloor`. The inactive points' near-zero
 /// weights perturb κ(M) negligibly, and gapFloor's κ term is
 /// scale-invariant in λ — the boundary rescale washes out.
 /// A chart-infeasible axis is impossible for a converged outcome

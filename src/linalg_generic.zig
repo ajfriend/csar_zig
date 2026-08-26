@@ -30,12 +30,9 @@ pub fn Linalg(comptime T: type) type {
         /// eigenvector fallback. `|b| ≫ sqrt(ulp)·max(|a|,|d|)` ≈ `1.5e-8·scale`
         /// is the regime where `vals[0] − d` retains useful precision.
         ///
-        /// TOLERANCE AUDIT (#9 phase 1): the 1e-8 literal — sqrt(eps) for
-        /// f64 — is deliberately FIXED across T, not rescaled to
-        /// floatEps(T): the f128 gap oracle requires branch identity with
-        /// the f64 evaluation on promoted iterates, and a T-scaled
-        /// threshold could flip the eigenvector fallback between the two.
-        /// A per-T law is phase 2's triage.
+        /// The 1e-8 literal — sqrt(eps) for f64 — is deliberately FIXED
+        /// across T, per the branch-identity rule (the authoritative
+        /// list and rationale: gap_generic.zig's header).
         const EIG2_REL: T = 1e-8;
 
         // ----------------------------------------------------------------

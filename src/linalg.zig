@@ -3,7 +3,9 @@
 //! factor of a 3×3 SPD matrix, and a closed-form 2×2 symmetric
 //! eigendecomposition. Defined generically over the scalar in
 //! linalg_generic.zig (`Linalg(T)`); the f64 instantiation is
-//! re-exported here under the original names. No algorithm-specific
+//! re-exported here under the original names. The one exception is
+//! `LU` below — f64-only (the bordered-KKT path), defined in place
+//! rather than in the generic slice. No algorithm-specific
 //! knowledge — generic enough for a standalone numerical library.
 //!
 //! Cancellation hygiene: dot products and their variants chain

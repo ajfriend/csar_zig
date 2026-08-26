@@ -10,10 +10,12 @@
 //!
 //! Guards (branch identity, #9 phase 1): every threshold used here —
 //! `tol.PSD_NEG_REL`, `algo.ACTIVE_THRESH`, `tol.UNDERFLOW`,
-//! `tol.GAP_UNCERTIFIED`, Cholesky's `!(s > 0)` — keeps its f64
-//! literal value at every `T` (comparisons widen exactly), so the
-//! f128 evaluation takes the same branches as f64 on promoted
-//! iterates. Per-T scaling laws are phase 2's triage.
+//! `tol.GAP_UNCERTIFIED`, Cholesky's `!(s > 0)`, and `eig2`'s
+//! `EIG2_REL` (linalg_generic.zig) — keeps its f64 literal value at
+//! every `T` (comparisons widen exactly), so the f128 evaluation
+//! takes the same branches as f64 on promoted iterates. Per-T
+//! scaling laws are phase 2's triage. This header is the one
+//! authoritative list; the per-site notes point here.
 
 const std = @import("std");
 const qmath = @import("qmath");

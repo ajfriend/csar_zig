@@ -91,5 +91,5 @@ and `bench/ab.zig`.
   solver (stage 1: reduced-oracle only; stage 2 is moot since the
   alternating path was removed).
 - `docs/algo-roadmap.md` — ranked candidates for future speed/convergence/
-  stability work (range-space polish, elimination, cert-floor probe), plus
+  stability work (range-space polish, elimination, the two-component gap), plus
   the measured dead ends not to retry.

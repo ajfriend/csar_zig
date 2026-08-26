@@ -1,7 +1,7 @@
 //! Certify (A, b) cone candidates from any source.
 //!
 //! The solver certifies its own iterates inside the solve loop
-//! (`dualityGapConstructed`, csar.zig); this module makes the same
+//! (`dualityGapConstructed`, gap_generic.zig); this module makes the same
 //! certificate math reachable for a candidate produced elsewhere — a
 //! generic conic solver, a shipped certificate being re-checked, a
 //! hand-constructed cone. Two entry points, one core: `cert_primal`

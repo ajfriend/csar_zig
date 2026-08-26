@@ -259,17 +259,23 @@ pick up branch coverage automatically.
 ## Source layout
 
 The `src/` directory contains library code only — nothing in there
-should be test- or diagnostic-specific.
+should be test- or diagnostic-specific. The one carve-out is
+`oracle.zig`: a debug instrument that must sit beside the generic
+slice it re-instantiates, kept out of the public surface by not being
+exported from `root.zig` rather than by placement.
 
 | File | Role |
 | --- | --- |
 | `src/root.zig` | Module entry point — thin re-export shim over `api.zig` + `solve` from `csar.zig`. |
 | `src/api.zig` | Solver public surface: `Outcome` (`Converged` / `Infeasible` / `Uncertified` ×2), `Cert`, `SolveError` / `InputError` / `SolveOptions`, `checkFeasibility`. |
 | `src/cert.zig` | Foreign-candidate certification: `cert_primal` / `cert_dual` / `primal_violation` and their result types. |
-| `src/csar.zig` | Algorithm orchestration: mvee/gap inner code, outer-loop driver, `solve`. |
-| `src/linalg.zig` | Linear algebra primitives: Vec2/3, Mat2/3/3x2, Chol3, `eig2`. |
+| `src/csar.zig` | Algorithm orchestration: mvee inner code, outer-loop driver, `solve`; re-exports the f64 `Gap` instantiation as decl aliases. |
+| `src/linalg_generic.zig` | `Linalg(T)`: the linear-algebra primitives (Vec2/3, Mat2/3/3x2, Chol3, `eig2`), generic over the scalar. |
+| `src/linalg.zig` | f64 alias shim over `Linalg(f64)`, plus the f64-only `LU` (bordered-KKT consumer; deliberately outside the generic slice). |
+| `src/gap_generic.zig` | `Gap(T)`: the certificate/gap slice (moments, `recoverAPerp`, `dualityGapConstructed`, `gapFromMultipliers`) — home of the phase-1 branch-identity rules. |
+| `src/oracle.zig` | Debug instrument: re-evaluate a shipped certificate's gap at a wider `T` (unexported; drives `floor_survey.zig`). |
 | `src/config.zig` | Internal tuning: `SIGMA_0`, `algo` (algorithm tuning), `tol` (numerical tolerances). |
-| `src/halfspace.zig` | Geometric preprocessing: `halfspaceCheck`, `convexHull2d`, `projectGnomonic`. |
+| `src/halfspace.zig` | Geometric preprocessing: `halfspaceCheck`, `convexHull2d`, `Gnomonic(T)` / `projectGnomonic`. |
 | `src/newton.zig` | Newton polish on the D-optimal dual + bordered KKT/LU. |
 
 ## Test layout
@@ -310,7 +316,8 @@ so f128 arms slot in behind qmath's version gate without touching call
 sites. Its f64 arms are `inline` builtin forwards — the routed
 `csar.solve` disassembles instruction-identical to the pre-routing
 baseline. Consumers resolve it transitively by URL+hash; bump the pin
-with `zig fetch --save` on a tagged qmath release. The routing boundary is syntactic and deliberate: top-level const
+with `zig fetch --save` on a tagged qmath release.
+The routing boundary is syntactic and deliberate: top-level const
 declarations keep the builtins (`SIGMA_0`), function bodies route
 through qmath uniformly — spelling uniformity is a runtime-code
 concern, and comptime eval never touches libm. Generic-T code derives
