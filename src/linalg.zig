@@ -1,16 +1,16 @@
 //! Linear algebra primitives used by the solver: 2D/3D vectors, 2×2 and
 //! 3×3 matrices, a 3×2 orthonormal basis, the lower-triangular Cholesky
 //! factor of a 3×3 SPD matrix, and a closed-form 2×2 symmetric
-//! eigendecomposition. No algorithm-specific knowledge — these are
-//! generic enough that they could be lifted into a standalone numerical
-//! library.
+//! eigendecomposition. Defined generically over the scalar in
+//! linalg_generic.zig (`Linalg(T)`); the f64 instantiation is
+//! re-exported here under the original names. No algorithm-specific
+//! knowledge — generic enough for a standalone numerical library.
 //!
 //! Cancellation hygiene: dot products and their variants chain
 //! `@mulAdd` to save 1 rounding per term. Cross products and 2×2
 //! determinants use `diff_of_products`, Kahan's compensated FMA scheme
 //! for `a*b − c*d`, accurate to ~2 ulp even at near-cancellation.
 //! Pattern mirrored from sibling project sparea_zig.
-
 
 pub const Linalg = @import("linalg_generic.zig").Linalg;
 
@@ -93,4 +93,3 @@ pub const LU = struct {
         }
     }
 };
-

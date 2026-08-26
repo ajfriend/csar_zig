@@ -2,9 +2,10 @@
 //!
 //! Shared solver core: preprocessing (Farkas halfspace check, optional
 //! convex-hull reduction, coplanarity rejection), the gnomonic-chart MVEE
-//! primitives (FW steps, moments, damped axis step, Newton polish,
-//! constructed dual certificate), and `solve`, which dispatches to
-//! `trust.zig`. Uses @Vector(N, f64) + generic helpers for 3D math.
+//! primitives (FW steps, damped axis step, Newton polish), and `solve`,
+//! which dispatches to `trust.zig`. The moments / constructed-dual-
+//! certificate slice is generic over T in gap_generic.zig and
+//! re-exported here at f64 under the original names.
 //!
 //! Allocator convention:
 //!   - solve() takes any std.mem.Allocator. The returned Info.cert lives on
@@ -35,8 +36,6 @@ const Vec3 = linalg.Vec3;
 const Mat2 = linalg.Mat2;
 const Mat3 = linalg.Mat3;
 const Mat3x2 = linalg.Mat3x2;
-const Chol3 = linalg.Chol3;
-const Eig2 = linalg.Eig2;
 const eig2 = linalg.eig2;
 
 // ----------------------------------------------------------------
@@ -58,12 +57,6 @@ const Outcome = api.Outcome;
 const SolveError = api.SolveError;
 const InputError = api.InputError;
 const SolveOptions = api.SolveOptions;
-
-// ----------------------------------------------------------------
-// Outer-loop primitives: rescale / moments / axis step.
-// Each is a thin wrapper so the outer loop reads close to pseudocode.
-// All inline → zero runtime cost vs hand-rolled arithmetic.
-// ----------------------------------------------------------------
 
 // ----------------------------------------------------------------
 // The certificate slice — generic over T in gap_generic.zig; the f64
@@ -471,10 +464,6 @@ pub fn initWeights(P: []const [2]f64, w: []f64) void {
         uniformWeights(w);
     }
 }
-
-// ----------------------------------------------------------------
-// Solution recovery: 2D shape M → 3D A
-// ----------------------------------------------------------------
 
 // ----------------------------------------------------------------
 // Newton polish (extracted to newton.zig)
