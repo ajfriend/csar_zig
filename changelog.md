@@ -5,6 +5,8 @@ commit that carries the full detail.
 
 ## [Unreleased]
 
+- Pin the solvable frontier: per-rung convergence counts with an oracle honesty audit (#107)
+
 - Measure the f64 evaluation floor against f128 over the batches (#101)
 - Add the f128 gap oracle over promoted iterates (#100)
 - Genericize the certificate slice over `comptime T` (#99)

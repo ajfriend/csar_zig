@@ -25,7 +25,8 @@
 
 const std = @import("std");
 
-/// The tolerance every pin in the corpus — cases and batches — is taken at.
+/// The tolerance every pin — cases, batches, and the frontier
+/// ladder's counts and audit (tests/frontier_test.zig) — is taken at.
 pub const GAP_TOL: f64 = 1e-6;
 
 /// The solver options every pin is taken under, as a value of the caller's

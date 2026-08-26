@@ -71,7 +71,11 @@ tiers 2-3 of dev.md's tier legend.) Protect the hot path:
   computes and diffs those against the pinned baseline for review.
   Frontier inputs go into the corpus at tier 2/3 — schema in
   `cases/cases.zig`, tier legend and promotion protocol in dev.md; the
-  A/B report is where their shifts surface, as `[t2]`/`[t3]` rows.
+  A/B report is where their shifts surface, as `[t2]`/`[t3]` rows. The
+  one sanctioned equality pin is aggregate: `tests/frontier_test.zig`
+  pins per-rung convergence COUNTS (the solvable frontier as a
+  monitored number); a count shift is flag-and-reconcile, re-pinned
+  in the same PR with the shift explained.
 
 When changing the solver, the full check is: `just ci` green (suite + coverage
 gate + both backends where supported) + **`just ab`**, which measures the
