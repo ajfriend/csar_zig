@@ -5,8 +5,8 @@
     .minimum_zig_version = "0.16.0",
     .dependencies = .{
         .qmath = .{
-            .url = "https://github.com/ajfriend/qmath/archive/refs/tags/v0.1.0.tar.gz",
-            .hash = "qmath-0.1.0-so3qBwgoAAAcSRjk9d_aAaLRYQQuGCWpL1yfNeFnGav_",
+            .url = "https://github.com/ajfriend/qmath/archive/refs/tags/v0.2.1.tar.gz",
+            .hash = "qmath-0.2.1-so3qB0isAAAlVYwlF-6G7awgrV1Tu9PbcU3TgYKbsYqh",
         },
     },
     .paths = .{
