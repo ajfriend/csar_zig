@@ -29,7 +29,11 @@ const helpers = @import("helpers.zig");
 /// 9.1e-10 on h3_r15_ring10) — a bootstrap-sized demonstration of
 /// exactly the phenomenon the oracle program measures. Bit-for-bit
 /// was never on the table; per-cell floor-normalized verdicts are
-/// #96's. Never loosen without a call-out.
+/// #96's. Measured over cases converging at PINNED DEFAULTS (tiers
+/// 0–1); tier-2 slivers are excluded by design below — their floors
+/// can far exceed this bound (#62), and their verdicts are per-cell
+/// floor-normalized in #96's report. Do not extend this absolute
+/// bound to them. Never loosen without a call-out.
 const BOOTSTRAP_TOL: f64 = 1e-8;
 
 test "corpus: f64 bootstrap reproduces shipped gaps; f128 branch identity" {
@@ -38,6 +42,9 @@ test "corpus: f64 bootstrap reproduces shipped gaps; f128 branch identity" {
     for (cases.all) |entry| {
         const case = entry.case;
         if (case.claim != .converges) continue;
+        // Tier-2 needs its settings table and a floor-normalized
+        // verdict — #96's territory (see BOOTSTRAP_TOL).
+        if (case.tier >= 2) continue;
         var outcome = try csar.solve(allocator, case.points, cases.pin(csar.SolveOptions));
         defer outcome.deinit();
         const c = switch (outcome) {
@@ -55,7 +62,9 @@ test "corpus: f64 bootstrap reproduces shipped gaps; f128 branch identity" {
         try std.testing.expect(diff <= BOOTSTRAP_TOL);
 
         // Branch identity: both precisions succeeded (non-null above),
-        // and the wider evaluation is sane — the value verdict is #96's.
+        // and the wider evaluation is sane. The 1e-3 is a deliberately
+        // loose wiring check — a wrong-column/wrong-λ bug is O(1) —
+        // never a value verdict; those are #96's.
         try std.testing.expect(std.math.isFinite(o128));
         try std.testing.expect(@abs(@as(f128, o64) - o128) < 1e-3);
     }
@@ -86,7 +95,7 @@ test "null: infeasible outcomes and empty-cert sentinels" {
         .sigma = .{ 1, 1, 1 },
         .gap = 1e30,
         .gap_floor = 0,
-        .diag = .{ .trust = .{ .eager_certified = false, .open_iters = 0, .tr_iters = 0, .recert_attempts = 0, .polish_failures = 0, .gaps_below_model = 0 } },
+        .diag = .{ .trust = std.mem.zeroes(csar.TrustDiagnostics) },
         .cert = .{ .indices = &[_]u32{}, .lambdas = &[_]f64{} },
         .allocator = allocator,
     } };

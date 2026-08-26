@@ -10,23 +10,18 @@
 //! Reconstruction (pinned on #95): everything comes from the returned
 //! outcome plus the input points. A is promoted from the outcome's
 //! factored (Q, σ) — f64 → T widening is exact, and buildOutcome's
-//! handedness flip of v₂ is harmless here since only v·vᵀ enters the
-//! gap. Multipliers come from the shipped cert; they are
-//! boundary-rescaled (#88), which the λ-scale-invariant gap absorbs
-//! mathematically — but the rescale's one rounding per entry moves the
-//! recomputed gap by EVALUATION-FLOOR noise (the σ_max·ε cancellation
-//! in M = LᵀZL), not ulp noise. The f64 bootstrap therefore reproduces
-//! the outcome's gap to floor scale, and that observation is itself
-//! the first demonstration of the noise this instrument measures
-//! (bound and measurements: tests/oracle_test.zig). A_perp is
-//! deliberately NOT rebuilt through chart → recoverAPerp: the
-//! ACTIVE_THRESH truncation would perturb M at exactly the resolution
-//! #96 measures.
-//!
-//! Population caveats: sentinel outcomes (empty cert; Q/σ carry no
-//! information) and infeasible outcomes return null. An `Uncertified`
-//! snapshot is the last CERTIFIED iterate, not the final one — the
-//! oracle evaluates what ships.
+//! handedness flip of v₂ is bit-exactly harmless: it enters buildA
+//! quadratically (sign-invariant) and L's third column linearly, where
+//! the flip is a diag(1, 1, −1) similarity of M whose sign washes out
+//! of the Cholesky diagonal — logDet reads only the diagonal.
+//! Multipliers come from the shipped cert; they are
+//! boundary-rescaled (#88), so the f64 bootstrap reproduces the
+//! outcome's gap to evaluation-floor scale, not bit-for-bit
+//! (mechanism, bound, measurements: BOOTSTRAP_TOL in
+//! tests/oracle_test.zig). A_perp is deliberately NOT rebuilt through
+//! chart → recoverAPerp: the ACTIVE_THRESH truncation would perturb M
+//! at exactly the resolution #96 measures. Null contracts are on
+//! `evalOutcome`.
 
 const std = @import("std");
 
@@ -55,9 +50,9 @@ pub fn evalCert(
     const k = indices.len;
     std.debug.assert(k > 0 and lambdas.len == k);
 
-    const b = promote(T, Q.col(0));
-    const v1 = promote(T, Q.col(1));
-    const v2 = promote(T, Q.col(2));
+    const b = promote(T, Q.col(0).m);
+    const v1 = promote(T, Q.col(1).m);
+    const v2 = promote(T, Q.col(2).m);
     const sig: [2]T = .{ sigma[1], sigma[2] };
 
     const xa = try allocator.alloc(la.Vec3, k);
@@ -66,11 +61,10 @@ pub fn evalCert(
     defer allocator.free(lam);
     const za = try allocator.alloc(la.Vec3, k);
     defer allocator.free(za);
-    const lam_out = try allocator.alloc(T, k);
+    const lam_out = try allocator.alloc(T, k); // required by the callee; discarded
     defer allocator.free(lam_out);
     for (0..k) |i| {
-        const p = X[indices[i]];
-        xa[i] = .{ .m = .{ p[0], p[1], p[2] } };
+        xa[i] = promote(T, X[indices[i]]);
         lam[i] = lambdas[i];
     }
 
@@ -100,6 +94,6 @@ pub fn evalOutcome(
 
 /// f64 → T widening of a vector: exact for every float `T` ≥ f64, so
 /// the `T` evaluation sees exactly the shipped iterate.
-fn promote(comptime T: type, v: linalg.Vec3) linalg.Linalg(T).Vec3 {
-    return .{ .m = .{ v.m[0], v.m[1], v.m[2] } };
+fn promote(comptime T: type, p: [3]f64) linalg.Linalg(T).Vec3 {
+    return .{ .m = .{ p[0], p[1], p[2] } };
 }

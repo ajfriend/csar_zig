@@ -131,10 +131,16 @@ pub fn Gap(comptime T: type) type {
             }
 
             pub fn init(allocator: std.mem.Allocator, nmax: usize) !GapScratch {
+                const active_idx = try allocator.alloc(usize, nmax);
+                errdefer allocator.free(active_idx);
+                const lam = try allocator.alloc(T, nmax);
+                errdefer allocator.free(lam);
+                const xa = try allocator.alloc(Vec3, nmax);
+                errdefer allocator.free(xa);
                 return .{
-                    .active_idx = try allocator.alloc(usize, nmax),
-                    .lam = try allocator.alloc(T, nmax),
-                    .xa = try allocator.alloc(Vec3, nmax),
+                    .active_idx = active_idx,
+                    .lam = lam,
+                    .xa = xa,
                     .za = try allocator.alloc(Vec3, nmax),
                 };
             }
