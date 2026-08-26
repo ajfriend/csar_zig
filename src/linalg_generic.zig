@@ -53,6 +53,33 @@ pub fn Linalg(comptime T: type) type {
                 t = @mulAdd(T, a.m[2], b.m[2], t);
                 return t;
             }
+
+            /// Compensated dot (Ogita–Rump–Oishi Dot2): TwoProduct via
+            /// fma per term, TwoSum-accumulated error — the result is
+            /// accurate to relative ~ε even when O(1) terms cancel to a
+            /// tiny total, where `dot` leaves absolute ~ε. Used where a
+            /// single cancelling dot would otherwise be the one
+            /// ε/θ-error input of an evaluation (the gap slice's
+            /// reference-point chart coordinates). Cost at f64:
+            /// ~2× `dot` in time, measured both latency- and
+            /// throughput-shaped (the ~5× op count is mostly hidden
+            /// by ILP); at f128 the three genuine fmas make it far
+            /// worse (soft-float). Not a default: at non-cancelling
+            /// sites it buys nothing.
+            pub fn dotCompensated(a: Vec3, b: Vec3) T {
+                var s = a.m[0] * b.m[0];
+                var e = @mulAdd(T, a.m[0], b.m[0], -s);
+                inline for (1..3) |j| {
+                    const p = a.m[j] * b.m[j];
+                    const ep = @mulAdd(T, a.m[j], b.m[j], -p);
+                    const t = s + p;
+                    const z = t - s;
+                    const es = (s - (t - z)) + (p - z);
+                    s = t;
+                    e += ep + es;
+                }
+                return s + e;
+            }
             pub inline fn norm(v: Vec3) T {
                 return qmath.sqrt(v.dot(v));
             }

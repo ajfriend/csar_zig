@@ -167,12 +167,12 @@ pub const Sym2 = struct {
 
 - Real refactor. Sites touched:
   - `src/linalg.zig` — new `Sym3` / `Sym2` types, related ops
-  - `src/csar.zig` — `mveeFw`'s S matrix, `computeMoments`'s
-    `M_s`, `buildA`, `dualityGapConstructed`'s M, `recoverAPerp`
+  - `src/csar.zig` / `src/gap_generic.zig` — `mveeFw`'s S matrix,
+    `computeMoments`'s `M_s`, `gapFromMultipliers`'s E/M, `recoverAPerp`
   - `src/newton.zig` — H matrix construction
   - `tests/linalg_test.zig` — symmetry tests redundant; could
     delete or move to Sym3 unit tests
-- Mixed-type operations: `dualityGapConstructed` does `L^T · Z ·
+- Mixed-type operations: `cert_dual` (src/cert.zig) does `L^T · Z ·
   L` then symmetrizes. Z is `Mat3` (general). L is the Cholesky
   factor (lower triangular). The product is symmetric (matches
   Z's algebraic structure under SPD assumption). Would need a

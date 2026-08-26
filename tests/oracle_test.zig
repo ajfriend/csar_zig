@@ -2,9 +2,8 @@
 //!
 //! Coverage:
 //!  - f64 bootstrap: the oracle's f64 re-evaluation reproduces every
-//!    converged corpus outcome's gap to evaluation-floor noise (see
-//!    BOOTSTRAP_TOL — the bound is measured, and its scale is itself
-//!    a finding);
+//!    converged corpus outcome's gap to ulp scale (see BOOTSTRAP_TOL
+//!    — the bound is measured);
 //!  - branch identity across the corpus: the f128 evaluation succeeds
 //!    exactly where the f64 one does (same Cholesky verdict), on the
 //!    same given active set;
@@ -22,20 +21,16 @@ const helpers = @import("helpers.zig");
 
 /// |oracle_f64 − outcome.gap|: same arithmetic, same factored A; the
 /// only input difference is the shipped λ's boundary rescale (one
-/// rounding per entry). That ulp-level perturbation moves the gap by
-/// EVALUATION-FLOOR noise, not ulp noise: M = LᵀZL sums σ_max-sized
-/// products that cancel to O(1), so the diff scales with the
-/// σ_max·ε floor (measured: ~1e-12 on h3_r9, ~3e-11 on r12, worst
-/// 9.1e-10 on h3_r15_ring10) — a bootstrap-sized demonstration of
-/// exactly the phenomenon the floor survey measures. Bit-for-bit
-/// was never on the table; per-cell floor-normalized verdicts are
-/// the survey's (docs/floor-survey.md). Measured over cases
-/// converging at PINNED DEFAULTS (tiers 0–1); tier-2 slivers are
-/// excluded by design below — their floors can far exceed this
-/// bound (#62), and the survey's batch corpus deliberately excludes
-/// them too. Do not extend this absolute bound to them. Never
-/// loosen without a call-out.
-const BOOTSTRAP_TOL: f64 = 1e-8;
+/// rounding per entry), and the gap is λ-scale invariant, so the
+/// diff is ulp-scale. Under the old 3D evaluation this bound was
+/// 1e-8 (the rescale perturbation was amplified to σ_max·ε
+/// evaluation-floor noise — the story docs/floor-survey.md records);
+/// the chart-form evaluation removed that amplification, and the
+/// measured worst over the corpus is now 1.1e-15 (exact_min3_ar5).
+/// Measured over cases converging at PINNED DEFAULTS (tiers 0–1);
+/// tier-2 slivers are excluded by design below. Never loosen
+/// without a call-out.
+const BOOTSTRAP_TOL: f64 = 1e-13;
 
 test "corpus: f64 bootstrap reproduces shipped gaps; f128 branch identity" {
     const allocator = std.testing.allocator;

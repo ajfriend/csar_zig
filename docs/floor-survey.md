@@ -147,8 +147,9 @@ floor (a floor cell's own solve at 1e-10 is ~10 µs). That per-eval
 cost is also the number #55's compensated f64 competes against in
 the bake-off. Whether it
 ships as f128 (this slice), compensated f64 (#55), or is removed
-algebraically (#58) is that pair's bake-off — refereed against this
-survey's per-cell record once #58 lands, per the roadmap's addendum.
+algebraically (the shift-then-project rung — landed as roadmap item
+11, exactly this referee protocol) is that pair's bake-off, refereed
+against this survey's per-cell record.
 
 Sequencing, not a verdict on f128 (#9's standing direction): the
 program is two compounding tracks. First, squeeze the f64 numerics —

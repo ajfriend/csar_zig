@@ -256,7 +256,9 @@ fn certFloor(allocator: std.mem.Allocator, X: []const [3]f64, Q: linalg.Mat3, si
     const Ps = try allocator.alloc([2]f64, k);
     defer allocator.free(Ps);
     const Q_tan: linalg.Mat3x2 = .{ .e1 = Q.col(1), .e2 = Q.col(2) };
-    if (!halfspace.projectGnomonic(xa, Q.col(0), Q_tan, P_buf, 0)) return error.InfeasibleChart;
+    const xd = try allocator.alloc(linalg.Vec3, k);
+    defer allocator.free(xd);
+    if (!halfspace.projectGnomonic(halfspace.shiftPoints(xa, xd), Q.col(0), Q_tan, P_buf, 0)) return error.InfeasibleChart;
     const s_scale = core.rescaleP(P_buf, Ps);
     const moments = core.computeMoments(Ps, w, s_scale);
     return core.gapFloor(sigma[2], moments.M);

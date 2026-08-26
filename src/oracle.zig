@@ -10,13 +10,13 @@
 //! Reconstruction: everything comes from the returned
 //! outcome plus the input points. A is promoted from the outcome's
 //! factored (Q, σ) — f64 → T widening is exact, and buildOutcome's
-//! handedness flip of v₂ is bit-exactly harmless: it enters buildA
-//! quadratically (sign-invariant) and L's third column linearly, where
-//! the flip is a diag(1, 1, −1) similarity of M whose sign washes out
-//! of the Cholesky diagonal — logDet reads only the diagonal.
+//! handedness flip of v₂ is bit-exactly harmless: it flips p₂ (and
+//! m₂) sign-symmetrically, a diag(1, 1, −1) similarity of M whose
+//! sign washes out of the Cholesky diagonal — logDet reads only the
+//! diagonal — and ‖m‖² is sign-invariant.
 //! Multipliers come from the shipped cert; they are
-//! boundary-rescaled (#88), so the f64 bootstrap reproduces the
-//! outcome's gap to evaluation-floor scale, not bit-for-bit
+//! boundary-rescaled (#88) and the gap is λ-scale invariant, so the
+//! f64 bootstrap reproduces the outcome's gap to ulp scale
 //! (mechanism, bound, measurements: BOOTSTRAP_TOL in
 //! tests/oracle_test.zig). A_perp is deliberately NOT rebuilt through
 //! chart → recoverAPerp: the ACTIVE_THRESH truncation would perturb M
@@ -60,8 +60,6 @@ pub fn evalCert(
     defer allocator.free(xa);
     const lam = try allocator.alloc(T, k);
     defer allocator.free(lam);
-    const za = try allocator.alloc(la.Vec3, k);
-    defer allocator.free(za);
     const lam_out = try allocator.alloc(T, k); // required by the callee; discarded
     defer allocator.free(lam_out);
     for (0..k) |i| {
@@ -69,7 +67,7 @@ pub fn evalCert(
         lam[i] = lambdas[i];
     }
 
-    const r = G.gapFromMultipliers(b, v1, v2, sig, xa, lam, za, lam_out);
+    const r = G.gapFromMultipliers(b, v1, v2, sig, xa, lam, lam_out);
     if (r.gap == tol.GAP_UNCERTIFIED) return null;
     return r.gap;
 }

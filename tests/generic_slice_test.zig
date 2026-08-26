@@ -48,7 +48,8 @@ fn octantGap(comptime T: type, allocator: std.mem.Allocator) !struct { gap: T, c
     const Q = b.orthoBasis();
 
     var P_buf: [3][2]T = undefined;
-    try std.testing.expect(proj.projectGnomonic(&X, b, Q, &P_buf, 0));
+    var xd: [3]la.Vec3 = undefined;
+    try std.testing.expect(proj.projectGnomonic(proj.shiftPoints(&X, &xd), b, Q, &P_buf, 0));
     var Ps: [3][2]T = undefined;
     const s_scale = G.rescaleP(&P_buf, &Ps);
     const w = [_]T{ 1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0 };
@@ -70,10 +71,10 @@ test "Gap(f128) vs Gap(f64): agreement at f64-noise scale, branch identity" {
 
     // The octant's uniform weights are the exact optimum: both gaps are
     // ~eps-level, and they must agree to f64 evaluation noise (the f128
-    // value stands as the truth the f64 one approximates). Measured:
-    // gap64 = -eps(f64) exactly, gap128 ~ eps(f128) — diff 2.2e-16,
-    // 45x under the bound; deterministic cross-platform (qmath
-    // transcendentals + guaranteed-fused @mulAdd, no libm variance).
+    // value stands as the truth the f64 one approximates); deterministic
+    // cross-platform (qmath transcendentals + guaranteed-fused @mulAdd,
+    // no libm variance), so the bound's headroom is re-verified by this
+    // assert on every change to the slice.
     try std.testing.expect(@abs(@as(f128, r64.gap) - r128.gap) <= 1e-14);
     // Branch identity: same support at both precisions (the phase-1
     // rule in gap_generic.zig's header; protects the oracle's
@@ -97,14 +98,15 @@ test "Gnomonic(f128): feasibility margin rejects like f64" {
     const X = [_]la.Vec3{ .{ .m = .{ 1, 0, 0 } }, .{ .m = .{ 0, 1, 0 } } };
     const b = la.Vec3{ .m = .{ 1, 0, 0 } }; // b·X[1] = 0 < margin
     var P: [2][2]f128 = undefined;
-    try std.testing.expect(!proj.projectGnomonic(&X, b, b.orthoBasis(), &P, 1e-30));
+    var xd: [2]la.Vec3 = undefined;
+    try std.testing.expect(!proj.projectGnomonic(proj.shiftPoints(&X, &xd), b, b.orthoBasis(), &P, 1e-30));
 }
 
 test "GapScratch.init frees earlier slices when a later alloc fails" {
-    // Fail each of the four allocations in turn; the errdefers must
+    // Fail each of the three allocations in turn; the errdefers must
     // release whatever was already allocated (testing.allocator is the
-    // leak check). fail_index 4 doesn't fire: init succeeds.
-    for (0..4) |fail_index| {
+    // leak check). fail_index 3 doesn't fire: init succeeds.
+    for (0..3) |fail_index| {
         var fa = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = fail_index });
         try std.testing.expectError(error.OutOfMemory, gap_generic.Gap(f64).GapScratch.init(fa.allocator(), 4));
     }

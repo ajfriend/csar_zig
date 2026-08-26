@@ -123,13 +123,11 @@ pub fn Gap(comptime T: type) type {
             active_idx: []usize, // [nmax]  points with w > thresh
             lam: []T, // [nmax]  dual lambdas: 3 w_i / (b·x_i)
             xa: []Vec3, // [nmax]  active x_i (from X_work)
-            za: []Vec3, // [nmax]  normalized A x_i / ‖A x_i‖
 
             pub fn deinit(self: *GapScratch, allocator: std.mem.Allocator) void {
                 allocator.free(self.active_idx);
                 allocator.free(self.lam);
                 allocator.free(self.xa);
-                allocator.free(self.za);
             }
 
             pub fn init(allocator: std.mem.Allocator, nmax: usize) !GapScratch {
@@ -137,13 +135,10 @@ pub fn Gap(comptime T: type) type {
                 errdefer allocator.free(active_idx);
                 const lam = try allocator.alloc(T, nmax);
                 errdefer allocator.free(lam);
-                const xa = try allocator.alloc(Vec3, nmax);
-                errdefer allocator.free(xa);
                 return .{
                     .active_idx = active_idx,
                     .lam = lam,
-                    .xa = xa,
-                    .za = try allocator.alloc(Vec3, nmax),
+                    .xa = try allocator.alloc(Vec3, nmax),
                 };
             }
         };
@@ -163,17 +158,6 @@ pub fn Gap(comptime T: type) type {
             sigma: [2]T,
         };
 
-        /// Assemble A from its eigendecomposition: A = (1/√3)·b·bᵀ + σ₁·v₁·v₁ᵀ
-        /// + σ₂·v₂·v₂ᵀ. Used internally by the gap computation; consumers
-        /// should call `Converged.A()` instead (in `api.zig`).
-        fn buildA(b: Vec3, v1: Vec3, v2: Vec3, sigma1: T, sigma2: T) Mat3 {
-            var m = Mat3.zero;
-            m.addSymRank1(sigma0, b);
-            m.addSymRank1(sigma1, v1);
-            m.addSymRank1(sigma2, v2);
-            return m;
-        }
-
         /// Structural dual gap on (b, A_perp, Q_ortho). A's eigendecomposition falls out
         /// of eig(A_perp) + lifting through Q_ortho, so we build L = V·√Λ directly — no
         /// Cholesky with fallback.
@@ -192,11 +176,11 @@ pub fn Gap(comptime T: type) type {
             // so `solve`'s finalization reuses it without re-decomposing.
             const eAPerp = eig2(A_perp.m);
             // A_perp is PSD by construction; eig2 can produce ulp-scale negative
-            // eigenvalues from FP noise. Clip noise to 0 (so the sqrt below is
-            // well-defined and downstream M = LᵀZL routes through the Cholesky
-            // null guard as "no progress"), but raise NegativeEigenvalue when
-            // the negative value is meaningful — that signals Newton polish
-            // landed on a non-PSD iterate or eig2 has a bug.
+            // eigenvalues from FP noise. Clip noise to 0 (a clipped zero is
+            // caught by gapFromMultipliers' sigma sentinel as "no progress"),
+            // but raise NegativeEigenvalue when the negative value is
+            // meaningful — that signals Newton polish landed on a non-PSD
+            // iterate or eig2 has a bug.
             const sigma_raw: [2]T = eAPerp.vals;
             const sigma_neg_thr = tol.PSD_NEG_REL * @max(sigma_raw[1], 1.0);
             if (sigma_raw[0] < -sigma_neg_thr) return SolveError.NegativeEigenvalue;
@@ -207,7 +191,6 @@ pub fn Gap(comptime T: type) type {
             const active_idx = s.active_idx;
             const lam = s.lam;
             const xa = s.xa;
-            const za = s.za;
             var k: usize = 0;
             for (w, 0..) |wi, i| {
                 if (wi > algo.ACTIVE_THRESH) {
@@ -223,18 +206,48 @@ pub fn Gap(comptime T: type) type {
                 lam[i] = 3.0 * w[idx] / b.dot(xa[i]);
                 cert_active_out[i] = idx;
             }
-            return gapFromMultipliers(b, v1, v2, sigma, xa[0..k], lam[0..k], za, cert_lambdas_out);
+            return gapFromMultipliers(b, v1, v2, sigma, xa[0..k], lam[0..k], cert_lambdas_out);
         }
 
         /// The post-active-set core of `dualityGapConstructed`: the gap
         /// of an EXPLICIT multiplier set. Its own entry point so a
         /// caller holding (λ, active xᵢ) — the f128 oracle
         /// re-evaluating a shipped certificate — reaches the identical
-        /// arithmetic without a lossy λ→w→λ round-trip. `inline` keeps
-        /// the solver's f64 codegen identical to the pre-split
-        /// straight-line body (disassembly-verified). `za` is scratch;
-        /// the boundary-normalized multipliers land in
-        /// `cert_lambdas_out[0..lam.len]`.
+        /// arithmetic. The boundary-normalized multipliers land in
+        /// `cert_lambdas_out[0..lam.len]`. (`inline`: certification-path
+        /// only, small body, k ≤ ~10 — and the shipped timing was
+        /// measured with it.)
+        ///
+        /// CHART FORM (roadmap item 11). The dual it constructs is
+        /// unchanged — γᵢ = λᵢ·ẑᵢ with ẑᵢ = A·xᵢ/‖A·xᵢ‖,
+        /// Z = Σᵢ λᵢ·sym(xᵢẑᵢᵀ), and gap = 3·log1p((‖Xλ‖−3)/3) −
+        /// log det M with M = Lᵀ·Z·L, L·Lᵀ = A (the 3D spelling
+        /// cert.zig's `cert_dual` still carries verbatim) — but every
+        /// quantity is evaluated in the tangent chart at `b` spanned by
+        /// (v₁, v₂), A's own eigenbasis, reached through the shifted
+        /// projection. The algebra: with
+        /// zᵢ = xᵢ/(b·xᵢ) = b + p₁ᵢv₁ + p₂ᵢv₂ exactly and
+        /// λᵢxᵢ = 3wᵢzᵢ (wᵢ = λᵢ(b·xᵢ)/3), ẑᵢ's coordinates in the
+        /// eigenbasis are tᵢ/nᵢ (below) — never materialized — and the
+        /// similarity collapses to
+        ///   M_jk = E_jk · (σⱼ+σₖ)/(2√(σⱼσₖ)),
+        ///   E    = 3·Σᵢ (wᵢ/nᵢ)·tᵢtᵢᵀ,
+        ///   tᵢ   = Λ·[1; pᵢ] = [σ₀; σ₁p₁ᵢ; σ₂p₂ᵢ],  nᵢ = ‖A·zᵢ‖ = ‖tᵢ‖,
+        /// and Xλ = 3·(S_w·b + m₁v₁ + m₂v₂) with S_w = Σwᵢ, m = Σwᵢpᵢ.
+        /// Every accumulated term is O(1): σⱼ ~ 1/θ meets pᵢ ~ θ inside
+        /// tᵢ before any sum, so no O(1) dot cancels to a θ-sized
+        /// result and the σ_max·ε evaluation floor (docs/floor-survey.md)
+        /// is gone; the remaining amplification is the √κ(A)-scale
+        /// mixing factor on E's near-cancelling off-diagonal moments.
+        /// ‖Xλ‖−3 uses the cancellation-free form (algo-roadmap item
+        /// 7): (S_w²−1) exact-to-one-rounding via a fused S_w·S_w − 1,
+        /// plus ‖m‖², over √(·)+1.
+        ///
+        /// Guards, branch-identical across T (header rules): the
+        /// M-Cholesky failure is the same indefinite-dual sentinel as
+        /// ever; a zero tangential eigenvalue (sigma[0] clipped to 0)
+        /// made the 3D form's M singular — same Cholesky-null sentinel,
+        /// tested before the division that would now produce NaN.
         pub inline fn gapFromMultipliers(
             b: Vec3,
             v1: Vec3,
@@ -242,77 +255,84 @@ pub fn Gap(comptime T: type) type {
             sigma: [2]T,
             xa: []const Vec3,
             lam: []const T,
-            za: []Vec3,
             cert_lambdas_out: []T,
         ) GapResult {
             const k = xa.len;
             std.debug.assert(k > 0 and lam.len == k);
+            if (!(sigma[0] > 0))
+                return .{ .gap = tol.GAP_UNCERTIFIED, .cert_n = 0, .v1 = v1, .v2 = v2, .sigma = sigma };
 
-            // Materialize A once; per-point matvec in the zᵢ loop is cheaper than a
-            // structural A·x decomposition once there are ≥ 2 points.
-            const A = buildA(b, v1, v2, sigma[0], sigma[1]);
+            // Shifted projection of the active set onto (v₁, v₂) at b —
+            // the same split halfspace.projectGnomonic documents, at the
+            // certificate's own basis. Also recovers wᵢ = λᵢ(b·xᵢ)/3.
+            // The reference point's own chart coordinates are the one
+            // remaining cancelling dot (O(1) components, θ-sized
+            // result); their absolute-ε error is common to every point,
+            // and away from exact optimality the gap is first-order
+            // sensitive to that common offset with a σ-amplified
+            // coefficient (E's first-moment rows × the √κ mixing
+            // factors) — so these two dots, and only these, are
+            // compensated. b·c cancels nothing (≈ 1); plain.
+            const c = xa[0];
+            const qc1 = la.Vec3.dotCompensated(v1, c);
+            const qc2 = la.Vec3.dotCompensated(v2, c);
+            const bc = b.dot(c);
+            var S_w: T = 0;
+            var m1: T = 0;
+            var m2: T = 0;
+            var E = Mat3.zero;
             for (0..k) |i| {
-                za[i] = A.apply(xa[i]).normalize();
+                const d = xa[i].sub(c);
+                const ci = bc + b.dot(d);
+                const p1 = (qc1 + v1.dot(d)) / ci;
+                const p2 = (qc2 + v2.dot(d)) / ci;
+                const wi = lam[i] * ci / 3.0;
+                S_w += wi;
+                m1 = @mulAdd(T, wi, p1, m1);
+                m2 = @mulAdd(T, wi, p2, m2);
+                const t = Vec3{ .m = .{ sigma0, sigma[0] * p1, sigma[1] * p2 } };
+                E.addSymRank1(3.0 * wi / t.norm(), t);
             }
 
-            // Z = Σᵢ λᵢ · (xᵢ zᵢᵀ + zᵢ xᵢᵀ) / 2
-            var Z = Mat3.zero;
-            for (0..k) |i| {
-                Z.addSymRank2(lam[i], xa[i], za[i]);
-            }
-
-            // L = V·√Λ so L·Lᵀ = A. Non-triangular, but we only use it in the
-            // symmetric similarity Lᵀ·Z·L — any square root of A works there.
-            const L0 = b.scale(qmath.sqrt(sigma0));
-            const L1 = v1.scale(qmath.sqrt(sigma[0]));
-            const L2 = v2.scale(qmath.sqrt(sigma[1]));
-            const L = Mat3{ .m = .{
-                L0.m[0], L1.m[0], L2.m[0],
-                L0.m[1], L1.m[1], L2.m[1],
-                L0.m[2], L1.m[2], L2.m[2],
+            // M from E via the eigenvalue mixing factors. σ₀ is fixed;
+            // f_jk = (σⱼ+σₖ)/(2√(σⱼσₖ)) ≥ 1, equal to 1 on the diagonal.
+            const f01 = (sigma0 + sigma[0]) / (2.0 * qmath.sqrt(sigma0 * sigma[0]));
+            const f02 = (sigma0 + sigma[1]) / (2.0 * qmath.sqrt(sigma0 * sigma[1]));
+            const f12 = (sigma[0] + sigma[1]) / (2.0 * qmath.sqrt(sigma[0] * sigma[1]));
+            const M = Mat3{ .m = .{
+                E.m[0],       f01 * E.m[1], f02 * E.m[2],
+                f01 * E.m[3], E.m[4],       f12 * E.m[5],
+                f02 * E.m[6], f12 * E.m[7], E.m[8],
             } };
-
-            // M = Lᵀ · Z · L. eig(M) = eig(A·Z); eigenvalues cluster near 1 at
-            // convergence, so Cholesky on M is well-conditioned. A failed pivot
-            // is the indefinite-dual guard — Z not PSD enough for log det.
-            const M = L.transpose().mul(Z).mul(L).symmetrize();
             const Lm = M.cholesky() orelse
                 return .{ .gap = tol.GAP_UNCERTIFIED, .cert_n = 0, .v1 = v1, .v2 = v2, .sigma = sigma };
 
-            var w_sum = Vec3.zero;
-            for (0..k) |i| {
-                w_sum = Vec3.lincomb(1.0, w_sum, lam[i], xa[i]);
-            }
-            const xlam_norm = w_sum.norm();
-
-            // Export the multipliers rescaled onto the normalized dual's
-            // constraint boundary (‖Xλ‖ = 3), so a shipped certificate
-            // satisfies the stated feasible set literally. Only the exported
-            // copy is scaled: the gap below already prices in the rescale (see
-            // the gap comment), and the raw `lam` keeps the exact identity
-            // λᵢ·(b·xᵢ) = 3wᵢ. No zero guard: ‖Xλ‖ ≥ b·Xλ = 3·Σ_active wᵢ ≈ 3
-            // whenever k > 0.
-            const cert_scale = 3.0 / xlam_norm;
+            // ‖Xλ‖ in chart form; the boundary rescale and the gap read
+            // off it. Export the multipliers rescaled onto the normalized
+            // dual's constraint boundary (‖Xλ‖ = 3), so a shipped
+            // certificate satisfies the stated feasible set literally.
+            // Only the exported copy is scaled: the gap below already
+            // prices in the rescale, and the raw `lam` keeps the exact
+            // identity λᵢ·(b·xᵢ) = 3wᵢ. No zero guard: ‖Xλ‖ ≥ b·Xλ =
+            // 3·S_w ≈ 3 whenever k > 0.
+            const m_sq = @mulAdd(T, m1, m1, m2 * m2);
+            const root = qmath.sqrt(@mulAdd(T, S_w, S_w, m_sq));
+            const cert_scale = 1.0 / root;
             for (0..k) |i| {
                 cert_lambdas_out[i] = cert_scale * lam[i];
             }
 
-            // Gap against the normalized dual (max log det Z s.t. ‖Xλ‖ ≤ 3):
-            // rescaling the multipliers onto the constraint boundary by 3/‖Xλ‖
-            // contributes 3·log(‖Xλ‖/3), and via the similarity
-            // log det Z = log det M − log det A the two log det A terms cancel:
-            //   gap = 3·log(‖Xλ‖/3) − log det M      (w_sum = Xλ).
-            // Since ‖Xλ‖ − 3 ≥ 3·log(‖Xλ‖/3), this is never looser than the
-            // Lagrangian form ‖Xλ‖ − 3 − log det M. ‖Xλ‖ is used directly
-            // rather than assuming b·Xλ = 3: that identity is broken by
-            // active-set truncation (Σ_active wᵢ is slightly below 1), and the
-            // ‖Xλ‖ form is a valid dual value regardless — do not "simplify"
-            // the assumption in. Computed as 3·log1p((‖Xλ‖ − 3)/3), exact up
-            // to the subtraction's ~1e-15 cancellation (algo-roadmap item 7);
-            // routing through M (eigenvalues near 1 at convergence) avoids the
-            // ~1e-3 error of sum-of-logs on Z's own ill-conditioned
-            // eigenvalues (hex-degenerate cases, κ(Z) ~ 1e7).
-            const gap = 3.0 * qmath.log1p((xlam_norm - 3.0) / 3.0) - Lm.logDet();
+            // Gap against the normalized dual (max log det Z s.t.
+            // ‖Xλ‖ ≤ 3): the boundary rescale contributes
+            // 3·log(‖Xλ‖/3), and via the similarity the two log det A
+            // terms cancel: gap = 3·log(‖Xλ‖/3) − log det M. ‖Xλ‖ is
+            // used directly rather than assuming b·Xλ = 3: active-set
+            // truncation breaks that identity, and the ‖Xλ‖ form is a
+            // valid dual value regardless — do not "simplify" the
+            // assumption in. The log1p argument is the cancellation-free
+            // split of ‖Xλ‖/3 − 1 (header note).
+            const dev = (@mulAdd(T, S_w, S_w, -1.0) + m_sq) / (root + 1.0);
+            const gap = 3.0 * qmath.log1p(dev) - Lm.logDet();
             return .{
                 .gap = gap,
                 .cert_n = k,

@@ -5,9 +5,10 @@
 //!   certificate of infeasibility).
 //! - `convexHull2d`: Andrew's monotone chain over 2D-projected points,
 //!   used to reduce large inputs to their hull boundary.
-//! - `projectGnomonic`: tangent-plane projection at a feasible axis.
+//! - `shiftPoints` + `projectGnomonic`: shift-then-project
+//!   tangent-plane projection at a feasible axis.
 //!
-//! All three operate on linear-algebra primitives from `linalg.zig`
+//! All of them operate on linear-algebra primitives from `linalg.zig`
 //! and read tolerances/constants from `config.zig`. None of them
 //! capture solver outer-loop state, so they can live cleanly outside
 //! `csar.zig`.
@@ -154,20 +155,56 @@ pub fn convexHull2d(allocator: std.mem.Allocator, P: []const [2]f64, hull_idx: [
 pub fn Gnomonic(comptime T: type) type {
     const la = linalg.Linalg(T);
     return struct {
+        const Self = @This();
+
+        /// The reference point `c = X[0]` and the differences
+        /// `dᵢ = xᵢ − c` — axis-independent, so `shiftPoints` runs
+        /// once per point set and every projection at every trial
+        /// axis reuses them (the split's numerics: `projectGnomonic`).
+        pub const ShiftedPoints = struct { c: la.Vec3, d: []const la.Vec3 };
+
+        /// Fill `d[0..X.len]` with `xᵢ − X[0]` and return the view.
+        /// `X` must be non-empty — a caller with possibly-empty input
+        /// owns that case (`cert_primal`'s `empty_support`).
+        pub fn shiftPoints(X: []const la.Vec3, d: []la.Vec3) Self.ShiftedPoints {
+            const c = X[0];
+            for (X, 0..) |xi, i| d[i] = xi.sub(c);
+            return .{ .c = c, .d = d[0..X.len] };
+        }
+
         /// Projection is well-defined iff every `b·xᵢ ≥ feas_margin`.
         /// Returns `false` and short-circuits on the first violator;
         /// the trailing `P[i..]` is left unspecified. Callers that
         /// already know feasibility (e.g. post-`halfspaceCheck` initial
         /// projection) can pass −inf to bypass the check.
-        pub fn projectGnomonic(X: []const la.Vec3, b: la.Vec3, Q: la.Mat3x2, P: [][2]T, feas_margin: T) bool {
-            for (X, 0..) |xi, i| {
-                const ci = b.dot(xi);
+        ///
+        /// Shift-then-project (roadmap item 11): each dot is split
+        /// through the reference point — `Qᵀxᵢ = Qᵀc + Qᵀdᵢ`. For a
+        /// clustered cell the dᵢ are O(θ) and subtract exactly
+        /// (Sterbenz), so `Qᵀdᵢ` carries relative-ε error where the
+        /// direct `Qᵀxᵢ` — an O(1) dot cancelling to a θ-sized result —
+        /// carries absolute-ε (relative ε/θ, the gapFloor σ_max·ε
+        /// term's source). The remaining absolute-ε error in `Qᵀc` is
+        /// common to every point: a translation of the chart cloud,
+        /// invisible to the MVEE's shape. For non-clustered inputs the
+        /// split is mathematically identical and costs one extra
+        /// rounding — nothing is lost. The gap evaluation carries its
+        /// own copy of this split at the certificate's eigenbasis, with
+        /// the reference dots compensated (`gapFromMultipliers`,
+        /// gap_generic.zig) — amend both together.
+        pub fn projectGnomonic(sp: Self.ShiftedPoints, b: la.Vec3, Q: la.Mat3x2, P: [][2]T, feas_margin: T) bool {
+            const qc = Q.applyT(sp.c);
+            const bc = b.dot(sp.c);
+            for (sp.d, 0..) |di, i| {
+                const ci = bc + b.dot(di);
                 if (ci < feas_margin) return false;
-                const p = Q.applyT(xi);
+                const p = la.Vec2.add(qc, Q.applyT(di));
                 P[i] = .{ p.m[0] / ci, p.m[1] / ci };
             }
             return true;
         }
     };
 }
+pub const ShiftedPoints = Gnomonic(f64).ShiftedPoints;
+pub const shiftPoints = Gnomonic(f64).shiftPoints;
 pub const projectGnomonic = Gnomonic(f64).projectGnomonic;

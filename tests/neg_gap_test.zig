@@ -79,7 +79,8 @@ test "a negative gap is the symptom of an infeasible certificate, and the model 
     b = b.normalize();
     const Q = b.orthoBasis();
     const P = try a.alloc([2]f64, X.len);
-    try std.testing.expect(halfspace.projectGnomonic(X, b, Q, P, 0.0));
+    const xd = try a.alloc(Vec3, X.len);
+    try std.testing.expect(halfspace.projectGnomonic(halfspace.shiftPoints(X, xd), b, Q, P, 0.0));
     const w = try a.alloc(f64, X.len);
     core.initWeights(P, w); // uniform for ≤ SEED_SPARSE_MIN_POINTS points
     const M = core.computeMoments(P, w, 1.0).M;

@@ -207,6 +207,7 @@ pub fn cert_primal(
     b_raw: Vec3,
 ) error{OutOfMemory}!PrimalOutcome {
     const n = X.len;
+    if (n == 0) return .{ .no_certificate = .empty_support };
     const b_norm = b_raw.norm();
     if (!(b_norm > tol.TINY)) return .{ .no_certificate = .axis_not_interior };
     const b = b_raw.scale(1.0 / b_norm);
@@ -221,7 +222,8 @@ pub fn cert_primal(
     // Gnomonic chart at the candidate's axis; rejects any b·xᵢ at or
     // below zero (the projection divides by it).
     const P_buf = try arena.alloc([2]f64, n);
-    if (!halfspace.projectGnomonic(Xv, b, b.orthoBasis(), P_buf, tol.TINY)) {
+    const xd = try arena.alloc(Vec3, n);
+    if (!halfspace.projectGnomonic(halfspace.shiftPoints(Xv, xd), b, b.orthoBasis(), P_buf, tol.TINY)) {
         return .{ .no_certificate = .axis_not_interior };
     }
     const Ps = try arena.alloc([2]f64, n);

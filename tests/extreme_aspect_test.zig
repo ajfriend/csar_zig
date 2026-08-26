@@ -521,7 +521,8 @@ test "acceptBUpdate fallback: all backtracks fail when a point sits below FEAS_M
     const u = linalg.Vec2{ .m = .{ -1, 0 } };
     var P_buf: [1][2]f64 = undefined;
     var Ps: [1][2]f64 = undefined;
-    const step = acceptBUpdate(&Xw, b, Q, u, 1.0, &P_buf, &Ps);
+    var xd: [1]csar.Vec3 = undefined;
+    const step = acceptBUpdate(halfspace.shiftPoints(&Xw, &xd), b, Q, u, 1.0, &P_buf, &Ps);
     // Fallback returns the input (b, Q) unchanged and a freshly
     // recomputed s_scale from rescaleP on the re-projected P_buf.
     // Assert all three so a future change that drops the rescaleP

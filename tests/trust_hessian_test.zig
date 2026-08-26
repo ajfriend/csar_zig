@@ -29,9 +29,9 @@ const FD_T: f64 = 3e-3;
 
 /// h(b) via the full oracle, restoring the caller's weights afterward
 /// so every FD evaluation starts from the same warm state.
-fn hAt(b: Vec3, Xw: []const Vec3, wb: *trust.Buffers, w_base: []const f64) f64 {
+fn hAt(b: Vec3, sp: halfspace.ShiftedPoints, wb: *trust.Buffers, w_base: []const f64) f64 {
     @memcpy(wb.w, w_base);
-    const e = trust.evalH(b, Xw, wb, -std.math.inf(f64)) orelse unreachable;
+    const e = trust.evalH(b, sp, wb, -std.math.inf(f64)) orelse unreachable;
     return e.h;
 }
 
@@ -64,17 +64,18 @@ fn fdCheck(alloc: std.mem.Allocator, points: []const [3]f64) !FdCheck {
     // Seed weights the way solveTrust's opening does, then refine to
     // oracle quality once so the base state is inner-optimal.
     const Q = b.orthoBasis();
-    try std.testing.expect(halfspace.projectGnomonic(Xw, b, Q, wb.P_buf, -std.math.inf(f64)));
+    const sp = halfspace.shiftPoints(Xw, wb.xd);
+    try std.testing.expect(halfspace.projectGnomonic(sp, b, Q, wb.P_buf, -std.math.inf(f64)));
     _ = core.rescaleP(wb.P_buf, wb.Ps);
     core.initWeights(wb.Ps, wb.w);
     const w_base = try a.alloc(f64, n);
     @memcpy(w_base, wb.w);
 
-    const e0 = trust.evalH(b, Xw, &wb, -std.math.inf(f64)) orelse unreachable;
+    const e0 = trust.evalH(b, sp, &wb, -std.math.inf(f64)) orelse unreachable;
     // Re-baseline on the refined weights: FD evaluations warm-start
     // from the oracle-quality state, minimizing refinement noise.
     @memcpy(w_base, wb.w);
-    const h0 = hAt(b, Xw, &wb, w_base);
+    const h0 = hAt(b, sp, &wb, w_base);
 
     const dirs = [_]Vec2{
         .{ .m = .{ 1, 0 } },
@@ -91,8 +92,8 @@ fn fdCheck(alloc: std.mem.Allocator, points: []const [3]f64) !FdCheck {
         const du = e0.Q.apply(u);
         const bp = Vec3.lincomb(1.0, b, FD_T, du).normalize();
         const bm = Vec3.lincomb(1.0, b, -FD_T, du).normalize();
-        const hp = hAt(bp, Xw, &wb, w_base);
-        const hm = hAt(bm, Xw, &wb, w_base);
+        const hp = hAt(bp, sp, &wb, w_base);
+        const hm = hAt(bm, sp, &wb, w_base);
 
         const fd_grad = (hp - hm) / (2.0 * FD_T);
         const fd_hess = (hp - 2.0 * h0 + hm) / (FD_T * FD_T);
