@@ -136,20 +136,32 @@ with c = |gap_f64 − gap_f128| / (σ_max·ε) over all 16,000 evaluations:
 
 ## 3. What this feeds (recorded on #9)
 
-Phase 1's question — build the full `Solver(f128)`? — gets a *no* on
-the iterate-error branch of the gate: the f64 iteration does not fall
-short of its own evaluation floor, so re-running it wider chases
-noise the certificate path already dominates. The live candidate is
-the narrow one: a **wide gap evaluation on the floor path** — on this
-corpus it would certify 100% of floor-classified cells at the 1e-6
-default outright, and gives the loop a merit signal down to
-~σ_max·ε²-scale for the tight-tolerance residue. The full sweep's
-cost hint: 32,000 oracle evaluations inside a ~1 s run — wide
-evaluation is microseconds-scale per cell even at soft-float f128.
-Whether it ships as f128 (this slice), compensated f64 (#55), or is
-removed algebraically (#58) is that pair's bake-off — refereed
-against this survey's per-cell record once #58 lands, per the
-roadmap's addendum.
+Phase 1's question — is the full `Solver(f128)` the *next* step? —
+gets a *not yet* on the iterate-error branch of the gate: on this
+corpus the f64 iteration reaches its own evaluation floor, so the
+binding constraint is the certificate's arithmetic, not the
+iteration's. The near-term lever is the narrow one: a **wide gap
+evaluation on the floor path** — on this corpus it would certify
+100% of floor-classified cells at the 1e-6 default outright, and
+gives the loop a merit signal down to ~σ_max·ε²-scale for the
+tight-tolerance residue. The full sweep's cost hint: 32,000 oracle
+evaluations inside a ~1 s run — wide evaluation is
+microseconds-scale per cell even at soft-float f128. Whether it
+ships as f128 (this slice), compensated f64 (#55), or is removed
+algebraically (#58) is that pair's bake-off — refereed against this
+survey's per-cell record once #58 lands, per the roadmap's addendum.
+
+Sequencing, not a verdict on f128 (#9's standing direction): the
+program is two compounding tracks. First, squeeze the f64 numerics —
+solver and certificate — as far as they go; through the generic
+slice those improvements carry to every instantiation, and the f128
+oracle is the debugging instrument that makes that work measurable
+at any precision. Then the full `Solver(T)` extends whatever the
+hardened numerics achieve when inputs push past what f64 can reach —
+this corpus doesn't produce such inputs, but it was chosen before we
+could look past the old floor, and the solvability horizon is meant
+to keep moving. Neither track substitutes for the other; the survey
+only says which one the *current* corpus is waiting on.
 
 ## Reproducing
 
