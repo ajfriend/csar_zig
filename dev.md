@@ -35,6 +35,7 @@
 | `just consumer-smoke` | Build `scripts/consumer_smoke/` against the tree as a consumer receives it, and print the shipped file list. The only check of the published package rather than the working tree; see "Packaging". |
 | `just ab` | A/B the working tree against the pinned baseline, both in one binary. `just ab --aa` calibrates. See "A/B benchmarking" below. |
 | `just clean` | Remove `zig-out/`, `.zig-cache/`, `coverage/`, and the bench package's caches and unpacked baseline. |
+| `zig build floor-survey -Doptimize=ReleaseFast` | The floor survey (`floor_survey.zig`): re-solve every batch cell at tight tolerances and re-evaluate each shipped certificate through the gap oracle at f64 and f128. Findings: `docs/floor-survey.md`. |
 | `just surveys::…` | The states/countries survey pipelines (research/example tooling), grouped in the `surveys` module (`surveys.just`) — `just --list surveys`. |
 
 ### Two test tiers
@@ -210,8 +211,12 @@ first is a question, not a technique, and it comes first:
   wide-cap eager certificate fails by construction) so both arms
   execute on every platform.
 
-Nothing anywhere is currently excluded — the ledger is empty (the
-last marker, on `examples/cases.zig`'s DNC print, was retired when
+The ledger currently holds one line: `floor_survey.zig`'s
+`.infeasible => unreachable` switch arm (feasibility is a property of
+the point set, and every batch cell is feasible by the batches
+contract — no narrower type exists to delete the arm, since the
+driver consumes the public `Outcome`). No `kcov-excl` markers exist
+(the last, on `examples/cases.zig`'s DNC print, was retired when
 the tier-2/3 frontier fixtures made that line genuinely covered).
 Historical
 evidence for the polish-bail

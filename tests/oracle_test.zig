@@ -1,4 +1,4 @@
-//! Tests for the gap oracle (src/oracle.zig) — #95's acceptance.
+//! Tests for the gap oracle (src/oracle.zig).
 //!
 //! Coverage:
 //!  - f64 bootstrap: the oracle's f64 re-evaluation reproduces every
@@ -12,7 +12,7 @@
 //!  - null returns: infeasible outcomes and empty-cert sentinels.
 //!
 //! The numeric verdicts — what gap_f128 says about the f64 floor —
-//! belong to #96, not here.
+//! belong to the floor survey (docs/floor-survey.md), not here.
 
 const std = @import("std");
 const csar = @import("../src/root.zig");
@@ -27,13 +27,14 @@ const helpers = @import("helpers.zig");
 /// products that cancel to O(1), so the diff scales with the
 /// σ_max·ε floor (measured: ~1e-12 on h3_r9, ~3e-11 on r12, worst
 /// 9.1e-10 on h3_r15_ring10) — a bootstrap-sized demonstration of
-/// exactly the phenomenon the oracle program measures. Bit-for-bit
+/// exactly the phenomenon the floor survey measures. Bit-for-bit
 /// was never on the table; per-cell floor-normalized verdicts are
-/// #96's. Measured over cases converging at PINNED DEFAULTS (tiers
-/// 0–1); tier-2 slivers are excluded by design below — their floors
-/// can far exceed this bound (#62), and their verdicts are per-cell
-/// floor-normalized in #96's report. Do not extend this absolute
-/// bound to them. Never loosen without a call-out.
+/// the survey's (docs/floor-survey.md). Measured over cases
+/// converging at PINNED DEFAULTS (tiers 0–1); tier-2 slivers are
+/// excluded by design below — their floors can far exceed this
+/// bound (#62), and the survey's batch corpus deliberately excludes
+/// them too. Do not extend this absolute bound to them. Never
+/// loosen without a call-out.
 const BOOTSTRAP_TOL: f64 = 1e-8;
 
 test "corpus: f64 bootstrap reproduces shipped gaps; f128 branch identity" {
@@ -43,7 +44,7 @@ test "corpus: f64 bootstrap reproduces shipped gaps; f128 branch identity" {
         const case = entry.case;
         if (case.claim != .converges) continue;
         // Tier-2 needs its settings table and a floor-normalized
-        // verdict — #96's territory (see BOOTSTRAP_TOL).
+        // verdict — out of scope here (see BOOTSTRAP_TOL).
         if (case.tier >= 2) continue;
         var outcome = try csar.solve(allocator, case.points, cases.pin(csar.SolveOptions));
         defer outcome.deinit();
@@ -64,7 +65,7 @@ test "corpus: f64 bootstrap reproduces shipped gaps; f128 branch identity" {
         // Branch identity: both precisions succeeded (non-null above),
         // and the wider evaluation is sane. The 1e-3 is a deliberately
         // loose wiring check — a wrong-column/wrong-λ bug is O(1) —
-        // never a value verdict; those are #96's.
+        // never a value verdict; those are the floor survey's.
         try std.testing.expect(std.math.isFinite(o128));
         try std.testing.expect(@abs(@as(f128, o64) - o128) < 1e-3);
     }

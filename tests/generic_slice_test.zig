@@ -1,8 +1,8 @@
 //! Tests for the certificate slice's `T = f128` instantiation
 //! (src/linalg_generic.zig, src/gap_generic.zig, halfspace's
-//! `Gnomonic`). Per #94's acceptance this proves the instantiation
-//! exists and behaves — the f128 *values* become authoritative with
-//! the oracle work; here we pin instantiation, basic identities, the
+//! `Gnomonic`). This proves the instantiation exists and behaves —
+//! the f128 *values* are the oracle's and the floor survey's
+//! (docs/floor-survey.md); here we pin instantiation, basic identities, the
 //! f64/f128 gap agreement at f64-noise scale on a promoted case, and
 //! branch identity (same active set at both precisions).
 
@@ -75,8 +75,9 @@ test "Gap(f128) vs Gap(f64): agreement at f64-noise scale, branch identity" {
     // 45x under the bound; deterministic cross-platform (qmath
     // transcendentals + guaranteed-fused @mulAdd, no libm variance).
     try std.testing.expect(@abs(@as(f128, r64.gap) - r128.gap) <= 1e-14);
-    // Branch identity: same support at both precisions (#94's phase-1
-    // rule; protects the oracle's measurement).
+    // Branch identity: same support at both precisions (the phase-1
+    // rule in gap_generic.zig's header; protects the oracle's
+    // measurement).
     try std.testing.expectEqual(r64.cert_n, r128.cert_n);
     // Sanity tie to the public solve on the same input (identity of
     // the f64 path is proven by the alias/type system, not this bound

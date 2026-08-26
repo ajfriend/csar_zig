@@ -5,6 +5,7 @@ commit that carries the full detail.
 
 ## [Unreleased]
 
+- Measure the f64 evaluation floor against f128 over the batches (#101)
 - Add the f128 gap oracle over promoted iterates (#100)
 - Genericize the certificate slice over `comptime T` (#99)
 

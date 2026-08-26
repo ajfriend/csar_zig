@@ -87,6 +87,13 @@ newton/trust boundary), zero algorithmic risk.
 
 ### 4. The certificate floor: extended-precision probe (the convergence lever)
 
+> **Superseded — the probe ran, at f128 instead of double-double
+> (docs/floor-survey.md; `zig build floor-survey`).** The answer is the
+> first branch below: the floor is the evaluation, not iterate
+> quantization — the entire floor-classified batch population certifies
+> below 1e-6 at f128. The numbers, the `gapFloor` calibration, and the
+> #55/#58 bake-off framing live in the survey report.
+
 The only convergence lever left is the f64 gap floor, not the solver. The
 tell is already in the record (CLAUDE.md, dggs_dnc_test): WHICH finest-res
 cells sit above vs below 1e-6 is path-dependent at noise level — so a large
@@ -436,10 +443,12 @@ dot products — ~4× per dot, gated to a post-pass, cannot help the
 iteration), which is kept as the fallback for exactly the axis-offset term
 if the oracle shows it first order. Composition with f128 (#9): f128 alone
 does not remove the cancellation (it pays ε₁₂₈/θ, with more digits to
-spare); the shifted form gives relative ε at any precision. So #58 makes
-f64 sufficient for nearly every cell and turns the f128 instantiation into
-the oracle and last resort, not the production path — #9 phase 2 is scoped
-by whatever residue #58 and #54 leave.
+spare); the shifted form gives relative ε at any precision — which is why
+the two tracks compound rather than compete: #58 hardens the numerics at
+every `T`, so the eventual `Solver(f128)` inherits it and starts from a
+lower floor. For the *current* corpus, #58 + #54 scope what #9 phase 2
+must add; the full instantiation remains #9's standing direction for
+inputs that push past hardened f64 (docs/floor-survey.md §3).
 
 Item 7 (the two-component gap) is the natural companion: its `gap_axis`
 split is where the second-order claim shows up as a number, so do it in the
@@ -458,7 +467,9 @@ eigen-based square root. Measure the second before paying for the first.
 The minority of floored cells; low priority.
 
 Order: #9 phase 1 (oracle) → #58 with item 7 → #54's Cholesky form → #9
-phase 2 only if a residue remains. What not to retry from this round, with
+phase 2, scoped by what the hardened-f64 residue and the solvability
+horizon then demand (sequencing, not a conditional — docs/floor-survey.md
+§3). What not to retry from this round, with
 the measurements on #53: an always-on repair in `recoverAPerp` (+1–3%,
 identical instruction count — dependency-chain serialisation), and
 `inline fn certify` (redistributes the detector's ≈1% across rows, removes
