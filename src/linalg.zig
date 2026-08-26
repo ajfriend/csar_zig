@@ -12,6 +12,7 @@
 //! Pattern mirrored from sibling project sparea_zig.
 
 const std = @import("std");
+const qmath = @import("qmath");
 
 /// `a*b − c*d`, computed via Kahan's compensated FMA scheme so the
 /// result is correct to ~2 ulp even when the two products nearly
@@ -48,7 +49,7 @@ pub const Vec3 = extern struct {
         return t;
     }
     pub inline fn norm(v: Vec3) f64 {
-        return @sqrt(v.dot(v));
+        return qmath.sqrt(v.dot(v));
     }
     pub inline fn normalize(v: Vec3) Vec3 {
         return v.scale(1.0 / v.norm());
@@ -139,7 +140,7 @@ pub const Vec2 = extern struct {
     pub inline fn dot(a: Vec2, b: Vec2) f64 {
         return @mulAdd(f64, a.m[1], b.m[1], a.m[0] * b.m[0]);
     }
-    pub inline fn norm(v: Vec2) f64 { return @sqrt(v.dot(v)); }
+    pub inline fn norm(v: Vec2) f64 { return qmath.sqrt(v.dot(v)); }
     pub inline fn scale(v: Vec2, s: f64) Vec2 { return .{ .m = .{ s * v.m[0], s * v.m[1] } }; }
     pub inline fn add(a: Vec2, b: Vec2) Vec2 { return .{ .m = .{ a.m[0] + b.m[0], a.m[1] + b.m[1] } }; }
     pub inline fn sub(a: Vec2, b: Vec2) Vec2 { return .{ .m = .{ a.m[0] - b.m[0], a.m[1] - b.m[1] } }; }
@@ -452,16 +453,16 @@ pub const Mat3 = struct {
         var L: [9]f64 = .{0} ** 9;
         var s = S[0];
         if (!(s > 0)) return null; // !(s>0), not s<=0: fail CLOSED on NaN
-        L[0] = @sqrt(s);
+        L[0] = qmath.sqrt(s);
         L[3] = S[1] / L[0];
         L[6] = S[2] / L[0];
         s = @mulAdd(f64, -L[3], L[3], S[4]);
         if (!(s > 0)) return null; // !(s>0), not s<=0: fail CLOSED on NaN
-        L[4] = @sqrt(s);
+        L[4] = qmath.sqrt(s);
         L[7] = @mulAdd(f64, -L[6], L[3], S[5]) / L[4];
         s = @mulAdd(f64, -L[7], L[7], @mulAdd(f64, -L[6], L[6], S[8]));
         if (!(s > 0)) return null; // !(s>0), not s<=0: fail CLOSED on NaN
-        L[8] = @sqrt(s);
+        L[8] = qmath.sqrt(s);
         return Chol3{ .m = L };
     }
 };
@@ -497,7 +498,7 @@ pub const Chol3 = struct {
 
     /// log det of the factored matrix: 2·Σ log(diagonal of L).
     pub inline fn logDet(self: Chol3) f64 {
-        return 2.0 * (@log(self.m[0]) + @log(self.m[4]) + @log(self.m[8]));
+        return 2.0 * (qmath.log(self.m[0]) + qmath.log(self.m[4]) + qmath.log(self.m[8]));
     }
 
     /// The factor as a general Mat3 — the sanctioned exit from the
@@ -599,7 +600,7 @@ pub fn eig2(M: [4]f64) Eig2 {
     // (a-d)² + 4·b², via FMA. Sum-of-squares — no cancellation
     // possible, so the win is precision-stylistic consistency, not
     // a robustness fix.
-    const disc = @sqrt(@mulAdd(f64, 4.0, b * b, ad * ad));
+    const disc = qmath.sqrt(@mulAdd(f64, 4.0, b * b, ad * ad));
     var result: Eig2 = undefined;
     result.vals[0] = (tr - disc) / 2.0;
     result.vals[1] = (tr + disc) / 2.0;
@@ -612,7 +613,7 @@ pub fn eig2(M: [4]f64) Eig2 {
     if (@abs(b) > EIG2_REL * scale) {
         var v0 = result.vals[0] - d;
         var v1 = b;
-        const nrm = @sqrt(v0 * v0 + v1 * v1);
+        const nrm = qmath.sqrt(v0 * v0 + v1 * v1);
         v0 /= nrm;
         v1 /= nrm;
         result.vecs = .{ .m = .{ v0, v1, -v1, v0 } };
