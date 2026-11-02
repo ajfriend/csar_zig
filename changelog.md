@@ -5,7 +5,12 @@ commit that carries the full detail.
 
 ## [Unreleased]
 
+## [0.7.0]
+
 - Remove the σ_max·ε evaluation floor: shifted projection + chart-form gap (#105)
+  Known limitation: `gap_floor` still uses the pre-#105 noise model and
+  over-predicts by ~1e8, so `.precision_floor` is over-conservative at
+  tight tolerances; `.converged` certification is unaffected. Retune: #109.
 - Pin the solvable frontier: per-rung convergence counts with an oracle honesty audit (#107)
 - Measure the f64 evaluation floor against f128 over the batches (#101)
 - Add the f128 gap oracle over promoted iterates (#100)
