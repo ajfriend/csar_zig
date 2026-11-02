@@ -359,6 +359,10 @@ pub const Uncertified = struct {
     /// this input's geometry, from a measured error model (≈ 64·σ_max·ε
     /// + κ·ε; ~1e-6 for a cell 1e-10 rad across, ~1e-9 for the finest
     /// DGGS cells). A `gap_tol` below it cannot be met — see `gap_tol`.
+    /// Known stale since the chart-form gap evaluation removed the
+    /// σ_max·ε term: this model over-predicts the measured noise by
+    /// ~1e8, so `.precision_floor` is over-conservative at tight
+    /// tolerances (retune: #109). Certification itself is unaffected.
     gap_floor: f64,
     /// Algorithm-specific diagnostics; the tag records which solver
     /// path produced this outcome.
