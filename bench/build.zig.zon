@@ -9,16 +9,13 @@
         .csar_cur = .{ .path = ".." },
         // The baseline, pinned by hash. Bump at each release.
         //
-        // Mid-cycle pin: v0.7.0's solver ported to zig 0.17.1 (v0.7.0
-        // itself needs 0.16). Re-pin to the tag at the next release.
-        //
         // A second slot pinning the SAME commit must reach it through a URL
         // that hashes differently (a commit-SHA archive rather than this tag
         // archive): zig dedupes identical pins into one module, which would
         // make a layout-faithful A/A measure one copy against itself. See #22.
         .csar_base = .{
-            .url = "https://github.com/ajfriend/csar_zig/archive/bfd862af059eff6c79f5422b3b2ca3e1314ddfc2.tar.gz",
-            .hash = "csar-0.7.0-bkw2IRdQAwDEhrbaru1d17uQsEfjaMeibfriXOf-RQV5",
+            .url = "https://github.com/ajfriend/csar_zig/archive/refs/tags/v0.8.0.tar.gz",
+            .hash = "csar-0.8.0-bkw2ISBQAwBN64fohx2q0I35COBNshopejdPqbch8u8o",
         },
     },
     .paths = .{ "build.zig", "build.zig.zon", "ab.zig", "core.zig" },
