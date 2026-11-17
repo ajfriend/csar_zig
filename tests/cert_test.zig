@@ -47,28 +47,35 @@ test "repair: gap is invariant under scaling A; off-axis candidates still certif
 }
 
 test "OOM in cert_primal's last alloc hits the indices errdefer" {
-    // Same technique as extreme_aspect_test.zig's cert-builder OOM
-    // tests: count parent-allocator calls on a clean run, then fail
-    // the last one — `lambdas`, the second of the two back-to-back
-    // export allocs — so the `errdefer allocator.free(indices)` runs.
+    // Fail each parent-allocator call in turn until a run succeeds. The
+    // last failing run is `lambdas`, the second of the two back-to-back
+    // export allocs, so the `errdefer allocator.free(indices)` runs.
+    //
+    // Not "count the calls on a clean run, then fail the last one": the
+    // scratch arena shares the parent allocator, and whether it grows in
+    // place or by a new parent call can differ between two runs, so a
+    // counted index can land on `indices` instead (seen on x86_64-linux
+    // under zig 0.17.1: the test passed and the errdefer went uncovered).
     const pts = helpers.casePoints("hex");
     var outcome = try csar.solve(std.testing.allocator, pts, .{});
     defer outcome.deinit();
     const c = outcome.converged;
 
-    var count_fa = std.testing.FailingAllocator.init(std.testing.allocator, .{});
-    {
-        const co = try csar.cert_primal(count_fa.allocator(), pts, c.A(), c.b());
+    var failed: usize = 0;
+    var fail_index: usize = 0;
+    while (true) : (fail_index += 1) {
+        var fa = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = fail_index });
+        const co = csar.cert_primal(fa.allocator(), pts, c.A(), c.b()) catch |err| {
+            try std.testing.expectEqual(error.OutOfMemory, err);
+            failed += 1;
+            continue;
+        };
         var cd = co.certified;
         cd.deinit();
+        break;
     }
-    var fa = std.testing.FailingAllocator.init(std.testing.allocator, .{
-        .fail_index = count_fa.alloc_index - 1,
-    });
-    try std.testing.expectError(
-        error.OutOfMemory,
-        csar.cert_primal(fa.allocator(), pts, c.A(), c.b()),
-    );
+    // at least the two export allocs were failed
+    try std.testing.expect(failed >= 2);
 }
 
 test "no_certificate: every reason, from both entry points" {
