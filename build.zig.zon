@@ -2,7 +2,7 @@
     .name = .csar,
     .version = "0.7.0",
     .fingerprint = 0x9c8d1b0e21364c6e,
-    .minimum_zig_version = "0.16.0",
+    .minimum_zig_version = "0.17.1",
     .dependencies = .{
         .qmath = .{
             .url = "https://github.com/ajfriend/qmath/archive/refs/tags/v0.2.2.tar.gz",

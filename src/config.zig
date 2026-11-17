@@ -13,7 +13,7 @@ pub const SIGMA_0: f64 = 1.0 / @sqrt(3.0); // comptime constant: builtin, not qm
 /// only — what the test suite and the coverage gate run. A bare
 /// `std.debug.assert` would compile to `unreachable` in ReleaseFast, so
 /// every tripwire goes behind this gate.
-pub const debug_checks = @import("builtin").mode == .Debug;
+pub const debug_checks = @import("builtin").mode == .debug;
 
 /// Algorithm tuning parameters — internal knobs tuned together for the
 /// solver to converge cleanly. Not exposed to callers because they

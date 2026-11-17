@@ -295,7 +295,7 @@ pub fn Linalg(comptime T: type) type {
         pub const Mat3 = struct {
             m: [9]T,
 
-            pub const zero: Mat3 = .{ .m = .{0} ** 9 };
+            pub const zero: Mat3 = .{ .m = @splat(0) };
 
             pub inline fn apply(self: Mat3, v: Vec3) Vec3 {
                 const a = self.m;
@@ -494,7 +494,7 @@ pub fn Linalg(comptime T: type) type {
             /// use `@mulAdd`, matching the pattern in `Chol3.forwardSolve`.
             pub fn cholesky(self: Mat3) ?Chol3 {
                 const S = self.m;
-                var L: [9]T = .{0} ** 9;
+                var L: [9]T = @splat(0);
                 var s = S[0];
                 if (!(s > 0)) return null; // !(s>0), not s<=0: fail CLOSED on NaN
                 L[0] = qmath.sqrt(s);

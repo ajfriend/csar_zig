@@ -2,7 +2,7 @@
     .name = .csar_bench,
     .version = "0.0.0",
     .fingerprint = 0x2ae0e728fa1b3da7,
-    .minimum_zig_version = "0.16.0",
+    .minimum_zig_version = "0.17.1",
     .dependencies = .{
         // The live working tree — a path dependency, so `just ab` measures
         // uncommitted changes, not just commits.

@@ -2,14 +2,12 @@
 
 ## Dependencies
 
-- **[zig](https://ziglang.org/)** 0.16.0+ — the language. Managed via
+- **[zig](https://ziglang.org/)** 0.17.1+ — the language. Managed via
   [mise](https://mise.jdx.dev/), pinned by the committed `mise.toml`:
   `brew install mise` on macOS, then `mise install` in the repo root.
-  On macOS 0.16.0 is a hard floor, not a preference: 0.15.x fails to link
-  against macOS 26.x SDKs — the build runner itself dies with
-  `undefined symbol: _free` and a dozen similar — so `zig build` cannot
-  run at all there, and `--sysroot` doesn't help (the runner is compiled
-  before the flag applies).
+  0.17 is a hard floor: the tree uses its build API (`addPassthruArgs`),
+  its optimize-mode names (`.debug`, `.fast`) and `@splat` where 0.16 had
+  the `**` array-repeat operator, none of which 0.16 accepts.
 - **[just](https://github.com/casey/just)** — task runner.
   `brew install just`.
 - **[kcov](https://github.com/SimonKagstrom/kcov)** — line-coverage tool
@@ -79,7 +77,7 @@ built with LLVM (`-Dcoverage=true` forces it; the test binary's
 `-Dllvm=false` selects self-hosted for the other suite run) and
 coverage is measured on LLVM binaries alone. Backend support is per-target:
 the self-hosted backend crashes compiling the suite on
-aarch64-macos (0.15.2 and 0.16.0), so run `just test-selfhosted` where it is supported
+aarch64-macos (0.15.2, 0.16.0 and 0.17.1), so run `just test-selfhosted` where it is supported
 (x86_64-linux; CI covers it).
 
 ## Coverage
@@ -247,7 +245,7 @@ excludes before measuring. That one is what the PR comment is for.
 
 ### Why kcov and not LLVM source-based coverage?
 
-Zig 0.15.x / 0.16.x doesn't expose the LLVM coverage flags
+Zig 0.15.x through 0.17.x doesn't expose the LLVM coverage flags
 (`-fprofile-instr-generate`, `-fcoverage-mapping`) that would feed
 `llvm-cov` and unlock branch coverage. The CLI only has `-ffuzz` for
 instrumentation. Track

@@ -67,7 +67,6 @@ const SolveError = api.SolveError;
 const core = @import("csar.zig");
 const Prep = core.Prep;
 const GapScratch = core.GapScratch;
-const GapResult = core.GapResult;
 
 /// Per-solve working buffers, all on the solve arena. (`pub` so the
 /// FD Hessian-validation test can drive `evalH` directly.)
@@ -325,10 +324,10 @@ pub fn evalH(
     // cheaper than the k×k LU it replaces. A pivot failure just keeps
     // the fixed-w model; the ρ test guards model quality either way.
     if (tc.EXACT_HESSIAN and k >= 2) {
-        var G = [_]f64{0} ** 36; // V·Vᵀ, row-major 6×6
-        var v1 = [_]f64{0} ** 6; // V·1
-        var vmx = [_]f64{0} ** 6; // V·m_x
-        var vmy = [_]f64{0} ** 6; // V·m_y
+        var G: [36]f64 = @splat(0); // V·Vᵀ, row-major 6×6
+        var v1: [6]f64 = @splat(0); // V·1
+        var vmx: [6]f64 = @splat(0); // V·m_x
+        var vmy: [6]f64 = @splat(0); // V·m_y
         // G upper triangle only, mirrored after the loop (the repo's
         // symmetric-accumulation idiom, cf. Mat3.addSymRank1): the
         // product is exactly commutative, so the mirror is
@@ -350,7 +349,7 @@ pub fn evalH(
         // A = [½G², −v1; v1ᵀ, 0] with relative Tikhonov mass on the
         // ½G² block (benign here: the RHS has no null component to
         // amplify).
-        var A = [_]f64{0} ** 49;
+        var A: [49]f64 = @splat(0);
         var tr_g2: f64 = 0;
         for (0..6) |a| {
             for (a..6) |bb| {

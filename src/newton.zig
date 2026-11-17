@@ -135,9 +135,9 @@ fn solveBorderedKkt(H: []const f64, k: usize, g: []const f64, delta_w: []f64, s:
 /// tol.NEWTON_RANGE_PIVOT_MIN).
 fn solveKktRangeSpace(Y: []const Vec3, g: []const f64, delta_w: []f64) bool {
     const k = Y.len;
-    var G = [_]f64{0} ** 36; // V·Vᵀ, row-major 6×6
-    var b1 = [_]f64{0} ** 6; // V·1
-    var bg = [_]f64{0} ** 6; // V·g
+    var G: [36]f64 = @splat(0); // V·Vᵀ, row-major 6×6
+    var b1: [6]f64 = @splat(0); // V·1
+    var bg: [6]f64 = @splat(0); // V·g
     // Upper triangle only, mirrored after the loop — the repo's
     // symmetric-accumulation idiom (cf. Mat3.addSymRank1): v[a]·v[b]
     // is exactly commutative, so the mirror is bit-identical to
@@ -156,7 +156,7 @@ fn solveKktRangeSpace(Y: []const Vec3, g: []const f64, delta_w: []f64) bool {
 
     // A = [G² + reg·I, V·1; (V·1)ᵀ, 0], relative Tikhonov mass on the
     // G² block (see tol.NEWTON_RANGE_REG). A[6][6] stays 0 from init.
-    var A = [_]f64{0} ** 49;
+    var A: [49]f64 = @splat(0);
     var tr_g2: f64 = 0;
     for (0..6) |a| {
         // (G²)ᵇᵃ term-by-term equals (G²)ᵃᵇ with each product's factors

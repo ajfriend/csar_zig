@@ -54,7 +54,6 @@ const projectGnomonic = halfspace.projectGnomonic;
 const api = @import("api.zig");
 const Cert = api.Cert;
 const Outcome = api.Outcome;
-const SolveError = api.SolveError;
 const InputError = api.InputError;
 const SolveOptions = api.SolveOptions;
 
@@ -465,13 +464,8 @@ pub fn initWeights(P: []const [2]f64, w: []f64) void {
     }
 }
 
-// ----------------------------------------------------------------
-// Newton polish (extracted to newton.zig)
-// ----------------------------------------------------------------
-
-const newton = @import("newton.zig");
-const NewtonScratch = newton.NewtonScratch;
-const newtonPolish = newton.newtonPolish;
+// The Newton polish lives in newton.zig; the solver reaches it through
+// trust.zig.
 
 // The solver (`trust.solveTrust`).
 const trust = @import("trust.zig");

@@ -107,7 +107,7 @@ pub fn build(b: *std.Build) void {
     const states_aspect_mod = b.createModule(.{
         .root_source_file = b.path("scripts/states/states.zig"),
         .target = target,
-        .optimize = .ReleaseFast,
+        .optimize = .fast,
     });
     states_aspect_mod.addImport("csar", csar_mod);
     const states_aspect_exe = b.addExecutable(.{
@@ -125,7 +125,7 @@ pub fn build(b: *std.Build) void {
     const countries_aspect_mod = b.createModule(.{
         .root_source_file = b.path("scripts/countries/countries.zig"),
         .target = target,
-        .optimize = .ReleaseFast,
+        .optimize = .fast,
     });
     countries_aspect_mod.addImport("csar", csar_mod);
     const countries_aspect_exe = b.addExecutable(.{
@@ -158,7 +158,7 @@ pub fn build(b: *std.Build) void {
     });
     const run_floor = b.addRunArtifact(floor_exe);
     run_floor.setCwd(b.path(""));
-    if (b.args) |args| run_floor.addArgs(args);
+    run_floor.addPassthruArgs();
     const floor_step = b.step("floor-survey", "Run floor_survey.zig (oracle over the batches at tight gap_tol)");
     floor_step.dependOn(&run_floor.step);
     check_step.dependOn(&floor_exe.step);
@@ -187,7 +187,7 @@ fn addExample(
     const run = b.addRunArtifact(exe);
     // Pass through any args after `--` on the `zig build` command.
     // Only `ex-cases` uses them today; the others ignore the arg slice.
-    if (b.args) |args| run.addArgs(args);
+    run.addPassthruArgs();
     const step = b.step(b.fmt("ex-{s}", .{stem}), description);
     step.dependOn(&run.step);
     ex.check.dependOn(&exe.step);
