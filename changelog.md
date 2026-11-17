@@ -5,6 +5,8 @@ commit that carries the full detail.
 
 ## [Unreleased]
 
+- Minimum zig raised to **0.17.1** (breaking for source builders); no change to the solver (#113)
+
 ## [0.7.0]
 
 - Remove the σ_max·ε evaluation floor: shifted projection + chart-form gap (#105)
