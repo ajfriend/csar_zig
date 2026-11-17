@@ -18,8 +18,8 @@ test {
 /// own is one level deep, which references a type without analysing the
 /// declarations inside it).
 fn refAllDeclsRecursive(comptime T: type) void {
-    inline for (comptime std.meta.declarations(T)) |decl| {
-        const D = @field(T, decl.name);
+    inline for (comptime std.meta.declarations(T)) |decl_name| {
+        const D = @field(T, decl_name);
         if (@TypeOf(D) == type) {
             switch (@typeInfo(D)) {
                 .@"struct", .@"enum", .@"union", .@"opaque" => refAllDeclsRecursive(D),

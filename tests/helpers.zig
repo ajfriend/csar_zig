@@ -21,6 +21,24 @@ pub fn diagPrint(comptime fmt: []const u8, args: anytype) void {
     if (!quiet_diagnostics) std.debug.print(fmt, args);
 }
 
+/// Fail each parent-allocator call in turn (0, 1, 2, ...) until `run`
+/// succeeds; every failing run must return `error.OutOfMemory`. Returns
+/// how many calls were failed. Reaches every OOM cleanup path of `run`
+/// without assuming how many allocator calls it makes: a count taken on
+/// one run need not hold for the next when a scratch arena shares the
+/// allocator.
+pub fn oomSweep(ctx: anytype, comptime run: fn (std.mem.Allocator, @TypeOf(ctx)) anyerror!void) !usize {
+    var fail_index: usize = 0;
+    while (true) : (fail_index += 1) {
+        var fa = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = fail_index });
+        run(fa.allocator(), ctx) catch |err| {
+            try std.testing.expectEqual(error.OutOfMemory, err);
+            continue;
+        };
+        return fail_index;
+    }
+}
+
 /// N points on the boundary of an anisotropic "elliptical cap": tangent
 /// ellipse (half-angles `half_a` × `half_b`) at `center`, mapped to the
 /// sphere via the exponential map, optionally over a partial arc.

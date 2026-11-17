@@ -14,7 +14,7 @@ pub fn build(b: *std.Build) void {
     // Debug solver on both sides.
     // `-Dcoverage=true` builds Debug, with LLVM, for the kcov gate (dev.md "Coverage").
     const coverage = b.option(bool, "coverage", "Build for the coverage gate (Debug)") orelse false;
-    const optimize: std.builtin.OptimizeMode = if (coverage) .Debug else .ReleaseFast;
+    const optimize: std.lang.Optimize = if (coverage) .debug else .fast;
 
     const cur = b.dependency("csar_cur", .{ .target = target, .optimize = optimize });
 
@@ -52,7 +52,7 @@ pub fn build(b: *std.Build) void {
     // which the coverage gate runs under kcov.
     b.installArtifact(exe);
     const run = b.addRunArtifact(exe);
-    if (b.args) |args| run.addArgs(args);
+    run.addPassthruArgs();
     b.step("ab", "A/B the working tree against the pinned baseline").dependOn(&run.step);
 
     // Compile-only, so the root `just check` keeps this package from rotting

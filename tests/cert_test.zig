@@ -47,28 +47,24 @@ test "repair: gap is invariant under scaling A; off-axis candidates still certif
 }
 
 test "OOM in cert_primal's last alloc hits the indices errdefer" {
-    // Same technique as extreme_aspect_test.zig's cert-builder OOM
-    // tests: count parent-allocator calls on a clean run, then fail
-    // the last one — `lambdas`, the second of the two back-to-back
-    // export allocs — so the `errdefer allocator.free(indices)` runs.
+    // The last call the sweep fails is `lambdas`, the second of the two
+    // back-to-back export allocs, so `errdefer allocator.free(indices)`
+    // runs.
     const pts = helpers.casePoints("hex");
     var outcome = try csar.solve(std.testing.allocator, pts, .{});
     defer outcome.deinit();
     const c = outcome.converged;
 
-    var count_fa = std.testing.FailingAllocator.init(std.testing.allocator, .{});
-    {
-        const co = try csar.cert_primal(count_fa.allocator(), pts, c.A(), c.b());
-        var cd = co.certified;
-        cd.deinit();
-    }
-    var fa = std.testing.FailingAllocator.init(std.testing.allocator, .{
-        .fail_index = count_fa.alloc_index - 1,
-    });
-    try std.testing.expectError(
-        error.OutOfMemory,
-        csar.cert_primal(fa.allocator(), pts, c.A(), c.b()),
-    );
+    const Candidate = struct { pts: []const [3]f64, A: csar.Mat3, b: csar.Vec3 };
+    const run = struct {
+        fn run(allocator: std.mem.Allocator, cand: Candidate) !void {
+            const co = try csar.cert_primal(allocator, cand.pts, cand.A, cand.b);
+            var cd = co.certified;
+            cd.deinit();
+        }
+    }.run;
+    const failed = try helpers.oomSweep(Candidate{ .pts = pts, .A = c.A(), .b = c.b() }, run);
+    try std.testing.expect(failed >= 2); // at least the two export allocs
 }
 
 test "no_certificate: every reason, from both entry points" {

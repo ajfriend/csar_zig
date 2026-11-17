@@ -448,22 +448,15 @@ test "convexHull2d tie-break sort: points sharing an x-coordinate" {
 // in the respective cert builder. Failing that last alloc exercises
 // the `errdefer allocator.free(indices)` immediately above it.
 //
-// `lastAllocFailIndex` runs solve once under a non-failing
-// FailingAllocator to count parent-allocator calls, then returns
-// `total - 1` for the test to use as fail_index. Robust to
-// ArenaAllocator page-pull / halfspaceCheck scratch / future build
-// changes that would shift a hard-coded fail_index off-target.
+// `helpers.oomSweep` fails every parent-allocator call in turn, so it
+// reaches that last one whatever the ArenaAllocator page pulls or the
+// halfspaceCheck scratch do to the call count.
 
-fn runWithFailIndex(fail_index: usize, X: []const [3]f64, opts: csar.SolveOptions) !csar.Outcome {
-    var fa = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = fail_index });
-    return csar.solve(fa.allocator(), X, opts);
-}
+const Problem = struct { X: []const [3]f64, opts: csar.SolveOptions };
 
-fn lastAllocFailIndex(X: []const [3]f64, opts: csar.SolveOptions) !usize {
-    var fa = std.testing.FailingAllocator.init(std.testing.allocator, .{});
-    var outcome = try csar.solve(fa.allocator(), X, opts);
+fn solveAndFree(allocator: std.mem.Allocator, p: Problem) !void {
+    var outcome = try csar.solve(allocator, p.X, p.opts);
     outcome.deinit();
-    return fa.alloc_index - 1;
 }
 
 test "OOM in the last cert alloc hits buildPrimalCert's indices errdefer" {
@@ -479,8 +472,8 @@ test "OOM in the last cert alloc hits buildPrimalCert's indices errdefer" {
         p.*[1] /= n;
         p.*[2] /= n;
     }
-    const fi = try lastAllocFailIndex(pts[0..], .{});
-    try std.testing.expectError(error.OutOfMemory, runWithFailIndex(fi, pts[0..], .{}));
+    const failed = try helpers.oomSweep(Problem{ .X = pts[0..], .opts = .{} }, solveAndFree);
+    try std.testing.expect(failed >= 2); // at least the two cert allocs
 }
 
 test "OOM in the last cert alloc hits buildFarkasCert's indices errdefer" {
@@ -495,8 +488,8 @@ test "OOM in the last cert alloc hits buildFarkasCert's indices errdefer" {
         .{ c120, -s120, 0.0 },
     };
     const opts: csar.SolveOptions = .{ .coplanarity_tol = -1 };
-    const fi = try lastAllocFailIndex(&pts, opts);
-    try std.testing.expectError(error.OutOfMemory, runWithFailIndex(fi, &pts, opts));
+    const failed = try helpers.oomSweep(Problem{ .X = &pts, .opts = opts }, solveAndFree);
+    try std.testing.expect(failed >= 2); // at least the two cert allocs
 }
 
 test "acceptBUpdate fallback: all backtracks fail when a point sits below FEAS_MARGIN" {

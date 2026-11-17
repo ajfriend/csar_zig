@@ -14,11 +14,11 @@ pub fn build(b: *std.Build) void {
         // Debug, not zlinter's ReleaseSafe default: the lint itself takes
         // milliseconds, and a ReleaseSafe compile of zlinter plus its zls
         // dependency dominates a cold build.
-        var builder = zlinter.builder(b, .{ .optimize = .Debug });
+        var builder = zlinter.builder(b, .{ .optimize = .debug });
         // Relative to THIS build root: zlinter resolves include paths
         // against it and runs with it as cwd. (A path it cannot open is a
         // warning, not an error — the `lint` recipe checks for it.)
-        builder.addPaths(.{ .include = &.{
+        builder.addPaths(.{ .include_dirs = &.{
             b.path("../src"),
             b.path("../tests"),
             b.path("../cases"),
