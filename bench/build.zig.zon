@@ -9,13 +9,18 @@
         .csar_cur = .{ .path = ".." },
         // The baseline, pinned by hash. Bump at each release.
         //
+        // Mid-cycle pin: this is the commit that ported the tree to zig
+        // 0.17.1, not a release. v0.7.0 does not compile on 0.17, so it
+        // cannot be the baseline; this commit is v0.7.0's solver with the
+        // port applied. Re-pin to the tag at the next release.
+        //
         // A second slot pinning the SAME commit must reach it through a URL
         // that hashes differently (a commit-SHA archive rather than this tag
         // archive): zig dedupes identical pins into one module, which would
         // make a layout-faithful A/A measure one copy against itself. See #22.
         .csar_base = .{
-            .url = "https://github.com/ajfriend/csar_zig/archive/refs/tags/v0.7.0.tar.gz",
-            .hash = "csar-0.7.0-bkw2IUdRAwBnGf1VxK5tUUyeqieTcroMw-6xmjXJTbPe",
+            .url = "https://github.com/ajfriend/csar_zig/archive/bfd862af059eff6c79f5422b3b2ca3e1314ddfc2.tar.gz",
+            .hash = "csar-0.7.0-bkw2IRdQAwDEhrbaru1d17uQsEfjaMeibfriXOf-RQV5",
         },
     },
     .paths = .{ "build.zig", "build.zig.zon", "ab.zig", "core.zig" },
