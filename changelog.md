@@ -5,6 +5,8 @@ commit that carries the full detail.
 
 ## [Unreleased]
 
+## [0.8.0]
+
 - Minimum zig raised to **0.17.1** (breaking for source builders); no change to the solver (#113)
 
 ## [0.7.0]
