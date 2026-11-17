@@ -9,10 +9,8 @@
         .csar_cur = .{ .path = ".." },
         // The baseline, pinned by hash. Bump at each release.
         //
-        // Mid-cycle pin: this is the commit that ported the tree to zig
-        // 0.17.1, not a release. v0.7.0 does not compile on 0.17, so it
-        // cannot be the baseline; this commit is v0.7.0's solver with the
-        // port applied. Re-pin to the tag at the next release.
+        // Mid-cycle pin: v0.7.0's solver ported to zig 0.17.1 (v0.7.0
+        // itself needs 0.16). Re-pin to the tag at the next release.
         //
         // A second slot pinning the SAME commit must reach it through a URL
         // that hashes differently (a commit-SHA archive rather than this tag

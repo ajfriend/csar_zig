@@ -47,35 +47,24 @@ test "repair: gap is invariant under scaling A; off-axis candidates still certif
 }
 
 test "OOM in cert_primal's last alloc hits the indices errdefer" {
-    // Fail each parent-allocator call in turn until a run succeeds. The
-    // last failing run is `lambdas`, the second of the two back-to-back
-    // export allocs, so the `errdefer allocator.free(indices)` runs.
-    //
-    // Not "count the calls on a clean run, then fail the last one": the
-    // scratch arena shares the parent allocator, and whether it grows in
-    // place or by a new parent call can differ between two runs, so a
-    // counted index can land on `indices` instead (seen on x86_64-linux
-    // under zig 0.17.1: the test passed and the errdefer went uncovered).
+    // The last call the sweep fails is `lambdas`, the second of the two
+    // back-to-back export allocs, so `errdefer allocator.free(indices)`
+    // runs.
     const pts = helpers.casePoints("hex");
     var outcome = try csar.solve(std.testing.allocator, pts, .{});
     defer outcome.deinit();
     const c = outcome.converged;
 
-    var failed: usize = 0;
-    var fail_index: usize = 0;
-    while (true) : (fail_index += 1) {
-        var fa = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = fail_index });
-        const co = csar.cert_primal(fa.allocator(), pts, c.A(), c.b()) catch |err| {
-            try std.testing.expectEqual(error.OutOfMemory, err);
-            failed += 1;
-            continue;
-        };
-        var cd = co.certified;
-        cd.deinit();
-        break;
-    }
-    // at least the two export allocs were failed
-    try std.testing.expect(failed >= 2);
+    const Candidate = struct { pts: []const [3]f64, A: csar.Mat3, b: csar.Vec3 };
+    const run = struct {
+        fn run(allocator: std.mem.Allocator, cand: Candidate) !void {
+            const co = try csar.cert_primal(allocator, cand.pts, cand.A, cand.b);
+            var cd = co.certified;
+            cd.deinit();
+        }
+    }.run;
+    const failed = try helpers.oomSweep(Candidate{ .pts = pts, .A = c.A(), .b = c.b() }, run);
+    try std.testing.expect(failed >= 2); // at least the two export allocs
 }
 
 test "no_certificate: every reason, from both entry points" {

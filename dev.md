@@ -369,6 +369,9 @@ are PRs, the rest are not commits.
    rewrites the URL and hash in place (the comment block survives), then
    `zig build --build-file bench/build.zig check`. The harness always measures
    against the last release (the `csar_base` comment in `bench/build.zig.zon`).
+   The one exception: when a toolchain bump leaves the last tag unable to
+   compile, the bump's PR pins its own port commit by commit-SHA archive, and
+   the next release re-pins to the tag.
    Before anything touching `src/` merges after the tag: run `just ab --aa`,
    then `just ab`, attach both to the PR, and record the ratios on #22 — the
    A/B is then a layout-bias sample (`bench/ab.zig` "Known residual bias").

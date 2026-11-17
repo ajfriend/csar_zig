@@ -2,7 +2,7 @@
 //!
 //! Shared solver core: preprocessing (Farkas halfspace check, optional
 //! convex-hull reduction, coplanarity rejection), the gnomonic-chart MVEE
-//! primitives (FW steps, damped axis step, Newton polish), and `solve`,
+//! primitives (FW steps, damped axis step), and `solve`,
 //! which dispatches to `trust.zig`. The moments / constructed-dual-
 //! certificate slice is generic over T in gap_generic.zig and
 //! re-exported here at f64 under the original names.
@@ -463,9 +463,6 @@ pub fn initWeights(P: []const [2]f64, w: []f64) void {
         uniformWeights(w);
     }
 }
-
-// The Newton polish lives in newton.zig; the solver reaches it through
-// trust.zig.
 
 // The solver (`trust.solveTrust`).
 const trust = @import("trust.zig");
